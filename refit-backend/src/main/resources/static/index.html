@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>카카오 로그인 테스트</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 700px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            text-align: center;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .btn-kakao {
+            background-color: #FEE500;
+            color: #000;
+            border: none;
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            justify-content: center;
+        }
+        .btn-kakao:hover {
+            background-color: #E6CF00;
+        }
+        .btn-submit {
+            background-color: #4CAF50;
+            color: white;
+            padding: 14px 28px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            margin-top: 16px;
+        }
+        .btn-submit:hover {
+            background-color: #45a049;
+        }
+        .form-group {
+            margin-bottom: 16px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            font-weight: 500;
+            color: #333;
+        }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        .form-group input[readonly] {
+            background-color: #f5f5f5;
+        }
+        .result {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+        }
+        .result.success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .result.info {
+            background-color: #fff3cd;
+            border: 1px solid #ffeeba;
+            color: #856404;
+        }
+        .result.error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .signup-form {
+            display: none;
+        }
+        .log-area {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 16px;
+            border-radius: 8px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        .hidden {
+            display: none;
+        }
+        .user-info p {
+            margin: 8px 0;
+        }
+        .user-info strong {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+<h1>🔐 카카오 로그인 테스트</h1>
+
+<!-- 로그인 버튼 -->
+<div id="loginCard" class="card">
+    <button class="btn-kakao" onclick="kakaoLogin()">
+        <svg width="24" height="24" viewBox="0 0 24 24">
+            <path fill="#000" d="M12 3C6.48 3 2 6.48 2 10.5c0 2.52 1.64 4.74 4.12 6.03-.18.65-.65 2.35-.74 2.72-.12.47.17.46.36.34.15-.1 2.37-1.6 3.32-2.25.62.09 1.26.14 1.94.14 5.52 0 10-3.48 10-7.78S17.52 3 12 3z"/>
+        </svg>
+        카카오로 시작하기
+    </button>
+</div>
+
+<!-- 결과 표시 -->
+<div id="resultCard" class="card hidden">
+    <div id="result"></div>
+</div>
+
+<!-- 회원가입 폼 -->
+<div id="signupCard" class="card signup-form">
+    <h2>📝 추가 정보 입력</h2>
+    <p style="color: #666; margin-bottom: 20px;">신규 회원입니다. 아래 정보를 입력해주세요.</p>
+
+    <input type="hidden" id="oauthProvider">
+    <input type="hidden" id="oauthId">
+
+    <div class="form-group">
+        <label>이메일</label>
+        <input type="email" id="email" readonly>
+    </div>
+
+    <div class="form-group">
+        <label>닉네임 *</label>
+        <input type="text" id="nickname" placeholder="닉네임 (2-10자)" maxlength="10">
+    </div>
+
+    <div class="form-group">
+        <label>사용자 유형 *</label>
+        <select id="userType">
+            <option value="">선택하세요</option>
+            <option value="JOB_SEEKER">구직자</option>
+            <option value="RECRUITER">채용담당자</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>경력 레벨 *</label>
+        <select id="careerLevelId">
+            <option value="">선택하세요</option>
+            <option value="1">신입</option>
+            <option value="2">주니어 (1-3년)</option>
+            <option value="3">미들 (4-7년)</option>
+            <option value="4">시니어 (8년+)</option>
+        </select>
+    </div>
+
+    <div class="form-group">
+        <label>자기소개</label>
+        <textarea id="introduction" rows="3" placeholder="간단한 자기소개를 입력해주세요"></textarea>
+    </div>
+
+    <button class="btn-submit" onclick="submitSignup()">회원가입 완료</button>
+</div>
+
+<!-- API 로그 -->
+<div class="card">
+    <h3>📋 API 로그</h3>
+    <div id="log" class="log-area">로그가 여기에 표시됩니다...</div>
+</div>
+
+<script>
+    // ============================================
+    // 유틸 함수
+    // ============================================
+    function addLog(message, data = null) {
+        const logDiv = document.getElementById('log');
+        const time = new Date().toLocaleTimeString();
+        let logMessage = `[${time}] ${message}`;
+        if (data) {
+            logMessage += '\n' + JSON.stringify(data, null, 2);
+        }
+        logDiv.textContent = logMessage + '\n\n' + logDiv.textContent;
+    }
+
+    function showResult(type, html) {
+        const resultCard = document.getElementById('resultCard');
+        const result = document.getElementById('result');
+        resultCard.classList.remove('hidden');
+        result.className = 'result ' + type;
+        result.innerHTML = html;
+    }
+
+    // ============================================
+    // 카카오 로그인
+    // ============================================
+    function kakaoLogin() {
+        addLog('카카오 로그인 시작');
+        window.location.href = '/api/v1/auth/oauth/kakao/authorize';
+    }
+
+    // ============================================
+    // 백엔드 API 호출
+    // ============================================
+    async function sendCodeToBackend(code) {
+        addLog('백엔드에 인가 코드 전송', { code: code.substring(0, 30) + '...' });
+
+        const response = await fetch('/api/v1/auth/oauth/kakao/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: code })
+        });
+
+        const data = await response.json();
+        addLog('백엔드 응답', data);
+        return data;
+    }
+
+    async function submitSignup() {
+        const signupData = {
+            oauth_provider: document.getElementById('oauthProvider').value,
+            oauth_id: document.getElementById('oauthId').value,
+            email: document.getElementById('email').value,
+            nickname: document.getElementById('nickname').value,
+            user_type: document.getElementById('userType').value,
+            career_level_id: Number(document.getElementById('careerLevelId').value),
+            job_ids: [],
+            skills: [],
+            introduction: document.getElementById('introduction').value
+        };
+
+        // 유효성 검사
+        if (!signupData.nickname) {
+            alert('닉네임 입력');
+            return;
+        }
+        if (!signupData.user_type) {
+            alert('사용자 유형 선택');
+            return;
+        }
+        if (!signupData.career_level_id) {
+            alert('경력 레벨 선택');
+            return;
+        }
+
+        addLog('회원가입 요청', signupData);
+
+        try {
+            const response = await fetch('/api/v1/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(signupData)
+            });
+
+            const data = await response.json();
+            addLog('회원가입 응답', data);
+
+            if (data.data?.user_id) {
+                document.getElementById('signupCard').style.display = 'none';
+                showResult('success', `
+                        <h3>✅ 회원가입 완료!</h3>
+                        <div class="user-info">
+                            <p><strong>사용자 ID:</strong> ${data.data.user_id}</p>
+                            <p><strong>사용자 유형:</strong> ${data.data.user_type}</p>
+                        </div>
+                    `);
+            } else {
+                showResult('error', `<h3>❌ 회원가입 실패</h3><p>${data.message || JSON.stringify(data)}</p>`);
+            }
+        } catch (error) {
+            addLog('회원가입 에러', { error: error.message });
+            showResult('error', `<h3>❌ 에러 발생</h3><p>${error.message}</p>`);
+        }
+    }
+
+    // ============================================
+    // 응답 처리
+    // ============================================
+    function handleResponse(response) {
+        if (response.data?.status === 'LOGIN_SUCCESS') {
+            document.getElementById('loginCard').classList.add('hidden');
+            const loginData = response.data.login_success;
+            showResult('success', `
+                    <h3>✅ 로그인 성공!</h3>
+                    <div class="user-info">
+                        <p><strong>사용자 ID:</strong> ${loginData.user_id}</p>
+                        <p><strong>사용자 유형:</strong> ${loginData.user_type}</p>
+                    </div>
+                `);
+        } else if (response.data?.status === 'SIGNUP_REQUIRED') {
+            document.getElementById('loginCard').classList.add('hidden');
+            showResult('info', '<h3>🆕 신규 회원입니다</h3><p>아래 폼에서 추가 정보를 입력해주세요.</p>');
+
+            const signupData = response.data.signup_required;
+            document.getElementById('signupCard').style.display = 'block';
+            document.getElementById('oauthProvider').value = signupData.oauth_provider;
+            document.getElementById('oauthId').value = signupData.oauth_id;
+            document.getElementById('email').value = signupData.email || '';
+            document.getElementById('nickname').value = signupData.nickname || '';
+        } else {
+            showResult('error', `<h3>❌ 오류 발생</h3><pre>${JSON.stringify(response, null, 2)}</pre>`);
+        }
+    }
+
+    // ============================================
+    // 페이지 로드 시 (콜백에서 전달된 데이터 확인)
+    // ============================================
+    window.onload = function() {
+        // sessionStorage에서 콜백 결과 확인
+        const callbackResult = sessionStorage.getItem('kakaoLoginResult');
+        if (callbackResult) {
+            sessionStorage.removeItem('kakaoLoginResult');
+            const response = JSON.parse(callbackResult);
+            addLog('콜백 결과 수신', response);
+            handleResponse(response);
+        }
+
+        // 콜백 에러 확인
+        const callbackError = sessionStorage.getItem('kakaoLoginError');
+        if (callbackError) {
+            sessionStorage.removeItem('kakaoLoginError');
+            addLog('콜백 에러', callbackError);
+            showResult('error', `<h3>❌ 로그인 에러</h3><p>${callbackError}</p>`);
+        }
+    };
+</script>
+</body>
+</html>
