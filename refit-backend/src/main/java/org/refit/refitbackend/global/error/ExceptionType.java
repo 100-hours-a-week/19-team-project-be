@@ -17,6 +17,9 @@ public enum ExceptionType {
     AUTH_INVALID_TOKEN(HttpStatus.UNAUTHORIZED, "AUTH_INVALID_TOKEN", "invalid_token"),
     AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_EXPIRED", "token_expired"),
 
+    // ExceptionType enum에 추가
+    INVALID_AUTH_CODE(HttpStatus.BAD_REQUEST, "auth_invalid_code", "유효하지 않은 인증 코드입니다"),
+
     SIGNUP_ALREADY_EXISTS(HttpStatus.CONFLICT, "SIGNUP_ALREADY_EXISTS", "user already exists"),
     EMAIL_DUPLICATE(HttpStatus.CONFLICT, "EMAIL_DUPLICATE", "email already exists"),
     OAUTH_DUPLICATE(HttpStatus.CONFLICT, "OAUTH_DUPLICATE", "oauth account already exists"),
