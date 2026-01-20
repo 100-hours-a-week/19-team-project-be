@@ -40,4 +40,9 @@ public class UserSkill extends BaseEntity {
         this.skill = skill;
         this.displayOrder = displayOrder;
     }
+
+    public static UserSkill of(User user, Skill skill, Integer displayOrder) {
+        return new UserSkill(user, skill, displayOrder);
+    }
+
 }
