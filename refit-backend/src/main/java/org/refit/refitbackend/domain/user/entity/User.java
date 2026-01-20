@@ -10,6 +10,9 @@ import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.global.common.entity.BaseEntity;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "users",
         uniqueConstraints = {
@@ -50,7 +53,7 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 20)
     private UserType userType;
 
-    @Column(nullable = false, length = 255)
+    @Column(length = 255)
     private String email;
 
     @Column(nullable = false, length = 10)
@@ -65,6 +68,13 @@ public class User extends BaseEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role =  Role.USER;
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserJob> userJobs = new ArrayList<>();
+
+    @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<UserSkill> userSkills = new ArrayList<>();
+
 
     @Builder
     private User(CareerLevel careerLevel, OAuthProvider oauthProvider, String oauthId, UserType userType, String email, String nickname, String introduction
@@ -81,5 +91,8 @@ public class User extends BaseEntity {
         this.profileImageUrl = "https://cdn.refit.com/default-profile.png";
     }
 
-
+    public void updateProfile(String email, String nickname) {
+        this.email = email != null ? email : this.email;
+        this.nickname = (nickname != null && !nickname.isBlank()) ? nickname : this.nickname;
+    }
 }
