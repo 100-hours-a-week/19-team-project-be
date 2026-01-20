@@ -9,3 +9,6 @@ spring:
     hibernate:
       ddl-auto: validate
     show-sql: false
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE

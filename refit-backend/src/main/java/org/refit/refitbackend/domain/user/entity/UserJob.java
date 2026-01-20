@@ -6,6 +6,7 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.refit.refitbackend.domain.master.entity.Job;
+import org.refit.refitbackend.global.common.entity.BaseEntity;
 
 @Entity
 @Table(
@@ -16,7 +17,7 @@ import org.refit.refitbackend.domain.master.entity.Job;
 )
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class UserJob {
+public class UserJob extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,5 +35,9 @@ public class UserJob {
     private UserJob(User user, Job job) {
         this.user = user;
         this.job = job;
+    }
+
+    public static UserJob of(User user, Job job) {
+        return new UserJob(user, job);
     }
 }
