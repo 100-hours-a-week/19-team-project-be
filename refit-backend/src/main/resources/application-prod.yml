@@ -10,5 +10,10 @@ spring:
       ddl-auto: validate
     show-sql: false
 
+  jwt:
+    issuer: re-fit
+    access-exp-ms: 600000 # 10분
+    refresh-exp-ms: 1209600000 # 2주
+
   jackson:
     property-naming-strategy: SNAKE_CASE
