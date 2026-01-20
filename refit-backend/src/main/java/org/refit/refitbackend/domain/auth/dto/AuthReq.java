@@ -1,5 +1,6 @@
 package org.refit.refitbackend.domain.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -65,5 +66,24 @@ public class AuthReq {
     public static record SkillRequest(
             Long skillId,
             Integer displayOrder
+    ) {}
+
+    /* =======================
+     * 토큰 재발급 요청 (RTR)
+     * ======================= */
+    public static record RefreshTokenRequest(
+            @NotBlank(message = "refresh_token_required")
+            @Schema(description = "Refresh Token")
+            String refreshToken
+    ) {}
+
+    /* =======================
+     * 개발용 토큰 발급 요청
+     * ======================= */
+    public static record DevTokenRequest(
+            @NotNull(message = "user_id_required")
+            @Schema(description = "User ID")
+            @JsonProperty("user_id")
+            Long userId
     ) {}
 }

@@ -56,4 +56,15 @@ public record AuthRes() {
             String nickname,
             String profileImageUrl
     ) {}
+
+    /* =======================
+     * 토큰 응답 Data
+     * ======================= */
+    @Schema(description = "토큰 AT, RT")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record TokenDto(
+            String accessToken,
+            String refreshToken
+    ){}
+
 }
