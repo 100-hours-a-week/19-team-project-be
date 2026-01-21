@@ -248,10 +248,10 @@ jobs:
             systemctl is-active --quiet caddy && sudo systemctl reload caddy || true
             
             echo "[6/7] 배포 검증 중..."
-            echo "Java 애플리케이션 시작 대기 중 (초기 10초)..."
-            sleep 10
-            
-            MAX_RETRIES=4
+            echo "Java 애플리케이션 시작 대기 중 (초기 15초)..."
+            sleep 15
+
+            MAX_RETRIES=5
             RETRY_INTERVAL=5
             HTTP_STATUS="000"
             
