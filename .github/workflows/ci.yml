@@ -101,6 +101,25 @@ jobs:
             exit 1
           }
 
+      - name: Inject Secret Configuration Files
+        run: |
+          set -e
+          mkdir -p src/main/resources || {
+            echo "Error: Failed to create resources directory"
+            exit 1
+          }
+          
+          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml || {
+              echo "Error: Failed to write application-secret.yml"
+              exit 1
+            }
+            echo "application-secret.yml injected successfully"
+          else
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+
       - name: Dependency Vulnerability Check
         run: |
           echo "Checking for known vulnerabilities..."
