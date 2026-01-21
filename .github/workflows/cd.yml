@@ -38,6 +38,37 @@ jobs:
         with:
           ref: ${{ github.ref }}
 
+      - name: Wait for CI artifact to be available
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "[0/7] CI 아티팩트 전파 대기 중..."
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}"
+          REPO="${{ github.repository }}"
+          MAX_RETRIES=12
+          RETRY_INTERVAL=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            ARTIFACT_ID=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+              --jq ".artifacts[] | select(.name==\"${ARTIFACT_NAME}\" and .expired==false) | .id" 2>/dev/null | head -n 1 || true)
+            
+            if [ -n "$ARTIFACT_ID" ]; then
+              echo "아티팩트 확인 완료 (id: $ARTIFACT_ID)"
+              exit 0
+            fi
+            
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "아직 아티팩트가 조회되지 않습니다. ${RETRY_INTERVAL}초 후 재시도... ($i/$MAX_RETRIES)"
+              sleep "$RETRY_INTERVAL"
+            fi
+          done
+          
+          echo "Error: CI 아티팩트가 일정 시간 내 조회되지 않습니다: ${ARTIFACT_NAME}"
+          exit 1
+
       - name: Download JAR Artifact (from CI)
         if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
