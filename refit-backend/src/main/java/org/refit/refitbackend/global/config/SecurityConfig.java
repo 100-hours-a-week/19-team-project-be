@@ -33,6 +33,7 @@ public class SecurityConfig {
     public List<String> allowUrls() {
         return List.of(
                 "/",
+                "/actuator/**",
                 "/index.html",
                 "/callback.html",
                 "/api/v1/auth/**",
