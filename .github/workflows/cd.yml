@@ -10,7 +10,9 @@ on:
       - main
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   deploy:
@@ -29,7 +31,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch }}
-          token: ${{ secrets.PAT }}
 
       - name: Checkout code (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
@@ -43,8 +44,8 @@ jobs:
         with:
           name: backend-jar-${{ github.event.workflow_run.head_sha }}
           path: build-output
-          github-token: ${{ secrets.PAT }}
           run-id: ${{ github.event.workflow_run.id }}
+        continue-on-error: false
 
       - name: Verify CI Artifact
         if: github.event_name == 'workflow_run'
@@ -98,6 +99,7 @@ jobs:
 
       - name: Prepare JAR for deployment
         run: |
+          set -e
           echo "Preparing JAR for deployment..."
           
           if [ "${{ github.event_name }}" == "workflow_run" ]; then
@@ -110,12 +112,23 @@ jobs:
           else
             if [ -f "refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
               echo "Using manually built artifact"
-              mkdir -p build-output
-              cp refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar build-output/refit-backend-0.0.1-SNAPSHOT.jar
+              mkdir -p build-output || {
+                echo "Error: Failed to create build-output directory"
+                exit 1
+              }
+              cp refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar build-output/refit-backend-0.0.1-SNAPSHOT.jar || {
+                echo "Error: Failed to copy JAR file"
+                exit 1
+              }
             else
-              echo "Error: JAR file not found"
+              echo "Error: JAR file not found at refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
               exit 1
             fi
+          fi
+          
+          if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found in build-output directory"
+            exit 1
           fi
           
           echo "JAR file ready for deployment:"
@@ -154,7 +167,10 @@ jobs:
             echo "============================================"
             
             # 백업 디렉토리 준비
-            mkdir -p $BACKUP_DIR
+            mkdir -p $BACKUP_DIR || {
+                echo "에러: 백업 디렉토리 생성 실패: $BACKUP_DIR"
+                exit 1
+            }
             
             # JAR 파일 존재 확인
             if [ ! -f "$JAR_PATH" ]; then
@@ -163,7 +179,10 @@ jobs:
             fi
             
             # 백업 (롤백용)
-            cp "$JAR_PATH" "$BACKUP_DIR/backend-$TIMESTAMP.jar"
+            cp "$JAR_PATH" "$BACKUP_DIR/backend-$TIMESTAMP.jar" || {
+                echo "에러: 백업 파일 복사 실패"
+                exit 1
+            }
             echo "백업 완료: $BACKUP_DIR/backend-$TIMESTAMP.jar"
             
             # 권한 확인 및 수정
@@ -173,32 +192,62 @@ jobs:
             if pm2 describe $APP_NAME > /dev/null 2>&1; then
                 echo "기존 프로세스 교체 (Delete + Start)..."
                 pm2 delete $APP_NAME || true
-                pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH"
             else
                 echo "신규 프로세스 시작..."
-                pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH"
+            fi
+            
+            # PM2 시작 및 상태 확인
+            pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH" || {
+                echo "에러: PM2 start 명령어 실행 실패"
+                exit 1
+            }
+            
+            # PM2 시작 확인
+            sleep 2
+            if ! pm2 describe $APP_NAME > /dev/null 2>&1; then
+                echo "에러: PM2 프로세스 시작 실패"
+                pm2 logs $APP_NAME --lines 20 --nostream || true
+                exit 1
             fi
             
             # Caddy 리로드
             if systemctl is-active --quiet caddy; then
-                sudo systemctl reload caddy
+                sudo systemctl reload caddy || {
+                    echo "경고: Caddy 리로드 실패 (계속 진행)"
+                }
+            else
+                echo "경고: Caddy 서비스가 실행 중이 아닙니다"
             fi
             
             # 배포 검증
-            echo "배포 검증 중 (10초 대기)..."
+            echo "배포 검증 중 (초기 10초 대기)..."
             sleep 10
             
-            echo "Checking backend health endpoint..."
-            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
-            echo "HTTP Status Code: $HTTP_STATUS"
+            MAX_RETRIES=3
+            RETRY_INTERVAL=5
+            HTTP_STATUS="000"
             
-            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
-                echo "배포 성공! (HTTP $HTTP_STATUS)"
-                pm2 save
+            for i in $(seq 1 $MAX_RETRIES); do
+                echo "Checking backend health endpoint (시도 $i/$MAX_RETRIES)..."
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+                echo "HTTP Status Code: $HTTP_STATUS"
                 
-                # 오래된 백업 삭제 (7일 이상)
-                find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null || true
-            else
+                if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
+                    echo "배포 성공! (HTTP $HTTP_STATUS)"
+                    pm2 save
+                    
+                    # 오래된 백업 삭제 (7일 이상)
+                    find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null || true
+                    break
+                fi
+                
+                if [ $i -lt $MAX_RETRIES ]; then
+                    echo "헬스 체크 실패, ${RETRY_INTERVAL}초 후 재시도..."
+                    sleep $RETRY_INTERVAL
+                fi
+            done
+            
+            if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "404" ]; then
                 echo "배포 이상 감지! (HTTP $HTTP_STATUS)"
                 echo "PM2 상태 확인:"
                 pm2 status
