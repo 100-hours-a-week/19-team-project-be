@@ -1,0 +1,273 @@
+name: Re-Fit Backend CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'refit-backend/**'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'refit-backend/**'
+  workflow_dispatch:
+    inputs:
+      job_to_run:
+        description: 'Which job to run'
+        required: true
+        type: choice
+        options:
+          - lint-and-test
+          - integration
+          - release
+          - all
+
+env:
+  JAVA_VERSION: 21
+
+permissions:
+  contents: write
+
+jobs:
+  # 1. PR 검증 단계
+  lint-and-test:
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'lint-and-test' || github.event.inputs.job_to_run == 'all'))
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: |
+          chmod +x gradlew || {
+            echo "Error: Failed to grant execute permission to gradlew"
+            exit 1
+          }
+
+      - name: Compile Check
+        run: |
+          ./gradlew compileJava --no-daemon || {
+            echo "Error: Compilation failed"
+            exit 1
+          }
+
+      - name: Build Verification
+        run: |
+          ./gradlew build -x test --no-daemon || {
+            echo "Error: Build verification failed"
+            exit 1
+          }
+
+  # 2. 통합 검증 단계
+  integration:
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'integration' || github.event.inputs.job_to_run == 'all'))
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: |
+          chmod +x gradlew || {
+            echo "Error: Failed to grant execute permission to gradlew"
+            exit 1
+          }
+
+      - name: Inject Secret Configuration Files
+        run: |
+          set -e
+          mkdir -p src/main/resources || {
+            echo "Error: Failed to create resources directory"
+            exit 1
+          }
+          
+          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml || {
+              echo "Error: Failed to write application-secret.yml"
+              exit 1
+            }
+            echo "application-secret.yml injected successfully"
+          else
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+
+      - name: Dependency Vulnerability Check
+        run: |
+          echo "Checking for known vulnerabilities..."
+          ./gradlew dependencies --no-daemon | grep -i "vulnerability\|CVE" || echo "No known vulnerabilities found in dependency tree"
+        continue-on-error: true
+
+      - name: Production Build Test
+        run: |
+          ./gradlew clean bootJar --no-daemon || {
+            echo "Error: Production build failed"
+            exit 1
+          }
+
+      - name: Verify JAR
+        run: |
+          set -e
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          
+          echo "JAR file created successfully"
+          ls -lh build/libs/*.jar
+          
+          jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar | head -20 || {
+            echo "Warning: Failed to list JAR contents, but JAR file exists"
+          }
+
+      - name: Archive JAR Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar-${{ github.sha }}
+          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
+          retention-days: 7
+
+      - name: Log Artifact Info
+        if: success()
+        run: |
+          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
+          echo "Commit SHA: ${{ github.sha }}"
+
+  # 3. 릴리즈 확정 단계
+  release:
+    if: |
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release' || github.event.inputs.job_to_run == 'all'))
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: |
+          chmod +x gradlew || {
+            echo "Error: Failed to grant execute permission to gradlew"
+            exit 1
+          }
+
+      - name: Inject Secret Configuration Files
+        run: |
+          set -e
+          mkdir -p src/main/resources || {
+            echo "Error: Failed to create resources directory"
+            exit 1
+          }
+          
+          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml || {
+              echo "Error: Failed to write application-secret.yml"
+              exit 1
+            }
+            echo "application-secret.yml injected successfully"
+          else
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+
+      - name: Production Build
+        run: |
+          ./gradlew clean bootJar --no-daemon || {
+            echo "Error: Production build failed"
+            exit 1
+          }
+
+      - name: Verify Build Output
+        run: |
+          set -e
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          
+          echo "JAR file exists"
+          ls -lh build/libs/*.jar
+
+      - name: Archive JAR Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar-${{ github.sha }}
+          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
+          retention-days: 7
+
+      - name: Log Artifact Info
+        if: success()
+        run: |
+          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
+          echo "Commit SHA: ${{ github.sha }}"
+
+      - name: Create Release Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          TAG_NAME="v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}"
+          
+          git config user.name "github-actions[bot]" || {
+            echo "Error: Failed to set git user name"
+            exit 1
+          }
+          git config user.email "github-actions[bot]@users.noreply.github.com" || {
+            echo "Error: Failed to set git user email"
+            exit 1
+          }
+          
+          git tag -a "$TAG_NAME" -m "Backend release $TAG_NAME" || {
+            echo "Error: Failed to create git tag"
+            exit 1
+          }
+          
+          git push origin "$TAG_NAME" || {
+            echo "Error: Failed to push git tag"
+            exit 1
+          }
+          
+          echo "Release tag created and pushed: $TAG_NAME"

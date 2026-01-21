@@ -20,6 +20,22 @@ import java.util.List;
 @Configuration
 @RequiredArgsConstructor
 public class SecurityConfig {
+    @Bean
+    public List<String> allowUrls() {
+        return List.of(
+                "/",
+                "/index.html",
+                "/callback.html",
+                "/api/v1/auth/**",
+
+                "/ws/**",
+
+                "/swagger-ui/**",
+                "/swagger-resources/**",
+                "/v3/api-docs/**",
+                "/v3/api-docs/swagger-config"
+        );
+    }
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;

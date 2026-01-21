@@ -1,0 +1,288 @@
+name: Re-Fit Backend CD
+
+on:
+  workflow_run:
+    workflows: ["Re-Fit Backend CI"]
+    types:
+      - completed
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'workflow_dispatch'
+
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code (workflow_run)
+        if: github.event_name == 'workflow_run'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      - name: Checkout code (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Wait for CI artifact to be available
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "[0/7] CI 아티팩트 전파 대기 중..."
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}"
+          REPO="${{ github.repository }}"
+          MAX_RETRIES=12
+          RETRY_INTERVAL=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            ARTIFACT_ID=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+              --jq ".artifacts[] | select(.name==\"${ARTIFACT_NAME}\" and .expired==false) | .id" 2>/dev/null | head -n 1 || true)
+            
+            if [ -n "$ARTIFACT_ID" ]; then
+              echo "아티팩트 확인 완료 (id: $ARTIFACT_ID)"
+              exit 0
+            fi
+            
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "아직 아티팩트가 조회되지 않습니다. ${RETRY_INTERVAL}초 후 재시도... ($i/$MAX_RETRIES)"
+              sleep "$RETRY_INTERVAL"
+            fi
+          done
+          
+          echo "Error: CI 아티팩트가 일정 시간 내 조회되지 않습니다: ${ARTIFACT_NAME}"
+          exit 1
+
+      - name: Download JAR Artifact (from CI)
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "[1/7] CI 아티팩트 다운로드 중..."
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}"
+          
+          mkdir -p build-output
+          
+          MAX_RETRIES=8
+          RETRY_INTERVAL=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "다운로드 시도 $i/$MAX_RETRIES: ${ARTIFACT_NAME} (run-id: ${RUN_ID})"
+            if gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output; then
+              break
+            fi
+            
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "${RETRY_INTERVAL}초 후 재시도..."
+              sleep "$RETRY_INTERVAL"
+            fi
+          done
+          
+          if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: 다운로드한 JAR 파일이 없습니다: build-output/refit-backend-0.0.1-SNAPSHOT.jar"
+            echo "build-output 목록:"
+            ls -lah build-output || true
+            exit 1
+          fi
+
+      - name: Verify CI Artifact
+        if: github.event_name == 'workflow_run'
+        run: |
+          echo "[2/7] CI 아티팩트 검증 중..."
+          if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: CI artifact not found!"
+            exit 1
+          fi
+          echo "CI 아티팩트 검증 완료"
+
+      - name: Set up JDK (for manual build)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: refit-backend
+        run: chmod +x gradlew
+
+      - name: Inject Secret Configuration Files (for manual build)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: refit-backend
+        run: |
+          set -e
+          echo "[2/7] Secret 설정 파일 주입 중..."
+          mkdir -p src/main/resources
+          
+          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+          
+          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+          echo "Secret 설정 파일 주입 완료"
+
+      - name: Build JAR (for manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        working-directory: refit-backend
+        run: |
+          echo "[3/7] JAR 파일 빌드 중..."
+          ./gradlew clean bootJar --no-daemon
+          
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found after build"
+            exit 1
+          fi
+          echo "JAR 파일 빌드 완료"
+
+      - name: Prepare JAR for deployment
+        run: |
+          set -e
+          echo "[4/7] 배포용 JAR 파일 준비 중..."
+          
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+              echo "Error: CI artifact not found"
+              exit 1
+            fi
+            echo "CI 아티팩트 사용"
+          else
+            JAR_SOURCE="refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+            if [ ! -f "$JAR_SOURCE" ]; then
+              echo "Error: JAR file not found at $JAR_SOURCE"
+              exit 1
+            fi
+            mkdir -p build-output
+            cp "$JAR_SOURCE" build-output/refit-backend-0.0.1-SNAPSHOT.jar
+            echo "수동 빌드 JAR 파일 준비 완료"
+          fi
+          echo "배포용 JAR 파일 준비 완료"
+
+      - name: Deploy JAR to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "build-output/refit-backend-0.0.1-SNAPSHOT.jar"
+          target: ${{ secrets.SERVER_BASE_PATH }}/app/backend/refit-backend/build/libs/
+          strip_components: 1
+
+      - name: Deploy and restart backend
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            
+            BASE_PATH="${{ secrets.SERVER_BASE_PATH }}"
+            JAR_PATH="$BASE_PATH/app/backend/refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+            BACKUP_DIR="$BASE_PATH/backups/backend"
+            APP_NAME="backend"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            
+            echo "============================================"
+            echo "[5/7] 서버 배포 시작: $(date)"
+            echo "============================================"
+            
+            echo "[5-1] 백업 디렉토리 준비 중..."
+            mkdir -p $BACKUP_DIR
+            
+            echo "[5-2] JAR 파일 확인 중..."
+            if [ ! -f "$JAR_PATH" ]; then
+                echo "에러: JAR 파일을 찾을 수 없습니다: $JAR_PATH"
+                exit 1
+            fi
+            
+            echo "[5-3] 기존 버전 백업 중..."
+            cp "$JAR_PATH" "$BACKUP_DIR/backend-$TIMESTAMP.jar"
+            echo "백업 완료: $BACKUP_DIR/backend-$TIMESTAMP.jar"
+            
+            echo "[5-4] 파일 권한 설정 중..."
+            sudo chown -R ubuntu:ubuntu "$(dirname "$JAR_PATH")" 2>/dev/null || true
+            
+            echo "[5-5] PM2 프로세스 재시작 중..."
+            if pm2 describe $APP_NAME > /dev/null 2>&1; then
+                echo "기존 프로세스 중지 중..."
+                pm2 delete $APP_NAME || true
+            fi
+            
+            echo "새 프로세스 시작 중..."
+            pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH"
+            
+            echo "[5-6] PM2 프로세스 시작 확인 중..."
+            sleep 2
+            if ! pm2 describe $APP_NAME > /dev/null 2>&1; then
+                echo "에러: PM2 프로세스 시작 실패"
+                pm2 logs $APP_NAME --lines 20 --nostream || true
+                exit 1
+            fi
+            echo "PM2 프로세스 시작 완료"
+            
+            echo "[5-7] Caddy 웹서버 리로드 중..."
+            systemctl is-active --quiet caddy && sudo systemctl reload caddy || true
+            
+            echo "[6/7] 배포 검증 중..."
+            echo "Java 애플리케이션 시작 대기 중 (초기 10초)..."
+            sleep 10
+            
+            MAX_RETRIES=4
+            RETRY_INTERVAL=5
+            HTTP_STATUS="000"
+            
+            for i in $(seq 1 $MAX_RETRIES); do
+                echo "헬스 체크 시도 $i/$MAX_RETRIES..."
+                HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+                echo "HTTP Status Code: $HTTP_STATUS"
+                
+                if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
+                    echo "[7/7] 배포 성공! (HTTP $HTTP_STATUS)"
+                    pm2 save
+                    find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null || true
+                    break
+                fi
+                
+                if [ $i -lt $MAX_RETRIES ]; then
+                    echo "${RETRY_INTERVAL}초 후 재시도..."
+                    sleep $RETRY_INTERVAL
+                fi
+            done
+            
+            if [ "$HTTP_STATUS" != "200" ] && [ "$HTTP_STATUS" != "404" ]; then
+                echo "[7/7] 배포 실패! (HTTP $HTTP_STATUS)"
+                echo "PM2 상태:"
+                pm2 status
+                echo "백엔드 로그 (최근 50줄):"
+                pm2 logs $APP_NAME --lines 50 --nostream || true
+                echo "롤백 명령: cp $BACKUP_DIR/backend-$TIMESTAMP.jar $JAR_PATH && pm2 restart $APP_NAME"
+                exit 1
+            fi
+            
+            echo "============================================"
+            echo "Re-Fit BE 배포 완료: $(date)"
+            echo "============================================"
