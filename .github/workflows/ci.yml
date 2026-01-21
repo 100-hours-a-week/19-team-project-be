@@ -86,6 +86,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: develop
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -177,6 +179,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
 
       - name: Set up JDK
