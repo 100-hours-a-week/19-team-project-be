@@ -68,19 +68,11 @@ jobs:
         run: |
           mkdir -p src/main/resources
           
-          if [ -n "${{ secrets.APPLICATION_PROD_YML }}" ]; then
-            echo "${{ secrets.APPLICATION_PROD_YML }}" > src/main/resources/application-prod.yml
-            echo "application-prod.yml injected successfully"
+          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+            echo "application-secret.yml injected successfully"
           else
-            echo "Error: APPLICATION_PROD_YML secret not found"
-            exit 1
-          fi
-          
-          if [ -n "${{ secrets.APPLICATION_OAUTH2_YML }}" ]; then
-            echo "${{ secrets.APPLICATION_OAUTH2_YML }}" > src/main/resources/application-oauth2.yml
-            echo "application-oauth2.yml injected successfully"
-          else
-            echo "Error: APPLICATION_OAUTH2_YML secret not found"
+            echo "Error: APPLICATION_SECRET_YML secret not found"
             exit 1
           fi
 
