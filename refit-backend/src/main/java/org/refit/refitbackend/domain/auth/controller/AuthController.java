@@ -4,6 +4,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +14,7 @@ import org.refit.refitbackend.domain.auth.config.properties.OAuth2RegistrationPr
 import org.refit.refitbackend.domain.auth.dto.AuthReq;
 import org.refit.refitbackend.domain.auth.dto.AuthRes;
 import org.refit.refitbackend.domain.auth.service.CustomOAuth2UserService;
+import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
@@ -70,16 +72,43 @@ public class AuthController {
     public ResponseEntity<ApiResponse<AuthRes.OAuthLoginResponse>> kakaoLogin(
             @Valid @RequestBody AuthReq.KakaoLoginRequest request
     ) {
+        log.info("[KAKAO][LOGIN] code={}", request.code());
+
         return ResponseUtil.ok("login_result", oAuth2UserService.kakaoLogin(request));
+    }
+
+    @Operation(summary = "토큰 재발급", description = "RTR 방식으로 AT/RT 재발급")
+    @SecurityRequirement(name = "refreshToken")
+    @PostMapping("/tokens")
+    public ResponseEntity<ApiResponse<AuthRes.TokenDto>> refreshTokens(
+            @RequestHeader(value = "Refresh-Token", required = false) String refreshHeader,
+            @RequestBody(required = false) AuthReq.RefreshTokenRequest request
+    ) {
+        String refreshToken = request != null ? request.refreshToken() : null;
+        if (refreshToken == null || refreshToken.isBlank()) {
+            refreshToken = refreshHeader;
+        }
+        if (refreshToken == null || refreshToken.isBlank()) {
+            return ResponseUtil.error(ExceptionType.AUTH_INVALID_REQUEST);
+        }
+
+        return ResponseUtil.ok("token_refreshed", oAuth2UserService.refreshTokens(refreshToken));
     }
 
     @Operation(summary = "카카오 로그인 페이지로 리다이렉트", description = "카카오 OAuth 인증 페이지로 리다이렉트")
     @GetMapping("/oauth/kakao/authorize")
     public ResponseEntity<Void> kakaoAuthorize() {
+
+        log.info("[KAKAO][AUTHORIZE] authorizationUri={}", providerProperties.kakao().authorizationUri());
+        log.info("[KAKAO][AUTHORIZE] clientId={}", registrationProperties.kakao().clientId());
+        log.info("[KAKAO][AUTHORIZE] redirectUri={}", registrationProperties.kakao().redirectUri());
+
         String kakaoAuthUrl = String.format("%s?client_id=%s&redirect_uri=%s&response_type=code",
                 providerProperties.kakao().authorizationUri(),
                 registrationProperties.kakao().clientId(),
                 registrationProperties.kakao().redirectUri());
+
+        log.info("[KAKAO][AUTHORIZE] redirectTo={}", kakaoAuthUrl);
 
         return ResponseEntity.status(302)
                 .header("Location", kakaoAuthUrl)

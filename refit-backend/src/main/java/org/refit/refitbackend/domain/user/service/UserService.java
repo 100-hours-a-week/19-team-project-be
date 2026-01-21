@@ -20,4 +20,11 @@ public class UserService {
 
         return UserRes.Detail.from(user);
     }
+
+    public UserRes.Me getMe(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("user_not_found"));
+
+        return UserRes.Me.from(user);
+    }
 }
