@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
 @Tag(name = "Auth", description = "회원가입 / 인증")
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/v1/auth")
 public class AuthController {
 
     private final CustomOAuth2UserService oAuth2UserService;
