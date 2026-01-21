@@ -16,7 +16,9 @@ jobs:
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: |
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
+      github.event_name == 'workflow_dispatch'
 
     environment:
       name: production
@@ -26,31 +28,37 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+          token: ${{ secrets.PAT }}
 
-      - name: Download JAR Artifact
-        id: download-artifact
+      - name: Download JAR Artifact (from CI)
+        if: github.event_name == 'workflow_run'
         uses: actions/download-artifact@v4
-        continue-on-error: true
         with:
           name: backend-jar-${{ github.event.workflow_run.head_sha }}
           path: build-output
           github-token: ${{ secrets.PAT }}
           run-id: ${{ github.event.workflow_run.id }}
 
-      - name: Check if artifact exists or rebuild
-        id: check-artifact
+      - name: Verify CI Artifact
+        if: github.event_name == 'workflow_run'
         run: |
-          if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "artifact_exists=true" >> $GITHUB_OUTPUT
-            echo "JAR artifact found, using downloaded artifact"
-            ls -lh build-output/*.jar
-          else
-            echo "artifact_exists=false" >> $GITHUB_OUTPUT
-            echo "JAR artifact not found, will rebuild with secrets"
+          echo "Verifying CI artifact..."
+          echo "Artifact name: backend-jar-${{ github.event.workflow_run.head_sha }}"
+          echo "Workflow run ID: ${{ github.event.workflow_run.id }}"
+          
+          if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: CI artifact not found!"
+            echo "CI should have uploaded the artifact. Please check:"
+            echo "  1. CI integration/release job ran successfully"
+            echo "  2. Artifact was uploaded with name: backend-jar-${{ github.event.workflow_run.head_sha }}"
+            exit 1
           fi
+          
+          echo "CI artifact verified successfully"
+          ls -lh build-output/*.jar
 
-      - name: Set up JDK
-        if: steps.check-artifact.outputs.artifact_exists == 'false'
+      - name: Set up JDK (for manual build)
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/setup-java@v4
         with:
           java-version: '21'
@@ -58,12 +66,12 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for gradlew
-        if: steps.check-artifact.outputs.artifact_exists == 'false'
+        if: github.event_name == 'workflow_dispatch'
         working-directory: refit-backend
         run: chmod +x gradlew
 
-      - name: Inject Secret Configuration Files
-        if: steps.check-artifact.outputs.artifact_exists == 'false'
+      - name: Inject Secret Configuration Files (for manual build)
+        if: github.event_name == 'workflow_dispatch'
         working-directory: refit-backend
         run: |
           mkdir -p src/main/resources
@@ -76,23 +84,33 @@ jobs:
             exit 1
           fi
 
-      - name: Rebuild with Secrets
-        if: steps.check-artifact.outputs.artifact_exists == 'false'
+      - name: Build JAR (for manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
         working-directory: refit-backend
         run: ./gradlew clean bootJar --no-daemon
 
       - name: Prepare JAR for deployment
         run: |
-          if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "Using downloaded artifact"
-          elif [ -f "refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "Using rebuilt artifact"
-            mkdir -p build-output
-            cp refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar build-output/refit-backend-0.0.1-SNAPSHOT.jar
+          echo "Preparing JAR for deployment..."
+          
+          if [ "${{ github.event_name }}" == "workflow_run" ]; then
+            if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+              echo "Using CI artifact"
+            else
+              echo "Error: CI artifact not found"
+              exit 1
+            fi
           else
-            echo "Error: JAR file not found"
-            exit 1
+            if [ -f "refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+              echo "Using manually built artifact"
+              mkdir -p build-output
+              cp refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar build-output/refit-backend-0.0.1-SNAPSHOT.jar
+            else
+              echo "Error: JAR file not found"
+              exit 1
+            fi
           fi
+          
           echo "JAR file ready for deployment:"
           ls -lh build-output/refit-backend-0.0.1-SNAPSHOT.jar
 

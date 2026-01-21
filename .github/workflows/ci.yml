@@ -112,6 +112,12 @@ jobs:
           path: build/libs/refit-backend-0.0.1-SNAPSHOT.jar
           retention-days: 7
 
+      - name: Log Artifact Info
+        if: success()
+        run: |
+          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
+          echo "Commit SHA: ${{ github.sha }}"
+
   # 3. 릴리즈 확정 단계
   release:
     if: |
@@ -172,6 +178,12 @@ jobs:
           name: backend-jar-${{ github.sha }}
           path: build/libs/refit-backend-0.0.1-SNAPSHOT.jar
           retention-days: 7
+
+      - name: Log Artifact Info
+        if: success()
+        run: |
+          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
+          echo "Commit SHA: ${{ github.sha }}"
 
       - name: Create Release Tag
         env:
