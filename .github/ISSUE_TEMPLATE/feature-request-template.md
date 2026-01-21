@@ -1,9 +1,9 @@
 ---
 name: Feature-Request-Template
 about: 기능 요청 템플릿
-title: "[Feature] {이슈 이름}"
+title: "[Feature] {이슈 내용}"
 labels: ''
-assignees: ''
+assignees: Eeeegarden
 
 ---
 
