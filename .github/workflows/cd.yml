@@ -185,9 +185,12 @@ jobs:
             fi
             
             # 배포 검증
-            echo "배포 검증 중 (15초 대기)..."
-            sleep 15
+            echo "배포 검증 중 (10초 대기)..."
+            sleep 10
+            
+            echo "Checking backend health endpoint..."
             HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+            echo "HTTP Status Code: $HTTP_STATUS"
             
             if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
                 echo "배포 성공! (HTTP $HTTP_STATUS)"
@@ -197,7 +200,10 @@ jobs:
                 find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null || true
             else
                 echo "배포 이상 감지! (HTTP $HTTP_STATUS)"
-                echo "로그 확인: pm2 logs $APP_NAME"
+                echo "PM2 상태 확인:"
+                pm2 status
+                echo "백엔드 로그 (최근 50줄):"
+                pm2 logs $APP_NAME --lines 50 --nostream || true
                 echo "롤백이 필요한 경우: cp $BACKUP_DIR/backend-$TIMESTAMP.jar $JAR_PATH && pm2 restart $APP_NAME"
                 exit 1
             fi
