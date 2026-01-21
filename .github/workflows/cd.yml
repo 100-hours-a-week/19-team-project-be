@@ -1,0 +1,190 @@
+name: Re-Fit Backend CD
+
+on:
+  workflow_run:
+    workflows: ["Re-Fit Backend CI"]
+    types:
+      - completed
+    branches:
+      - develop
+      - main
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+
+    environment:
+      name: production
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || github.ref }}
+
+      - name: Download JAR Artifact
+        id: download-artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: backend-jar-${{ github.event.workflow_run.head_sha }}
+          path: build-output
+          github-token: ${{ secrets.PAT }}
+          run-id: ${{ github.event.workflow_run.id }}
+
+      - name: Check if artifact exists or rebuild
+        id: check-artifact
+        run: |
+          if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "artifact_exists=true" >> $GITHUB_OUTPUT
+            echo "JAR artifact found, using downloaded artifact"
+            ls -lh build-output/*.jar
+          else
+            echo "artifact_exists=false" >> $GITHUB_OUTPUT
+            echo "JAR artifact not found, will rebuild with secrets"
+          fi
+
+      - name: Set up JDK
+        if: steps.check-artifact.outputs.artifact_exists == 'false'
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        if: steps.check-artifact.outputs.artifact_exists == 'false'
+        working-directory: refit-backend
+        run: chmod +x gradlew
+
+      - name: Inject Secret Configuration Files
+        if: steps.check-artifact.outputs.artifact_exists == 'false'
+        working-directory: refit-backend
+        run: |
+          mkdir -p src/main/resources
+          
+          if [ -n "${{ secrets.APPLICATION_PROD_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_PROD_YML }}" > src/main/resources/application-prod.yml
+            echo "application-prod.yml injected successfully"
+          else
+            echo "Error: APPLICATION_PROD_YML secret not found"
+            exit 1
+          fi
+          
+          if [ -n "${{ secrets.APPLICATION_OAUTH2_YML }}" ]; then
+            echo "${{ secrets.APPLICATION_OAUTH2_YML }}" > src/main/resources/application-oauth2.yml
+            echo "application-oauth2.yml injected successfully"
+          else
+            echo "Error: APPLICATION_OAUTH2_YML secret not found"
+            exit 1
+          fi
+
+      - name: Rebuild with Secrets
+        if: steps.check-artifact.outputs.artifact_exists == 'false'
+        working-directory: refit-backend
+        run: ./gradlew clean bootJar --no-daemon
+
+      - name: Prepare JAR for deployment
+        run: |
+          if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Using downloaded artifact"
+          elif [ -f "refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Using rebuilt artifact"
+            mkdir -p build-output
+            cp refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar build-output/refit-backend-0.0.1-SNAPSHOT.jar
+          else
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          echo "JAR file ready for deployment:"
+          ls -lh build-output/refit-backend-0.0.1-SNAPSHOT.jar
+
+      - name: Deploy JAR to server via SCP
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "build-output/refit-backend-0.0.1-SNAPSHOT.jar"
+          target: ${{ secrets.SERVER_BASE_PATH }}/app/backend/refit-backend/build/libs/
+          strip_components: 1
+
+      - name: Deploy and restart backend
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          port: ${{ secrets.SSH_PORT }}
+          key: ${{ secrets.SSH_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            
+            BASE_PATH="${{ secrets.SERVER_BASE_PATH }}"
+            JAR_PATH="$BASE_PATH/app/backend/refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+            BACKUP_DIR="$BASE_PATH/backups/backend"
+            APP_NAME="backend"
+            TIMESTAMP=$(date +%Y%m%d%H%M%S)
+            
+            echo "============================================"
+            echo "Re-Fit BE 배포 시작: $(date)"
+            echo "============================================"
+            
+            # 백업 디렉토리 준비
+            mkdir -p $BACKUP_DIR
+            
+            # JAR 파일 존재 확인
+            if [ ! -f "$JAR_PATH" ]; then
+                echo "에러: JAR 파일을 찾을 수 없습니다: $JAR_PATH"
+                exit 1
+            fi
+            
+            # 백업 (롤백용)
+            cp "$JAR_PATH" "$BACKUP_DIR/backend-$TIMESTAMP.jar"
+            echo "백업 완료: $BACKUP_DIR/backend-$TIMESTAMP.jar"
+            
+            # 권한 확인 및 수정
+            sudo chown -R ubuntu:ubuntu "$(dirname "$JAR_PATH")" 2>/dev/null || true
+            
+            # PM2를 이용한 무중단 재시작
+            if pm2 describe $APP_NAME > /dev/null 2>&1; then
+                echo "기존 프로세스 교체 (Delete + Start)..."
+                pm2 delete $APP_NAME || true
+                pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH"
+            else
+                echo "신규 프로세스 시작..."
+                pm2 start /usr/bin/java --name "$APP_NAME" -- -jar "$JAR_PATH"
+            fi
+            
+            # Caddy 리로드
+            if systemctl is-active --quiet caddy; then
+                sudo systemctl reload caddy
+            fi
+            
+            # 배포 검증
+            echo "배포 검증 중 (15초 대기)..."
+            sleep 15
+            HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/actuator/health 2>/dev/null || echo "000")
+            
+            if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "404" ]; then
+                echo "배포 성공! (HTTP $HTTP_STATUS)"
+                pm2 save
+                
+                # 오래된 백업 삭제 (7일 이상)
+                find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null || true
+            else
+                echo "배포 이상 감지! (HTTP $HTTP_STATUS)"
+                echo "로그 확인: pm2 logs $APP_NAME"
+                echo "롤백이 필요한 경우: cp $BACKUP_DIR/backend-$TIMESTAMP.jar $JAR_PATH && pm2 restart $APP_NAME"
+                exit 1
+            fi
+            
+            echo "============================================"
+            echo "Re-Fit BE 배포 완료: $(date)"
+            echo "============================================"
