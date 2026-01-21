@@ -7,7 +7,7 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
 
   jwt:
@@ -17,3 +17,13 @@ spring:
 
   jackson:
     property-naming-strategy: SNAKE_CASE
+
+springdoc:
+  swagger-ui:
+    url: /v3/api-docs
+    disable-swagger-default-url: true
+  api-docs:
+    enabled: true
+
+server:
+  forward-headers-strategy: framework
