@@ -71,16 +71,42 @@ jobs:
 
       - name: Download JAR Artifact (from CI)
         if: github.event_name == 'workflow_run'
-        uses: actions/download-artifact@v4
-        with:
-          name: backend-jar-${{ github.event.workflow_run.head_sha }}
-          path: build-output
-          run-id: ${{ github.event.workflow_run.id }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          echo "[1/7] CI 아티팩트 다운로드 중..."
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}"
+          
+          mkdir -p build-output
+          
+          MAX_RETRIES=8
+          RETRY_INTERVAL=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "다운로드 시도 $i/$MAX_RETRIES: ${ARTIFACT_NAME} (run-id: ${RUN_ID})"
+            if gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output; then
+              break
+            fi
+            
+            if [ "$i" -lt "$MAX_RETRIES" ]; then
+              echo "${RETRY_INTERVAL}초 후 재시도..."
+              sleep "$RETRY_INTERVAL"
+            fi
+          done
+          
+          if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: 다운로드한 JAR 파일이 없습니다: build-output/refit-backend-0.0.1-SNAPSHOT.jar"
+            echo "build-output 목록:"
+            ls -lah build-output || true
+            exit 1
+          fi
 
       - name: Verify CI Artifact
         if: github.event_name == 'workflow_run'
         run: |
-          echo "[1/7] CI 아티팩트 검증 중..."
+          echo "[2/7] CI 아티팩트 검증 중..."
           if [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
             echo "Error: CI artifact not found!"
             exit 1
