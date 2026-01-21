@@ -38,9 +38,13 @@ public class SecurityConfig {
                 "/index.html",
                 "/callback.html",
                 "/v1/auth/**",
+                "/api/v1/auth/**",
                 "/v1/jobs",
+                "/api/v1/jobs",
                 "/v1/skills",
+                "/api/v1/skills",
                 "/v1/career-levels",
+                "/api/v1/career-levels",
 
                 "/ws/**",
 
@@ -51,7 +55,7 @@ public class SecurityConfig {
                 "/v3/api-docs/**",
                 "/api/v3/api-docs/**",
                 "/v3/api-docs/swagger-config",
-                "/api,v3/api-docs/swagger-config"
+                "/api/v3/api-docs/swagger-config"
         );
     }
 
