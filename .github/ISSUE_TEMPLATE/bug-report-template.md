@@ -3,7 +3,7 @@ name: Bug-Report-Template
 about: 버그 리포트 템플릿
 title: "[Bug] {이슈 내용}"
 labels: ''
-assignees: ''
+assignees: Eeeegarden
 
 ---
 
