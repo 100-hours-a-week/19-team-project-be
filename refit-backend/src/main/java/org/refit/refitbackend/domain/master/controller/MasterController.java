@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/v1")
+@RequestMapping("/api/v1")
 @Tag(name = "Master", description = "마스터 데이터 조회 API (직무, 스킬, 경력 레벨)")
 public class MasterController {
 
