@@ -34,16 +34,24 @@ public class SecurityConfig {
         return List.of(
                 "/",
                 "/actuator/**",
+                "/api/actuator/**",
                 "/index.html",
                 "/callback.html",
                 "/api/v1/auth/**",
+                "/api/v1/jobs",
+                "/api/v1/skills",
+                "/api/v1/career-levels",
 
                 "/ws/**",
 
                 "/swagger-ui/**",
+                "/api/swagger-ui/**",
                 "/swagger-resources/**",
+                "/api/swagger-resources/**",
                 "/v3/api-docs/**",
-                "/v3/api-docs/swagger-config"
+                "/api/v3/api-docs/**",
+                "/v3/api-docs/swagger-config",
+                "/api,v3/api-docs/swagger-config"
         );
     }
 
