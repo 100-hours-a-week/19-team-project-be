@@ -6,12 +6,15 @@ import org.refit.refitbackend.domain.auth.config.properties.OAuth2ProviderProper
 import org.refit.refitbackend.domain.auth.config.properties.OAuth2RegistrationProperties;
 import org.refit.refitbackend.domain.auth.dto.Oauth2.OAuth2KakaoUserInfoDto;
 import org.refit.refitbackend.domain.auth.dto.Oauth2.OAuth2TokenInfoDto;
+import org.refit.refitbackend.global.error.CustomException;
+import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.*;
 import org.springframework.stereotype.Component;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.HttpStatusCodeException;
 
 import java.util.Map;
 
@@ -53,9 +56,15 @@ public class KakaoUtil {
                     .accessToken(body.get("access_token").toString())
                     .refreshToken(body.get("refresh_token") != null ? body.get("refresh_token").toString() : null)
                     .build();
+        } catch (HttpStatusCodeException e) {
+            log.error("kakao token request failed: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new CustomException(ExceptionType.INVALID_AUTH_CODE);
+            }
+            throw new CustomException(ExceptionType.SERVICE_UNAVAILABLE);
         } catch (Exception e) {
-            log.error("카카오 토큰 요청 실패: {}", e.getMessage());
-            throw new RuntimeException("카카오 토큰 요청 실패", e);
+            log.error("kakao token request failed: {}", e.getMessage(), e);
+            throw new CustomException(ExceptionType.SERVICE_UNAVAILABLE);
         }
     }
 
@@ -93,9 +102,15 @@ public class KakaoUtil {
                     .profileImageUrl(profileImageUrl)
                     .build();
 
+        } catch (HttpStatusCodeException e) {
+            log.error("kakao user info request failed: status={}, body={}", e.getStatusCode(), e.getResponseBodyAsString());
+            if (e.getStatusCode().is4xxClientError()) {
+                throw new CustomException(ExceptionType.AUTH_INVALID_TOKEN);
+            }
+            throw new CustomException(ExceptionType.SERVICE_UNAVAILABLE);
         } catch (Exception e) {
-            log.error("카카오 사용자 정보 요청 실패: {}", e.getMessage(), e);
-            throw new RuntimeException("카카오 사용자 정보 요청 실패", e);
+            log.error("kakao user info request failed: {}", e.getMessage(), e);
+            throw new CustomException(ExceptionType.SERVICE_UNAVAILABLE);
         }
     }
 }
