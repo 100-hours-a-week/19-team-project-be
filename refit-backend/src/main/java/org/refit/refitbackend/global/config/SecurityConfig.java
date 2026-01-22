@@ -38,14 +38,12 @@ public class SecurityConfig {
                 "/api/actuator/**",
                 "/index.html",
                 "/callback.html",
+                "/chat-test.html",
+                "/chat-lab.html",
+                "/chat-app.html",
                 "/v1/auth/**",
                 "/api/v1/auth/**",
-                "/v1/jobs",
-                "/api/v1/jobs",
-                "/v1/skills",
-                "/api/v1/skills",
-                "/v1/career-levels",
-                "/api/v1/career-levels",
+                "/api/api/**",
 
                 "/ws/**",
 

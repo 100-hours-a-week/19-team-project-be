@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.domain.master.dto.MasterRes;
 import org.refit.refitbackend.domain.master.service.MasterService;
 import org.refit.refitbackend.global.response.ApiResponse;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1")
@@ -42,7 +44,10 @@ public class MasterController {
     )
     @GetMapping("/jobs")
     public ResponseEntity<ApiResponse<MasterRes.Jobs>> getJobs() {
-        return ResponseUtil.ok("success", masterService.getJobs());
+        MasterRes.Jobs result = masterService.getJobs();
+        int count = result.jobs() == null ? 0 : result.jobs().size();
+        log.info("GET /api/v1/jobs -> count={}", count);
+        return ResponseUtil.ok("success", result);
     }
 
     /* =======================
@@ -63,7 +68,10 @@ public class MasterController {
     )
     @GetMapping("/career-levels")
     public ResponseEntity<ApiResponse<MasterRes.CareerLevels>> getCareerLevels() {
-        return ResponseUtil.ok("success", masterService.getCareerLevels());
+        MasterRes.CareerLevels result = masterService.getCareerLevels();
+        int count = result.careerLevels() == null ? 0 : result.careerLevels().size();
+        log.info("GET /api/v1/career-levels -> count={}", count);
+        return ResponseUtil.ok("success", result);
     }
 
     /* =======================
@@ -95,6 +103,9 @@ public class MasterController {
             )
             @RequestParam(required = false) String keyword
     ) {
-        return ResponseUtil.ok("success", masterService.getSkills(keyword));
+        MasterRes.Skills result = masterService.getSkills(keyword);
+        int count = result.skills() == null ? 0 : result.skills().size();
+        log.info("GET /api/v1/skills -> keyword={}, count={}", keyword, count);
+        return ResponseUtil.ok("success", result);
     }
 }

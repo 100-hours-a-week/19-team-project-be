@@ -119,4 +119,21 @@ public class JwtUtil {
                 .signWith(secretKey, Jwts.SIG.HS256)
                 .compact();
     }
+
+    /**
+     * 토큰 유효성 검증 (유효하고 만료되지 않았는지 체크)
+     */
+    public boolean validateToken(String token) {
+        return isValid(token) && !isExpired(token);
+    }
+
+    /**
+     * 토큰에서 사용자 ID 추출 (검증 포함)
+     */
+    public Long getUserIdFromToken(String token) {
+        if (!validateToken(token)) {
+            throw new CustomException(ExceptionType.AUTH_INVALID_TOKEN);
+        }
+        return getUserId(token);
+    }
 }

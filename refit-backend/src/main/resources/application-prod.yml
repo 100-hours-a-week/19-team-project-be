@@ -3,6 +3,9 @@ spring:
     hibernate:
       ddl-auto: update
     show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
 
   jwt:
     issuer: re-fit
@@ -19,6 +22,12 @@ springdoc:
     disable-swagger-default-url: true
   api-docs:
     enabled: true
+
+logging:
+  level:
+    root: info
+    org.springframework: warn
+    org.hibernate: warn
 
 server:
   forward-headers-strategy: framework

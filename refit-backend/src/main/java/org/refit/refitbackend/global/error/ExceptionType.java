@@ -18,7 +18,7 @@ public enum ExceptionType {
     AUTH_TOKEN_EXPIRED(HttpStatus.UNAUTHORIZED, "AUTH_TOKEN_EXPIRED", "token_expired"),
 
     // ExceptionType enum에 추가
-    INVALID_AUTH_CODE(HttpStatus.BAD_REQUEST, "auth_invalid_code", "유효하지 않은 인증 코드입니다"),
+    INVALID_AUTH_CODE(HttpStatus.BAD_REQUEST, "auth_invalid_code", "invalid_auth_code"),
 
     SIGNUP_ALREADY_EXISTS(HttpStatus.CONFLICT, "SIGNUP_ALREADY_EXISTS", "user already exists"),
     EMAIL_DUPLICATE(HttpStatus.CONFLICT, "EMAIL_DUPLICATE", "email already exists"),
@@ -45,6 +45,8 @@ public enum ExceptionType {
     SIGNUP_USER_TYPE_INVALID(HttpStatus.BAD_REQUEST, "SIGNUP_USER_TYPE_INVALID", "invalid user type"),
 
     AUTH_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "AUTH_INVALID_REQUEST", "auth_invalid_request"),
+    AUTH_CODE_REQUIRED(HttpStatus.BAD_REQUEST, "AUTH_CODE_REQUIRED", "auth_code_required"),
+    REFRESH_TOKEN_REQUIRED(HttpStatus.BAD_REQUEST, "REFRESH_TOKEN_REQUIRED", "refresh_token_required"),
     AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_INVALID_CREDENTIALS", "auth_invalid_credentials"),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "auth_forbidden"),
 
@@ -52,6 +54,7 @@ public enum ExceptionType {
      * User
      * ======================= */
     USER_ID_INVALID(HttpStatus.BAD_REQUEST, "USER_ID_INVALID", "user_id_invalid"),
+    USER_ID_REQUIRED(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED", "user_id_required"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "user_not_found"),
 
     NICKNAME_EMPTY(HttpStatus.BAD_REQUEST, "NICKNAME_EMPTY", "nickname is empty"),
@@ -106,10 +109,18 @@ public enum ExceptionType {
     CHAT_ALREADY_CLOSED(HttpStatus.BAD_REQUEST, "CHAT_ALREADY_CLOSED", "cannot send message to closed chat"),
     MESSAGE_CONTENT_EMPTY(HttpStatus.BAD_REQUEST, "MESSAGE_CONTENT_EMPTY", "message content is required"),
     MESSAGE_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "MESSAGE_CONTENT_TOO_LONG", "message content is too long"),
+    CHAT_RECEIVER_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_RECEIVER_REQUIRED", "receiver_id is required"),
+    CHAT_REQUEST_TYPE_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_REQUEST_TYPE_REQUIRED", "request_type is required"),
+    CHAT_ID_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_ID_REQUIRED", "chat_id is required"),
+    CHAT_STATUS_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_STATUS_REQUIRED", "status is required"),
+    MESSAGE_ID_REQUIRED(HttpStatus.BAD_REQUEST, "MESSAGE_ID_REQUIRED", "message_id is required"),
+    CHAT_JOB_POST_URL_TOO_LONG(HttpStatus.BAD_REQUEST, "CHAT_JOB_POST_URL_TOO_LONG", "job_post_url is too long"),
 
     CHAT_STATUS_INVALID(HttpStatus.BAD_REQUEST, "CHAT_STATUS_INVALID", "status must be ACCEPTED or REJECTED"),
     CHAT_ALREADY_RESPONDED(HttpStatus.BAD_REQUEST, "CHAT_ALREADY_RESPONDED", "chat request already responded"),
-
+    CHAT_ROOM_NOT_FOUND(HttpStatus.NOT_FOUND, "CHAT_ROOM_NOT_FOUND", "chat_room_not_found"),
+    CHAT_ROOM_ALREADY_EXISTS(HttpStatus.CONFLICT, "CHAT_ROOM_ALREADY_EXISTS", "chat_room_already_exists"),
+    MESSAGE_NOT_FOUND(HttpStatus.NOT_FOUND, "MESSAGE_NOT_FOUND", "message_not_found"),
     /* =======================
      * Review / Feedback
      * ======================= */
@@ -153,7 +164,7 @@ public enum ExceptionType {
 
 
 
-
+    INVALID_REQUEST(HttpStatus.BAD_REQUEST, "INVALID_REQUEST", "invalid_request"),
     INVALID_JSON(HttpStatus.BAD_REQUEST,"INVALID_JSON_REQUEST", "invalid json request"),
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "server_error"),
     AI_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_SERVER_ERROR", "ai_server_error");
