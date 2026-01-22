@@ -418,10 +418,10 @@ jobs:
             systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
             
             echo "[5/8] 배포 검증 중..."
-            echo "Java 애플리케이션 시작 대기 중 (초기 10초)..."
-            sleep 10
+            echo "Java 애플리케이션 시작 대기 중 (초기 15초)..."
+            sleep 15
             
-            MAX_RETRIES=10
+            MAX_RETRIES=5
             RETRY_INTERVAL=3
             HTTP_STATUS="000"
             HEALTH_CHECK_URL="https://re-fit.kr/actuator/health"
