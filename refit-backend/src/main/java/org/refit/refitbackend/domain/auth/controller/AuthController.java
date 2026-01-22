@@ -16,6 +16,7 @@ import org.refit.refitbackend.domain.auth.dto.AuthRes;
 import org.refit.refitbackend.domain.auth.service.CustomOAuth2UserService;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
+import org.refit.refitbackend.global.response.ErrorResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -32,9 +33,22 @@ public class AuthController {
     private final OAuth2ProviderProperties providerProperties;
 
     @Operation(summary = "회원가입", description = "OAuth 정보 + 추가 정보로 회원가입")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "success"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "invalid_request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "409",
+                    description = "conflict",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<AuthRes.LoginSuccess>> signup(@Valid @RequestBody AuthReq.SignUp request) {
-        return ResponseUtil.ok("success", oAuth2UserService.signup(request));
+        return ResponseUtil.created("success", oAuth2UserService.signup(request));
     }
 
     /* =======================
@@ -65,7 +79,8 @@ public class AuthController {
             ),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
                     responseCode = "400",
-                    description = "잘못된 요청"
+                    description = "invalid_request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     @PostMapping("/oauth/kakao/login")
@@ -79,6 +94,29 @@ public class AuthController {
 
     @Operation(summary = "토큰 재발급", description = "RTR 방식으로 AT/RT 재발급")
     @SecurityRequirement(name = "refreshToken")
+    @ApiResponses({
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "201",
+                    description = "created",
+                    content = @Content(
+                            schema = @Schema(implementation = ApiResponse.class),
+                            examples = @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "token_refreshed",
+                                    value = "{ \"code\": \"CREATED\", \"message\": \"token_refreshed\", \"data\": { \"access_token\": \"string\", \"refresh_token\": \"string\" } }"
+                            )
+                    )
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "400",
+                    description = "invalid_request",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                    responseCode = "401",
+                    description = "unauthorized",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
     @PostMapping("/tokens")
     public ResponseEntity<ApiResponse<AuthRes.TokenDto>> refreshTokens(
             @RequestHeader(value = "Refresh-Token", required = false) String refreshHeader,
@@ -92,7 +130,7 @@ public class AuthController {
             return ResponseUtil.error(ExceptionType.AUTH_INVALID_REQUEST);
         }
 
-        return ResponseUtil.ok("token_refreshed", oAuth2UserService.refreshTokens(refreshToken));
+        return ResponseUtil.created("token_refreshed", oAuth2UserService.refreshTokens(refreshToken));
     }
 
     @Operation(summary = "카카오 로그인 페이지로 리다이렉트", description = "카카오 OAuth 인증 페이지로 리다이렉트")
