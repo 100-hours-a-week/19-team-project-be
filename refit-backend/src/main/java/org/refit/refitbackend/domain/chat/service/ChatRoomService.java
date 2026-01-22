@@ -131,7 +131,7 @@ public class ChatRoomService {
      */
     @Transactional
     public void markAsRead(Long userId, ChatReq.ReadMessage request) {
-        ChatRoom room = chatRoomRepository.findByIdAndUserId(request.roomId(), userId)
+        ChatRoom room = chatRoomRepository.findByIdAndUserId(request.chatId(), userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
         ChatMessage message = chatMessageRepository.findById(request.messageId())
@@ -153,7 +153,7 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
-        List<ChatMessage> messages = chatMessageRepository.findByChatRoomIdByCursor(
+        List<ChatMessage> messages = chatMessageRepository.findByChatIdByCursor(
                 roomId,
                 cursorId,
                 PageRequest.of(0, size + 1)

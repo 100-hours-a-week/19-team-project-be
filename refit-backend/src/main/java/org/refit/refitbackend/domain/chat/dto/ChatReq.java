@@ -42,8 +42,8 @@ public class ChatReq {
     @Schema(description = "메시지 읽음 처리 요청")
     public record ReadMessage(
             @Schema(description = "채팅방 ID", example = "1")
-            @NotNull(message = "chat_room_id_required")
-            Long roomId,
+            @NotNull(message = "chat_id_required")
+            Long chatId,
 
             @Schema(description = "읽은 메시지 ID", example = "100")
             @NotNull(message = "message_id_required")

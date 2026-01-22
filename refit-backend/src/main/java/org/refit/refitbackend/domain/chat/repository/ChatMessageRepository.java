@@ -12,12 +12,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     // (CURSOR) 채팅방 메시지 목록 조회 (최신순)
     @Query("""
           SELECT cm FROM ChatMessage cm
-          WHERE cm.chatRoom.id = :chatRoomId
+          WHERE cm.chatRoom.id = :chatId
           AND (:cursorId IS NULL OR cm.id < :cursorId)
           ORDER BY cm.id DESC
       """)
-    java.util.List<ChatMessage> findByChatRoomIdByCursor(
-            @Param("chatRoomId") Long chatRoomId,
+    java.util.List<ChatMessage> findByChatIdByCursor(
+            @Param("chatId") Long chatId,
             @Param("cursorId") Long cursorId,
             Pageable pageable
     );
