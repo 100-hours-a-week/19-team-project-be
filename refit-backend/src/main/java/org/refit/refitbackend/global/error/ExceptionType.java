@@ -111,7 +111,7 @@ public enum ExceptionType {
     MESSAGE_CONTENT_TOO_LONG(HttpStatus.BAD_REQUEST, "MESSAGE_CONTENT_TOO_LONG", "message content is too long"),
     CHAT_RECEIVER_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_RECEIVER_REQUIRED", "receiver_id is required"),
     CHAT_REQUEST_TYPE_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_REQUEST_TYPE_REQUIRED", "request_type is required"),
-    CHAT_ROOM_ID_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_ROOM_ID_REQUIRED", "chat_id is required"),
+    CHAT_ID_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_ID_REQUIRED", "chat_id is required"),
     CHAT_STATUS_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_STATUS_REQUIRED", "status is required"),
     MESSAGE_ID_REQUIRED(HttpStatus.BAD_REQUEST, "MESSAGE_ID_REQUIRED", "message_id is required"),
     CHAT_JOB_POST_URL_TOO_LONG(HttpStatus.BAD_REQUEST, "CHAT_JOB_POST_URL_TOO_LONG", "job_post_url is too long"),

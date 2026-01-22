@@ -125,8 +125,8 @@ public class GlobalExceptionHandler {
             case "chat_request_type_required" ->
                     ExceptionType.CHAT_REQUEST_TYPE_REQUIRED;
 
-            case "chat_room_id_required" ->
-                    ExceptionType.CHAT_ROOM_ID_REQUIRED;
+            case "chat_room_id_required", "chat_id_required" ->
+                    ExceptionType.CHAT_ID_REQUIRED;
 
             case "chat_status_required" ->
                     ExceptionType.CHAT_STATUS_REQUIRED;
