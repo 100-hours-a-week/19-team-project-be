@@ -48,7 +48,10 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private void authenticateUser(StompHeaderAccessor accessor, String token) {
         try {
-            Long userId = jwtUtil.getUserIdFromToken(token);
+            if (!jwtUtil.validateToken(token)) {
+                throw new IllegalArgumentException("Invalid JWT token");
+            }
+            Long userId = jwtUtil.getUserId(token);
 
             accessor.setUser(new UsernamePasswordAuthenticationToken(
                     userId.toString(),
