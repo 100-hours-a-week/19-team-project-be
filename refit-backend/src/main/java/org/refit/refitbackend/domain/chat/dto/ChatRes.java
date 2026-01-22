@@ -1,6 +1,8 @@
 package org.refit.refitbackend.domain.chat.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
@@ -12,6 +14,7 @@ import java.util.List;
 public class ChatRes {
 
     @Schema(description = "채팅방 목록 응답")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RoomListItem(
             @Schema(description = "채팅방 ID", example = "1")
             Long id,
@@ -62,6 +65,7 @@ public class ChatRes {
     }
 
     @Schema(description = "채팅방 상세 정보")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RoomDetail(
             @Schema(description = "채팅방 ID", example = "1")
             Long chatId,
@@ -104,6 +108,7 @@ public class ChatRes {
     }
 
     @Schema(description = "메시지 정보")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record MessageInfo(
             @Schema(description = "메시지 ID", example = "1")
             Long messageId,
@@ -137,6 +142,7 @@ public class ChatRes {
     }
 
     @Schema(description = "사용자 정보")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record UserInfo(
             @Schema(description = "사용자 ID", example = "1")
             Long userId,
@@ -161,6 +167,7 @@ public class ChatRes {
     }
 
     @Schema(description = "마지막 메시지 정보")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LastMessageInfo(
             @Schema(description = "메시지 ID", example = "1")
             Long id,
@@ -182,9 +189,10 @@ public class ChatRes {
     }
 
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CreateChat(
             Long chatId
-    ){
+    ) {
         public static CreateChat from(ChatRoom room) {
             return new CreateChat(
                     room.getId()
@@ -192,12 +200,14 @@ public class ChatRes {
         }
     }
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ChatCursorResponse(
             List<ChatRes.RoomListItem> chats,
             String nextCursor,
             boolean hasMore
     ) {}
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record MessageCursorResponse(
             List<ChatRes.MessageInfo> messages,
             String nextCursor,
