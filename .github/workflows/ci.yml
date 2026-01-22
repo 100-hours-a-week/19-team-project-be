@@ -252,7 +252,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
-          TAG_NAME="v$(date +'%Y.%m.%d')-${GITHUB_SHA::7}"
+          TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')-${GITHUB_SHA::7}"
           
           git config user.name "github-actions[bot]" || {
             echo "Error: Failed to set git user name"
