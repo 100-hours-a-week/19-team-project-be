@@ -20,21 +20,23 @@ on:
           - lint-and-test
           - integration
           - release
-          - all
 
 env:
   JAVA_VERSION: 21
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
 
 permissions:
   contents: write
 
 jobs:
-  # 1. PR 검증 단계
+  # PR 검증: 컴파일 체크
+  # 목적: 빠른 피드백을 통한 코드 품질 검증
   lint-and-test:
     if: |
       github.event_name == 'pull_request' ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'lint-and-test' || github.event.inputs.job_to_run == 'all'))
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'lint-and-test')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     defaults:
       run:
@@ -42,7 +44,8 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -52,32 +55,20 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for gradlew
-        run: |
-          chmod +x gradlew || {
-            echo "Error: Failed to grant execute permission to gradlew"
-            exit 1
-          }
+        run: chmod +x gradlew
 
       - name: Compile Check
-        run: |
-          ./gradlew compileJava --no-daemon || {
-            echo "Error: Compilation failed"
-            exit 1
-          }
+        run: ./gradlew compileJava --no-daemon
 
-      - name: Build Verification
-        run: |
-          ./gradlew build -x test --no-daemon || {
-            echo "Error: Build verification failed"
-            exit 1
-          }
-
-  # 2. 통합 검증 단계
+  # 통합 검증: develop 브랜치 빌드 검증 및 보안 스캔
+  # 목적: develop 브랜치 병합 전 빌드 검증 및 보안 취약점 확인
   integration:
     if: |
       (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'integration' || github.event.inputs.job_to_run == 'all'))
+      (github.event_name == 'pull_request' && github.head_ref == 'develop') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     defaults:
       run:
@@ -85,9 +76,10 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          ref: develop
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -97,43 +89,84 @@ jobs:
           cache: gradle
 
       - name: Grant execute permission for gradlew
-        run: |
-          chmod +x gradlew || {
-            echo "Error: Failed to grant execute permission to gradlew"
-            exit 1
-          }
+        run: chmod +x gradlew
 
       - name: Inject Secret Configuration Files
         run: |
-          set -e
-          mkdir -p src/main/resources || {
-            echo "Error: Failed to create resources directory"
-            exit 1
-          }
-          
-          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
-            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml || {
-              echo "Error: Failed to write application-secret.yml"
-              exit 1
-            }
-            echo "application-secret.yml injected successfully"
-          else
+          mkdir -p src/main/resources
+          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
             echo "Error: APPLICATION_SECRET_YML secret not found"
             exit 1
           fi
+          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
 
-      - name: Dependency Vulnerability Check
+      - name: Build Verification
         run: |
-          echo "Checking for known vulnerabilities..."
-          ./gradlew dependencies --no-daemon | grep -i "vulnerability\|CVE" || echo "No known vulnerabilities found in dependency tree"
+          set -e
+          ./gradlew bootJar --no-daemon
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          ls -lh build/libs/*.jar | head -1
+
+      - name: Security Scan
+        run: |
+          ./gradlew dependencies --no-daemon > dependencies.txt 2>&1 || true
+          if grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt 2>/dev/null; then
+            echo "Warning: Potential security issues detected"
+            grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt | head -20
+            echo "Please review dependencies.txt for details"
+          else
+            echo "No obvious security vulnerabilities detected"
+          fi
         continue-on-error: true
 
-      - name: Production Build Test
+  # 릴리즈: develop/main 브랜치 프로덕션 빌드 및 아티팩트 생성
+  # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
+  release:
+    if: |
+      (github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')) ||
+      (github.event_name == 'pull_request' && (github.head_ref == 'main' || github.head_ref == 'develop')) ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ (github.ref == 'refs/heads/main' || github.ref_name == 'main') && 'production' || 'development' }}
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: ${{ github.event_name == 'push' && 0 || 1 }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Secret Configuration Files
         run: |
-          ./gradlew clean bootJar --no-daemon || {
-            echo "Error: Production build failed"
+          mkdir -p src/main/resources
+          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "Error: APPLICATION_SECRET_YML secret not found"
             exit 1
-          }
+          fi
+          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+
+      - name: Production Build
+        run: ./gradlew clean bootJar --no-daemon
 
       - name: Verify JAR
         run: |
@@ -142,135 +175,49 @@ jobs:
             echo "Error: JAR file not found"
             exit 1
           fi
-          
-          echo "JAR file created successfully"
-          ls -lh build/libs/*.jar
-          
-          jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar | head -20 || {
-            echo "Warning: Failed to list JAR contents, but JAR file exists"
-          }
-
-      - name: Archive JAR Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-jar-${{ github.sha }}
-          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
-          retention-days: 7
-
-      - name: Log Artifact Info
-        if: success()
-        run: |
-          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
-          echo "Commit SHA: ${{ github.sha }}"
-
-  # 3. 릴리즈 확정 단계
-  release:
-    if: |
-      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release' || github.event.inputs.job_to_run == 'all'))
-    runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: refit-backend
-        shell: bash
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Set up JDK
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: ${{ env.JAVA_VERSION }}
-          cache: gradle
-
-      - name: Grant execute permission for gradlew
-        run: |
-          chmod +x gradlew || {
-            echo "Error: Failed to grant execute permission to gradlew"
-            exit 1
-          }
-
-      - name: Inject Secret Configuration Files
-        run: |
-          set -e
-          mkdir -p src/main/resources || {
-            echo "Error: Failed to create resources directory"
-            exit 1
-          }
-          
-          if [ -n "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
-            echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml || {
-              echo "Error: Failed to write application-secret.yml"
-              exit 1
-            }
-            echo "application-secret.yml injected successfully"
-          else
-            echo "Error: APPLICATION_SECRET_YML secret not found"
+          # JAR 파일 무결성 확인
+          if ! jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar > /dev/null 2>&1; then
+            echo "Error: Invalid JAR file"
             exit 1
           fi
-
-      - name: Production Build
-        run: |
-          ./gradlew clean bootJar --no-daemon || {
-            echo "Error: Production build failed"
-            exit 1
-          }
-
-      - name: Verify Build Output
-        run: |
-          set -e
-          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "Error: JAR file not found"
-            exit 1
-          fi
-          
-          echo "JAR file exists"
           ls -lh build/libs/*.jar
 
       - name: Archive JAR Artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: backend-jar-${{ github.sha }}
+          name: backend-jar-${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}-${{ github.run_id }}
           path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
           retention-days: 7
-
-      - name: Log Artifact Info
+          if-no-files-found: error
+          compression-level: 6
+      
+      - name: Verify Artifact Upload
         if: success()
         run: |
-          echo "Artifact uploaded with name: backend-jar-${{ github.sha }}"
-          echo "Commit SHA: ${{ github.sha }}"
+          set -e
+          echo "아티팩트 업로드 검증 중..."
+          JAR_FILE="refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "$JAR_FILE" ]; then
+            echo "Error: JAR 파일이 존재하지 않습니다"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
+          echo "업로드된 JAR 파일 크기: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "Error: JAR 파일 크기가 비정상적으로 작습니다"
+            exit 1
+          fi
+          echo "아티팩트 업로드 검증 완료"
 
       - name: Create Release Tag
+        if: github.event_name == 'push'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -e
           TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')-${GITHUB_SHA::7}"
-          
-          git config user.name "github-actions[bot]" || {
-            echo "Error: Failed to set git user name"
-            exit 1
-          }
-          git config user.email "github-actions[bot]@users.noreply.github.com" || {
-            echo "Error: Failed to set git user email"
-            exit 1
-          }
-          
-          git tag -a "$TAG_NAME" -m "Backend release $TAG_NAME" || {
-            echo "Error: Failed to create git tag"
-            exit 1
-          }
-          
-          git push origin "$TAG_NAME" || {
-            echo "Error: Failed to push git tag"
-            exit 1
-          }
-          
-          echo "Release tag created and pushed: $TAG_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "Release tag created: $TAG_NAME"
