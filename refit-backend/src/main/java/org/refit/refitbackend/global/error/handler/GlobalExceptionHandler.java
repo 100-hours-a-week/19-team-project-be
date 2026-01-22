@@ -10,6 +10,7 @@ import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -22,14 +23,15 @@ public class GlobalExceptionHandler {
     // @RequestBody @Valid 실패
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
-        String message = ex.getBindingResult().getFieldErrors().stream()
+        FieldError error = ex.getBindingResult().getFieldErrors().stream()
                 .findFirst()
-                .map(org.springframework.validation.FieldError::getDefaultMessage)
-                .orElse("validation_error");
+                .orElse(null);
 
-        ExceptionType type = mapValidationError(message);
+        if (error == null) {
+            return ResponseUtil.error(ExceptionType.INVALID_REQUEST);
+        }
 
-        return ResponseUtil.error(type);
+        return ResponseUtil.error(mapValidationError(error));
     }
 
     // JSON 파싱 실패 등
@@ -62,8 +64,13 @@ public class GlobalExceptionHandler {
     }
 
 
-    private ExceptionType mapValidationError(String code) {
-        return switch (code) {
+    private ExceptionType mapValidationError(FieldError error) {
+        String message = error.getDefaultMessage();
+        if (message == null) {
+            message = "validation_error";
+        }
+
+        return switch (message) {
 
             /* =======================
              * Signup / Auth
@@ -76,6 +83,15 @@ public class GlobalExceptionHandler {
             case "signup_oauth_id_empty" ->
                     ExceptionType.SIGNUP_OAUTH_ID_EMPTY;
 
+            case "auth_code_required" ->
+                    ExceptionType.AUTH_CODE_REQUIRED;
+
+            case "refresh_token_required" ->
+                    ExceptionType.REFRESH_TOKEN_REQUIRED;
+
+            case "user_id_required" ->
+                    ExceptionType.USER_ID_REQUIRED;
+
             // Email
             case "signup_email_empty" ->
                     ExceptionType.SIGNUP_EMAIL_INVALID; // empty도 invalid로 통일
@@ -87,11 +103,68 @@ public class GlobalExceptionHandler {
             case "signup_user_type_invalid" ->
                     ExceptionType.SIGNUP_USER_TYPE_INVALID;
 
+            case "nickname_empty" ->
+                    ExceptionType.NICKNAME_EMPTY;
+
+            case "career_level_not_found" ->
+                    ExceptionType.CAREER_LEVEL_NOT_FOUND;
+
+            /* =======================
+             * Chat
+             * ======================= */
+
+            case "message_content_required" ->
+                    ExceptionType.MESSAGE_CONTENT_EMPTY;
+
+            case "message_content_length_invalid" ->
+                    ExceptionType.MESSAGE_CONTENT_TOO_LONG;
+
+            case "chat_receiver_required" ->
+                    ExceptionType.CHAT_RECEIVER_REQUIRED;
+
+            case "chat_request_type_required" ->
+                    ExceptionType.CHAT_REQUEST_TYPE_REQUIRED;
+
+            case "chat_room_id_required" ->
+                    ExceptionType.CHAT_ROOM_ID_REQUIRED;
+
+            case "chat_status_required" ->
+                    ExceptionType.CHAT_STATUS_REQUIRED;
+
+            case "message_id_required" ->
+                    ExceptionType.MESSAGE_ID_REQUIRED;
+
+            case "chat_job_post_url_too_long" ->
+                    ExceptionType.CHAT_JOB_POST_URL_TOO_LONG;
+
             /* =======================
              * Fallback
              * ======================= */
-            default -> ExceptionType.AUTH_INVALID_REQUEST;
+            default -> resolveByFieldAndConstraint(error);
         };
+    }
+
+    private ExceptionType resolveByFieldAndConstraint(FieldError error) {
+        String field = error.getField();
+        String constraint = error.getCode();
+        Object rejected = error.getRejectedValue();
+
+        if ("nickname".equals(field)) {
+            if ("NotBlank".equals(constraint)) {
+                return ExceptionType.NICKNAME_EMPTY;
+            }
+            if ("Size".equals(constraint) && rejected instanceof String nickname) {
+                int length = nickname.length();
+                if (length < 2) {
+                    return ExceptionType.NICKNAME_TOO_SHORT;
+                }
+                if (length > 10) {
+                    return ExceptionType.NICKNAME_TOO_LONG;
+                }
+            }
+        }
+
+        return ExceptionType.INVALID_REQUEST;
     }
 
 
