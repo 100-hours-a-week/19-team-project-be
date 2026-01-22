@@ -1,0 +1,472 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat V1 Lab</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #101827;
+        --panel-2: #0b1320;
+        --accent: #22d3ee;
+        --accent-2: #f59e0b;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --line: #1f2a3a;
+        --ok: #34d399;
+        --err: #f87171;
+        --shadow: 0 10px 30px rgba(2, 8, 23, 0.55);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 800px at 10% -10%, rgba(34, 211, 238, 0.15), transparent 60%),
+          radial-gradient(1000px 700px at 110% 10%, rgba(245, 158, 11, 0.12), transparent 60%),
+          linear-gradient(180deg, #0b1220, #0f172a 40%, #0b1220);
+        min-height: 100vh;
+      }
+      header { padding: 24px; }
+      header h1 { margin: 0 0 6px; font-size: 26px; }
+      header p { margin: 0; color: var(--muted); font-size: 14px; }
+      main {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        padding: 0 24px 32px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1.1px;
+        color: var(--muted);
+      }
+      label { display: block; font-size: 12px; margin: 8px 0 6px; color: var(--muted); }
+      input, textarea, button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      textarea { min-height: 70px; resize: vertical; font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+      button {
+        cursor: pointer;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #04111f;
+        font-weight: 700;
+        border: none;
+        margin-top: 10px;
+      }
+      button.secondary {
+        background: #111827;
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+      .log {
+        background: #0b1220;
+        border-radius: 12px;
+        border: 1px dashed var(--line);
+        padding: 12px;
+        height: 320px;
+        overflow: auto;
+      }
+      .log p { margin: 0 0 8px; color: var(--muted); font-size: 12px; }
+      .messages {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .bubble {
+        max-width: 80%;
+        padding: 10px 12px;
+        border-radius: 14px;
+        font-size: 14px;
+        line-height: 1.4;
+        background: #0b1320;
+        border: 1px solid var(--line);
+      }
+      .bubble.me {
+        align-self: flex-end;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #04111f;
+        border: none;
+      }
+      .meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .ok { color: var(--ok); }
+      .err { color: var(--err); }
+      .tag {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #111827;
+        border: 1px solid var(--line);
+        color: #cbd5f5;
+        margin-right: 6px;
+      }
+      .wide { grid-column: 1 / -1; }
+      .muted { color: var(--muted); font-size: 12px; }
+      @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Chat V1 Lab</h1>
+      <p>두 유저 동시에 연결해 메시지 왕복 테스트 <span id="versionTag" class="muted"></span></p>
+    </header>
+
+    <section style="margin: 0 24px 16px;">
+      <h2>Env</h2>
+      <label>Base API URL</label>
+      <input id="baseUrl" placeholder="http://localhost:8080/api" />
+      <div class="row">
+        <div>
+          <label>Room ID</label>
+          <input id="chatId" placeholder="예: 1" />
+        </div>
+        <div>
+          <label>Receiver ID (room create)</label>
+          <input id="receiverId" placeholder="예: 2" />
+        </div>
+      </div>
+      <button id="btnCreateRoom">Create Room (User A)</button>
+      <p class="muted">Create Room은 User A 토큰으로 수행됨.</p>
+    </section>
+
+    <main>
+      <section>
+        <h2>User A</h2>
+        <label>Dev Token user_id</label>
+        <input id="userAId" placeholder="예: 1" />
+        <button id="btnDevA">Get Dev Token A</button>
+        <label>Access Token</label>
+        <textarea id="tokenA"></textarea>
+        <button class="secondary" id="btnConnectA">Connect WS A</button>
+        <button class="secondary" id="btnDisconnectA">Disconnect A</button>
+        <label>Message</label>
+        <textarea id="msgA" placeholder="A가 보낼 메시지"></textarea>
+        <button id="btnSendA">Send A</button>
+        <div class="log" id="logA">
+          <div class="messages" id="messagesA"></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>User B</h2>
+        <label>Dev Token user_id</label>
+        <input id="userBId" placeholder="예: 2" />
+        <button id="btnDevB">Get Dev Token B</button>
+        <label>Access Token</label>
+        <textarea id="tokenB"></textarea>
+        <button class="secondary" id="btnConnectB">Connect WS B</button>
+        <button class="secondary" id="btnDisconnectB">Disconnect B</button>
+        <label>Message</label>
+        <textarea id="msgB" placeholder="B가 보낼 메시지"></textarea>
+        <button id="btnSendB">Send B</button>
+        <div class="log" id="logB">
+          <div class="messages" id="messagesB"></div>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      function makeStompClient(wsUrl, headers, onMessage, onError, onClose, onConnect) {
+        let ws = null;
+        let connected = false;
+        let subId = 0;
+        const subs = new Map();
+
+        function sendFrame(command, frameHeaders, body) {
+          const lines = [command];
+          Object.entries(frameHeaders || {}).forEach(([k, v]) => lines.push(`${k}:${v}`));
+          lines.push("", body || "");
+          ws.send(lines.join("\n") + "\0");
+        }
+
+        function parseFrames(data) {
+          const frames = data.split("\0").filter(Boolean);
+          frames.forEach((raw) => {
+            const parts = raw.split("\n\n");
+            const head = parts[0] || "";
+            const body = parts.slice(1).join("\n\n");
+            const lines = head.split("\n");
+            const command = lines.shift();
+            const headers = {};
+            lines.forEach((line) => {
+              const idx = line.indexOf(":");
+              if (idx > -1) headers[line.slice(0, idx)] = line.slice(idx + 1);
+            });
+            if (command === "CONNECTED") {
+              connected = true;
+              onConnect && onConnect();
+              return;
+            }
+            if (command === "MESSAGE") {
+              const dest = headers.destination;
+              const cb = subs.get(dest);
+              if (cb) cb(body);
+              onMessage && onMessage(body, headers);
+              return;
+            }
+            if (command === "ERROR") {
+              onError && onError(body || "stomp error");
+            }
+          });
+        }
+
+        return {
+          connect() {
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => {
+              sendFrame("CONNECT", { "accept-version": "1.2", ...headers }, "");
+            };
+            ws.onmessage = (evt) => parseFrames(evt.data);
+            ws.onerror = () => onError && onError("websocket error");
+            ws.onclose = () => {
+              connected = false;
+              onClose && onClose();
+            };
+          },
+          subscribe(destination, callback) {
+            const id = `sub-${subId++}`;
+            subs.set(destination, callback);
+            sendFrame("SUBSCRIBE", { id, destination }, "");
+            return { unsubscribe: () => subs.delete(destination) };
+          },
+          send(destination, body) {
+            sendFrame("SEND", { destination, "content-type": "application/json" }, body);
+          },
+          disconnect() {
+            if (ws) {
+              sendFrame("DISCONNECT", {}, "");
+              ws.close();
+            }
+          },
+          isConnected() { return connected; },
+        };
+      }
+
+      const baseUrlEl = document.getElementById("baseUrl");
+      const chatIdEl = document.getElementById("chatId");
+      const receiverIdEl = document.getElementById("receiverId");
+
+      const log = (el, tag, message, kind = "ok") => {
+        const p = document.createElement("p");
+        p.innerHTML = `<span class="tag">${tag}</span> <span class="${kind}">${message}</span>`;
+        el.appendChild(p);
+        el.scrollTop = el.scrollHeight;
+      };
+
+      function renderMessage(container, payload, myUserId) {
+        let msg;
+        try {
+          msg = typeof payload === "string" ? JSON.parse(payload) : payload;
+        } catch {
+          msg = { content: String(payload), sender: { user_id: "?" }, created_at: "" };
+        }
+        const bubble = document.createElement("div");
+        const senderId = msg?.sender?.user_id;
+        bubble.className = "bubble" + (String(senderId) === String(myUserId) ? " me" : "");
+        bubble.textContent = msg?.content || "";
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const id = msg?.message_id ?? msg?.id ?? "?";
+        const time = msg?.created_at ?? msg?.last_message_at ?? "";
+        meta.textContent = `#${id} · ${time}`;
+        bubble.appendChild(meta);
+        container.appendChild(bubble);
+        container.scrollTop = container.scrollHeight;
+      }
+
+      function apiUrl(path) {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        return base + path;
+      }
+
+      function authHeader(raw) {
+        if (!raw) return {};
+        return { Authorization: raw.startsWith("Bearer ") ? raw : `Bearer ${raw}` };
+      }
+
+      function wsUrl() {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        const url = new URL(base);
+        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+        let path = url.pathname;
+        if (path === "/api") path = "";
+        if (path === "/") path = "";
+        return `${wsProtocol}//${url.host}${path}/ws`;
+      }
+
+      async function request(method, path, body, token) {
+        const options = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeader(token),
+          },
+        };
+        if (body) options.body = JSON.stringify(body);
+        const res = await fetch(apiUrl(path), options);
+        const text = await res.text();
+        try {
+          return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+        } catch {
+          return { ok: res.ok, status: res.status, data: text };
+        }
+      }
+
+      function decodeJwtSub(token) {
+        try {
+          const parts = token.split(".");
+          if (parts.length < 2) return null;
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+          return payload.sub || null;
+        } catch {
+          return null;
+        }
+      }
+
+      let stompA = null;
+      let stompB = null;
+
+      document.getElementById("btnDevA").addEventListener("click", async () => {
+        const userId = document.getElementById("userAId").value.trim();
+        const logEl = document.getElementById("logA");
+        if (!userId) return log(logEl, "DEV", "userId required", "err");
+        const res = await request("POST", "/v1/auth/dev/token", { user_id: Number(userId) });
+        if (res.ok) {
+          const token = res.data?.data?.access_token || "";
+          document.getElementById("tokenA").value = token;
+          log(logEl, "DEV", `token ok (sub=${decodeJwtSub(token)})`);
+        } else {
+          log(logEl, "DEV", JSON.stringify(res.data), "err");
+        }
+      });
+
+      document.getElementById("btnDevB").addEventListener("click", async () => {
+        const userId = document.getElementById("userBId").value.trim();
+        const logEl = document.getElementById("logB");
+        if (!userId) return log(logEl, "DEV", "userId required", "err");
+        const res = await request("POST", "/v1/auth/dev/token", { user_id: Number(userId) });
+        if (res.ok) {
+          const token = res.data?.data?.access_token || "";
+          document.getElementById("tokenB").value = token;
+          log(logEl, "DEV", `token ok (sub=${decodeJwtSub(token)})`);
+        } else {
+          log(logEl, "DEV", JSON.stringify(res.data), "err");
+        }
+      });
+
+      document.getElementById("btnCreateRoom").addEventListener("click", async () => {
+        const receiverId = Number(receiverIdEl.value);
+        const tokenA = document.getElementById("tokenA").value.trim();
+        if (!receiverId || !tokenA) return alert("receiverId와 User A 토큰 필요");
+        const res = await request("POST", "/v1/chats", { receiver_id: receiverId, request_type: "FEEDBACK" }, tokenA);
+        if (res.ok) {
+          const chatId = res.data?.data?.chat_id ?? res.data?.data?.chatId;
+          chatIdEl.value = chatId;
+        } else {
+          alert(JSON.stringify(res.data));
+        }
+      });
+
+      document.getElementById("btnConnectA").addEventListener("click", () => {
+        const token = document.getElementById("tokenA").value.trim();
+        const logEl = document.getElementById("logA");
+        const msgEl = document.getElementById("messagesA");
+        if (!token) return log(logEl, "WS", "token required", "err");
+        const url = wsUrl();
+        log(logEl, "WS", `connecting ${url}`);
+        stompA = makeStompClient(
+          url,
+          authHeader(token),
+          null,
+          (err) => log(logEl, "ERR", err, "err"),
+          () => log(logEl, "WS", "closed", "err"),
+          () => {
+            log(logEl, "WS", "connected");
+            const chatId = chatIdEl.value.trim();
+            if (chatId) {
+              const myId = decodeJwtSub(token);
+              stompA.subscribe(`/queue/chat.${chatId}`, (body) => renderMessage(msgEl, body, myId));
+            }
+          }
+        );
+        stompA.connect();
+      });
+
+      document.getElementById("btnConnectB").addEventListener("click", () => {
+        const token = document.getElementById("tokenB").value.trim();
+        const logEl = document.getElementById("logB");
+        const msgEl = document.getElementById("messagesB");
+        if (!token) return log(logEl, "WS", "token required", "err");
+        const url = wsUrl();
+        log(logEl, "WS", `connecting ${url}`);
+        stompB = makeStompClient(
+          url,
+          authHeader(token),
+          null,
+          (err) => log(logEl, "ERR", err, "err"),
+          () => log(logEl, "WS", "closed", "err"),
+          () => {
+            log(logEl, "WS", "connected");
+            const chatId = chatIdEl.value.trim();
+            if (chatId) {
+              const myId = decodeJwtSub(token);
+              stompB.subscribe(`/queue/chat.${chatId}`, (body) => renderMessage(msgEl, body, myId));
+            }
+          }
+        );
+        stompB.connect();
+      });
+
+      document.getElementById("btnDisconnectA").addEventListener("click", () => {
+        if (stompA) stompA.disconnect();
+      });
+      document.getElementById("btnDisconnectB").addEventListener("click", () => {
+        if (stompB) stompB.disconnect();
+      });
+
+      document.getElementById("btnSendA").addEventListener("click", () => {
+        const chatId = chatIdEl.value.trim();
+        const msg = document.getElementById("msgA").value.trim();
+        if (!stompA || !stompA.isConnected()) return alert("A not connected");
+        stompA.send("/app/chat.sendMessage", JSON.stringify({ room_id: Number(chatId), content: msg, message_type: "TEXT" }));
+      });
+      document.getElementById("btnSendB").addEventListener("click", () => {
+        const chatId = chatIdEl.value.trim();
+        const msg = document.getElementById("msgB").value.trim();
+        if (!stompB || !stompB.isConnected()) return alert("B not connected");
+        stompB.send("/app/chat.sendMessage", JSON.stringify({ room_id: Number(chatId), content: msg, message_type: "TEXT" }));
+      });
+
+      baseUrlEl.value = "http://localhost:8080/api";
+      document.getElementById("versionTag").textContent = "· build 2026-01-22-2";
+    </script>
+  </body>
+</html>
