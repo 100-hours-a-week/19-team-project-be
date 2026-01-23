@@ -52,6 +52,21 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:8080",
                         "https://re-fit.kr"
                 );
+
+        registry.addEndpoint("/api/ws")
+                .setAllowedOrigins(
+                        "http://localhost:3000",
+                        "http://localhost:8080",
+                        "https://re-fit.kr"
+                )
+                .withSockJS();
+
+        registry.addEndpoint("/api/ws")
+                .setAllowedOrigins(
+                        "http://localhost:3000",
+                        "http://localhost:8080",
+                        "https://re-fit.kr"
+                );
     }
 
     @Override
