@@ -491,7 +491,7 @@
         const messageId = document.getElementById("messageId").value.trim();
         if (!chatId || !messageId) return log("READ", "chatId and messageId required", "err");
         const res = await request("PATCH", "/v1/chats/messages/read", {
-          room_id: Number(chatId),
+          chat_id: Number(chatId),
           message_id: Number(messageId),
         });
         res.ok ? log("READ", JSON.stringify(res.data)) : log("READ", `Error ${res.status}`, "err");
