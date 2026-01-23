@@ -17,7 +17,7 @@ public class ChatRes {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RoomListItem(
             @Schema(description = "채팅방 ID", example = "1")
-            Long id,
+            Long chatId,
 
             @Schema(description = "요청한 사람 정보")
             UserInfo requester,
@@ -170,7 +170,7 @@ public class ChatRes {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record LastMessageInfo(
             @Schema(description = "메시지 ID", example = "1")
-            Long id,
+            Long messageId,
 
             @Schema(description = "메시지 내용", example = "안녕하세요!")
             String content,
