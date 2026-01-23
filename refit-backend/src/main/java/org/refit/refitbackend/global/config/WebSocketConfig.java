@@ -3,17 +3,17 @@ package org.refit.refitbackend.global.config;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.global.websocket.JwtChannelInterceptor;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.converter.JacksonJsonMessageConverter;
+import org.springframework.messaging.converter.MessageConverter;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.PropertyNamingStrategies;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import tools.jackson.databind.json.JsonMapper;
 
-import org.springframework.context.annotation.Bean;
+import java.util.List;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -75,11 +75,11 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
         registration.interceptors(jwtChannelInterceptor);
     }
 
-    @Bean
-    public ObjectMapper objectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setPropertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
-        mapper.registerModule(new JavaTimeModule());
-        return mapper;
+    @Override
+    public boolean configureMessageConverters(List<MessageConverter> messageConverters) {
+        JsonMapper mapper = JsonMapper.builder()
+                .build();
+        messageConverters.add(new JacksonJsonMessageConverter(mapper));
+        return false;
     }
 }
