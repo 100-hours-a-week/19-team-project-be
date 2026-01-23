@@ -543,7 +543,7 @@
         stompClient.send(
           "/app/chat.sendMessage",
           JSON.stringify({
-            room_id: Number(chatId),
+            chat_id: Number(chatId),
             content,
             message_type: messageTypeEl.value,
           })

@@ -460,13 +460,13 @@
         const chatId = chatIdEl.value.trim();
         const msg = document.getElementById("msgA").value.trim();
         if (!stompA || !stompA.isConnected()) return alert("A not connected");
-        stompA.send("/app/chat.sendMessage", JSON.stringify({ room_id: Number(chatId), content: msg, message_type: "TEXT" }));
+        stompA.send("/app/chat.sendMessage", JSON.stringify({ chat_id: Number(chatId), content: msg, message_type: "TEXT" }));
       });
       document.getElementById("btnSendB").addEventListener("click", () => {
         const chatId = chatIdEl.value.trim();
         const msg = document.getElementById("msgB").value.trim();
         if (!stompB || !stompB.isConnected()) return alert("B not connected");
-        stompB.send("/app/chat.sendMessage", JSON.stringify({ room_id: Number(chatId), content: msg, message_type: "TEXT" }));
+        stompB.send("/app/chat.sendMessage", JSON.stringify({ chat_id: Number(chatId), content: msg, message_type: "TEXT" }));
       });
 
       baseUrlEl.value = "http://localhost:8080/api";
