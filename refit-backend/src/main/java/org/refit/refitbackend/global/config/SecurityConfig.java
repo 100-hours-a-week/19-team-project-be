@@ -32,7 +32,6 @@ public class SecurityConfig {
     @Bean
     public List<String> allowUrls() {
         return List.of(
-                "/**",
                 "/",
                 "/actuator/**",
                 "/api/actuator/**",
