@@ -379,7 +379,7 @@ jobs:
             if pm2 describe $APP_NAME > /dev/null 2>&1; then
               # 기존 프로세스가 있으면 restart (더 빠름)
               echo "기존 프로세스 재시작 중..."
-              pm2 restart $APP_NAME || pm2 delete $APP_NAME
+              pm2 restart $APP_NAME 2>/dev/null || pm2 delete $APP_NAME 2>/dev/null || true
               sleep 1
             fi
             
@@ -392,9 +392,9 @@ jobs:
                 -XX:MaxGCPauseMillis=200 \
                 -XX:+HeapDumpOnOutOfMemoryError \
                 -XX:HeapDumpPath=/tmp/heapdump.hprof \
-                -jar "$JAR_PATH"; then
+                -jar "$JAR_PATH" 2>/dev/null; then
                 echo "에러: PM2 프로세스 시작 실패"
-                pm2 logs $APP_NAME --lines 20 --nostream || true
+                pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
                 exit 1
               fi
             fi
@@ -405,12 +405,12 @@ jobs:
             echo "[3-6] PM2 프로세스 시작 확인 중..."
             if ! pm2 describe $APP_NAME > /dev/null 2>&1; then
               echo "에러: PM2 프로세스 시작 실패"
-              pm2 status
-              pm2 logs $APP_NAME --lines 20 --nostream || true
+              pm2 status 2>/dev/null || true
+              pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
               exit 1
             fi
             
-            PM2_STATUS=$(pm2 jlist | jq -r ".[] | select(.name==\"$APP_NAME\") | .pm2_env.status" 2>/dev/null || echo "unknown")
+            PM2_STATUS=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$APP_NAME\") | .pm2_env.status" 2>/dev/null || echo "unknown")
             echo "PM2 프로세스 시작 완료 (상태: $PM2_STATUS)"
             
             # Caddy 웹서버 리로드 (비동기)
@@ -440,7 +440,7 @@ jobs:
                   DEPLOY_END_TIME=$(date +%s)
                   DEPLOY_DURATION=$((DEPLOY_END_TIME - DEPLOY_START_TIME))
                   echo "[5/8] 배포 성공! (HTTP $HTTP_STATUS, 소요 시간: ${DEPLOY_DURATION}초)"
-                  pm2 save
+                  pm2 save 2>/dev/null || true
                   
                   # 배포 정보 기록
                   echo "배포 정보:"
@@ -486,9 +486,9 @@ jobs:
               fi
               
               echo "롤백 파일 복사 완료"
-              if ! pm2 restart $APP_NAME; then
+              if ! pm2 restart $APP_NAME 2>/dev/null; then
                 echo "에러: PM2 재시작 실패"
-                pm2 logs $APP_NAME --lines 20 --nostream || true
+                pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
                 exit 1
               fi
               
@@ -498,13 +498,13 @@ jobs:
               ROLLBACK_STATUS=$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "$HEALTH_CHECK_URL" 2>/dev/null || echo "000")
               if [ "$ROLLBACK_STATUS" = "200" ]; then
                 echo "롤백 성공! (HTTP $ROLLBACK_STATUS)"
-                pm2 save
+                pm2 save 2>/dev/null || true
               else
                 echo "롤백 실패! (HTTP $ROLLBACK_STATUS)"
                 echo "PM2 상태:"
-                pm2 status
+                pm2 status 2>/dev/null || true
                 echo "백엔드 로그 (최근 50줄):"
-                pm2 logs $APP_NAME --lines 50 --nostream || true
+                pm2 logs $APP_NAME --lines 50 --nostream 2>/dev/null || true
                 echo "시스템 리소스:"
                 free -h || true
                 df -h "$BASE_PATH" || true
