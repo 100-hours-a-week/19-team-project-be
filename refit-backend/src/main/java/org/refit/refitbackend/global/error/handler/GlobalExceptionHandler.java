@@ -14,6 +14,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 
 @Hidden
 @RestControllerAdvice
@@ -32,6 +34,32 @@ public class GlobalExceptionHandler {
         }
 
         return ResponseUtil.error(mapValidationError(error));
+    }
+
+    // @RequestParam @Validated 실패
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
+        ConstraintViolation<?> violation = ex.getConstraintViolations().stream()
+                .findFirst()
+                .orElse(null);
+
+        if (violation == null) {
+            return ResponseUtil.error(ExceptionType.INVALID_REQUEST);
+        }
+
+        String message = violation.getMessage();
+        String field = null;
+        if (violation.getPropertyPath() != null) {
+            String path = violation.getPropertyPath().toString();
+            int lastDot = path.lastIndexOf('.');
+            field = lastDot >= 0 ? path.substring(lastDot + 1) : path;
+        }
+        String constraint = violation.getConstraintDescriptor()
+                .getAnnotation()
+                .annotationType()
+                .getSimpleName();
+
+        return ResponseUtil.error(mapValidationMessage(message, field, constraint, violation.getInvalidValue()));
     }
 
     // JSON 파싱 실패 등
@@ -65,7 +93,15 @@ public class GlobalExceptionHandler {
 
 
     private ExceptionType mapValidationError(FieldError error) {
-        String message = error.getDefaultMessage();
+        return mapValidationMessage(
+                error.getDefaultMessage(),
+                error.getField(),
+                error.getCode(),
+                error.getRejectedValue()
+        );
+    }
+
+    private ExceptionType mapValidationMessage(String message, String field, String constraint, Object rejected) {
         if (message == null) {
             message = "validation_error";
         }
@@ -140,15 +176,11 @@ public class GlobalExceptionHandler {
             /* =======================
              * Fallback
              * ======================= */
-            default -> resolveByFieldAndConstraint(error);
+            default -> resolveByFieldAndConstraint(field, constraint, rejected);
         };
     }
 
-    private ExceptionType resolveByFieldAndConstraint(FieldError error) {
-        String field = error.getField();
-        String constraint = error.getCode();
-        Object rejected = error.getRejectedValue();
-
+    private ExceptionType resolveByFieldAndConstraint(String field, String constraint, Object rejected) {
         if ("nickname".equals(field)) {
             if ("NotBlank".equals(constraint)) {
                 return ExceptionType.NICKNAME_EMPTY;

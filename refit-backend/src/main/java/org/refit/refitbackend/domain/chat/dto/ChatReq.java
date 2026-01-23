@@ -1,5 +1,7 @@
 package org.refit.refitbackend.domain.chat.dto;
 
+import com.fasterxml.jackson.databind.PropertyNamingStrategies;
+import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -7,6 +9,7 @@ import jakarta.validation.constraints.Size;
 public class ChatReq {
 
     @Schema(description = "채팅방 생성 요청")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CreateRoom(
             @Schema(description = "수신자(현직자) ID", example = "2")
             @NotNull(message = "chat_receiver_required")
@@ -25,6 +28,7 @@ public class ChatReq {
     ) {}
 
     @Schema(description = "메시지 전송 요청 (WebSocket)")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record SendMessage(
             @Schema(description = "채팅방 ID", example = "1")
             @NotNull(message = "chat_id_required")
@@ -40,6 +44,7 @@ public class ChatReq {
     ) {}
 
     @Schema(description = "메시지 읽음 처리 요청")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReadMessage(
             @Schema(description = "채팅방 ID", example = "1")
             @NotNull(message = "chat_id_required")
@@ -51,6 +56,7 @@ public class ChatReq {
     ) {}
 
     @Schema(description = "채팅방 종료 요청")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CloseRoom(
             @Schema(description = "채팅방 상태", example = "CLOSED")
             @NotNull(message = "chat_status_required")
