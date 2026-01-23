@@ -391,8 +391,12 @@
         const url = new URL(normalized);
         const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
         let path = url.pathname;
-        // 로컬은 보통 context-path가 없으므로 /api 프리픽스 제거
-        if (path === "/api") path = "";
+        // 배포는 /api 유지, 로컬은 보통 context-path가 없으므로 /api 제거
+        if (url.host.includes("re-fit.kr")) {
+          path = "/api";
+        } else if (path === "/api") {
+          path = "";
+        }
         if (path === "/") path = "";
         const httpEndpoint = `${url.protocol}//${url.host}${path}/ws`;
         const wsEndpoint = `${wsProtocol}//${url.host}${path}/ws`;
