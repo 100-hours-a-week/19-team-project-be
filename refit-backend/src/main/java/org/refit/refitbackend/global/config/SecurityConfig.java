@@ -39,6 +39,9 @@ public class SecurityConfig {
                 "/v1/auth/**",
                 "/api/v1/auth/**",
                 "/api/api/**",
+                "/api/v1/skills",
+                "/api/v1/jobs",
+                "/api/v1/career-levels",
 
                 "/api/ws/**",
                 "/ws/**",
