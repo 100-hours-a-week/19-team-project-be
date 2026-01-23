@@ -317,7 +317,11 @@
         const url = new URL(base);
         const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
         let path = url.pathname;
-        if (path === "/api") path = "";
+        if (url.host.includes("re-fit.kr")) {
+          path = "/api";
+        } else if (path === "/api") {
+          path = "";
+        }
         if (path === "/") path = "";
         return `${wsProtocol}//${url.host}${path}/ws`;
       }
