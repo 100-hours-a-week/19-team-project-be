@@ -42,6 +42,10 @@ public class SecurityConfig {
                 "/api/v1/skills",
                 "/api/v1/jobs",
                 "/api/v1/career-levels",
+                "/api/v1/users",
+                "/api/v1/experts",
+                "/api/v1/experts/**",
+                "/api/v1/dev/**",
 
                 "/api/ws/**",
                 "/ws/**",

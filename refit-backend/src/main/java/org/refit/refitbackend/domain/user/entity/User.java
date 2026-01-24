@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.refit.refitbackend.domain.user.entity.enums.Role;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
+import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.global.common.entity.BaseEntity;
 
@@ -74,6 +75,21 @@ public class User extends BaseEntity {
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserSkill> userSkills = new ArrayList<>();
+
+    @OneToOne(mappedBy = "user", fetch = FetchType.LAZY)
+    private ExpertProfile expertProfile;
+
+    public void updateUserType(UserType userType) {
+        this.userType = userType;
+    }
+
+    public void attachExpertProfile(ExpertProfile expertProfile) {
+        this.expertProfile = expertProfile;
+    }
+
+    public void clearExpertProfile() {
+        this.expertProfile = null;
+    }
 
 
     @Builder

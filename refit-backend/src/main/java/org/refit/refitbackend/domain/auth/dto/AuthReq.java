@@ -63,14 +63,18 @@ public class AuthReq {
             String introduction
     ) {}
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record SkillRequest(
+            @Schema(description = "스킬 ID", example = "1", name = "skill_id")
             Long skillId,
+            @Schema(description = "표시 순서", example = "1", name = "display_order")
             Integer displayOrder
     ) {}
 
     /* =======================
      * 토큰 재발급 요청 (RTR)
      * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record RefreshTokenRequest(
             @NotBlank(message = "refresh_token_required")
             @Schema(description = "Refresh Token")

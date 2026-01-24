@@ -25,7 +25,7 @@ import jakarta.validation.constraints.Size;
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/users")
 @Validated
-@Tag(name = "User", description = "유저 조회 API (프론트 디버깅용)")
+@Tag(name = "User", description = "유저 조회 API")
 public class UserController {
 
     private final UserService userService;
@@ -104,39 +104,6 @@ public class UserController {
             String nickname
     ) {
         return ResponseUtil.ok("success", userService.checkNickname(nickname));
-    }
-
-    /**
-     * 현직자 검색
-     */
-    @Operation(
-            summary = "현직자 검색",
-            description = "직무, 스킬, 키워드로 현직자를 검색합니다"
-    )
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "success"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "401",
-                    description = "unauthorized",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    @GetMapping("/experts")
-    public ResponseEntity<ApiResponse<UserRes.ExpertCursorResponse>> searchExperts(
-            @Parameter(description = "검색 키워드")
-            @RequestParam(required = false) String keyword,
-            @Parameter(description = "직무 ID")
-            @RequestParam(required = false) Long jobId,
-            @Parameter(description = "스킬 ID")
-            @RequestParam(required = false) Long skillId,
-            @Parameter(description = "커서(마지막 유저 ID)")
-            @RequestParam(required = false) Long cursor,
-            @Parameter(description = "페이지 크기")
-            @RequestParam(defaultValue = "20") int size
-    ) {
-        CursorPage<UserRes.ExpertSearch> page = userService.searchExperts(keyword, jobId, skillId, cursor, size);
-        UserRes.ExpertCursorResponse res = new UserRes.ExpertCursorResponse(page.items(), page.nextCursor(), page.hasMore());
-        return ResponseUtil.ok("success", res);
     }
 
     /**

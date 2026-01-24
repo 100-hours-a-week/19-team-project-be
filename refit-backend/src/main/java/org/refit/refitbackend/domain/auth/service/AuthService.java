@@ -2,6 +2,8 @@ package org.refit.refitbackend.domain.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.auth.dto.AuthReq;
+import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
+import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.master.entity.Job;
 import org.refit.refitbackend.domain.master.entity.Skill;
@@ -9,6 +11,7 @@ import org.refit.refitbackend.domain.master.repository.CareerLevelRepository;
 import org.refit.refitbackend.domain.master.repository.JobRepository;
 import org.refit.refitbackend.domain.master.repository.SkillRepository;
 import org.refit.refitbackend.domain.user.entity.*;
+import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.user.repository.*;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
@@ -28,6 +31,7 @@ public class AuthService {
     private final JobRepository jobRepository;
     private final UserSkillRepository userSkillRepository;
     private final UserJobRepository userJobRepository;
+    private final ExpertProfileRepository expertProfileRepository;
 
     @Transactional
     public User signup(AuthReq.SignUp signUpDto) {
@@ -38,6 +42,7 @@ public class AuthService {
 
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
+        createExpertProfileIfNeeded(user);
         return user;
     }
 
@@ -92,6 +97,18 @@ public class AuthService {
                 .toList();
 
         userSkillRepository.saveAll(userSkills);
+    }
+
+    private void createExpertProfileIfNeeded(User user) {
+        if (user.getUserType() != UserType.EXPERT) {
+            return;
+        }
+        if (user.getExpertProfile() != null) {
+            return;
+        }
+        String companyName = "TempCompany";
+        String companyEmail = "user" + user.getId() + "@tempcorp.com";
+        expertProfileRepository.save(ExpertProfile.create(user, companyName, companyEmail));
     }
 
 

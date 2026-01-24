@@ -46,35 +46,6 @@ public class UserService {
     /**
      * 현직자 검색
      */
-    public CursorPage<UserRes.ExpertSearch> searchExperts(
-            String keyword,
-            Long jobId,
-            Long skillId,
-            Long cursorId,
-            int size
-    ) {
-        List<User> experts = userRepository.searchExpertsByCursor(
-                keyword,
-                jobId,
-                skillId,
-                cursorId,
-                PageRequest.of(0, size + 1)
-        );
-
-        boolean hasMore = experts.size() > size;
-        if (hasMore) {
-            experts = experts.subList(0, size);
-        }
-
-        List<UserRes.ExpertSearch> items = experts.stream()
-                .map(UserRes.ExpertSearch::from)
-                .toList();
-
-        String nextCursor = experts.isEmpty() ? null : String.valueOf(experts.get(experts.size() - 1).getId());
-
-        return new CursorPage<>(items, nextCursor, hasMore);
-    }
-
     /**
      * 모든 유저 검색
      */

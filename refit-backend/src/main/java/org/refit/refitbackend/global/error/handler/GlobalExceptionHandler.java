@@ -174,6 +174,15 @@ public class GlobalExceptionHandler {
                     ExceptionType.CHAT_JOB_POST_URL_TOO_LONG;
 
             /* =======================
+             * Expert
+             * ======================= */
+            case "expert_user_id_invalid" ->
+                    ExceptionType.EXPERT_USER_ID_INVALID;
+
+            case "user_type_invalid" ->
+                    ExceptionType.USER_TYPE_INVALID;
+
+            /* =======================
              * Fallback
              * ======================= */
             default -> resolveByFieldAndConstraint(field, constraint, rejected);
