@@ -24,26 +24,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
       SELECT DISTINCT u FROM User u
       LEFT JOIN u.userJobs uj
       LEFT JOIN u.userSkills us
-      WHERE u.userType = 'EXPERT'
-      AND (:keyword IS NULL OR u.nickname LIKE %:keyword% OR uj.job.name LIKE %:keyword% OR us.skill.name LIKE %:keyword%)
-      AND (:jobId IS NULL OR uj.job.id = :jobId)
-      AND (:skillId IS NULL OR us.skill.id = :skillId)
-      AND (:cursorId IS NULL OR u.id < :cursorId)
-      ORDER BY u.id DESC
-  """)
-    java.util.List<User> searchExpertsByCursor(
-            @Param("keyword") String keyword,
-            @Param("jobId") Long jobId,
-            @Param("skillId") Long skillId,
-            @Param("cursorId") Long cursorId,
-            Pageable pageable
-    );
-
-    @Query("""
-      SELECT DISTINCT u FROM User u
-      LEFT JOIN u.userJobs uj
-      LEFT JOIN u.userSkills us
-      WHERE (:keyword IS NULL OR u.nickname LIKE %:keyword% OR uj.job.name LIKE %:keyword% OR us.skill.name LIKE %:keyword%)
+      WHERE (:keyword IS NULL
+           OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(uj.job.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(us.skill.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
       AND (:jobId IS NULL OR uj.job.id = :jobId)
       AND (:skillId IS NULL OR us.skill.id = :skillId)
       AND (:cursorId IS NULL OR u.id < :cursorId)
