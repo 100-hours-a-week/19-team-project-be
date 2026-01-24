@@ -19,10 +19,10 @@ public interface ExpertRepository extends JpaRepository<User, Long> {
       LEFT JOIN u.userSkills us
       WHERE u.userType = 'EXPERT'
       AND (:keyword IS NULL
-           OR u.nickname ILIKE CONCAT('%', :keyword, '%')
-           OR u.introduction ILIKE CONCAT('%', :keyword, '%')
-           OR uj.job.name ILIKE CONCAT('%', :keyword, '%')
-           OR us.skill.name ILIKE CONCAT('%', :keyword, '%'))
+           OR u.nickname ILIKE CONCAT('%', CAST(:keyword AS text), '%')
+           OR u.introduction ILIKE CONCAT('%', CAST(:keyword AS text), '%')
+           OR uj.job.name ILIKE CONCAT('%', CAST(:keyword AS text), '%')
+           OR us.skill.name ILIKE CONCAT('%', CAST(:keyword AS text), '%'))
       AND (:jobId IS NULL OR uj.job.id = :jobId)
       AND (:skillId IS NULL OR us.skill.id = :skillId)
       AND (:careerLevelId IS NULL OR u.careerLevel.id = :careerLevelId)
