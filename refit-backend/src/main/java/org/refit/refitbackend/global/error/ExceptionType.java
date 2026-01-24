@@ -56,6 +56,7 @@ public enum ExceptionType {
     USER_ID_INVALID(HttpStatus.BAD_REQUEST, "USER_ID_INVALID", "user_id_invalid"),
     USER_ID_REQUIRED(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED", "user_id_required"),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "user_not_found"),
+    USER_TYPE_INVALID(HttpStatus.BAD_REQUEST, "USER_TYPE_INVALID", "user_type_invalid"),
 
     NICKNAME_EMPTY(HttpStatus.BAD_REQUEST, "NICKNAME_EMPTY", "nickname is empty"),
     NICKNAME_TOO_SHORT(HttpStatus.BAD_REQUEST, "NICKNAME_TOO_SHORT", "nickname is too short"),
