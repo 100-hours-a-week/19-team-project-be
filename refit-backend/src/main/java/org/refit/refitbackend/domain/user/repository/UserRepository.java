@@ -25,9 +25,9 @@ public interface UserRepository extends JpaRepository<User, Long> {
       LEFT JOIN u.userJobs uj
       LEFT JOIN u.userSkills us
       WHERE (:keyword IS NULL
-           OR LOWER(u.nickname) LIKE LOWER(CONCAT('%', :keyword, '%'))
-           OR LOWER(uj.job.name) LIKE LOWER(CONCAT('%', :keyword, '%'))
-           OR LOWER(us.skill.name) LIKE LOWER(CONCAT('%', :keyword, '%')))
+           OR LOWER(CAST(u.nickname AS string)) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(CAST(uj.job.name AS string)) LIKE LOWER(CONCAT('%', :keyword, '%'))
+           OR LOWER(CAST(us.skill.name AS string)) LIKE LOWER(CONCAT('%', :keyword, '%')))
       AND (:jobId IS NULL OR uj.job.id = :jobId)
       AND (:skillId IS NULL OR us.skill.id = :skillId)
       AND (:cursorId IS NULL OR u.id < :cursorId)
