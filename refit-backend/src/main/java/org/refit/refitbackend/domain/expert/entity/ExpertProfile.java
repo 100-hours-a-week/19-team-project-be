@@ -77,4 +77,9 @@ public class ExpertProfile extends BaseEntity {
         user.attachExpertProfile(profile);
         return profile;
     }
+
+    public void markVerified(LocalDateTime verifiedAt) {
+        this.verified = true;
+        this.verifiedAt = verifiedAt;
+    }
 }

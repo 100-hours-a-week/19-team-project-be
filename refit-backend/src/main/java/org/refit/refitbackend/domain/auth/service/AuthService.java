@@ -2,12 +2,16 @@ package org.refit.refitbackend.domain.auth.service;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.auth.dto.AuthReq;
+import org.refit.refitbackend.domain.auth.entity.EmailVerification;
+import org.refit.refitbackend.domain.auth.entity.EmailVerificationStatus;
+import org.refit.refitbackend.domain.auth.repository.EmailVerificationRepository;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.master.entity.Job;
 import org.refit.refitbackend.domain.master.entity.Skill;
 import org.refit.refitbackend.domain.master.repository.CareerLevelRepository;
+import org.refit.refitbackend.domain.master.repository.EmailDomainRepository;
 import org.refit.refitbackend.domain.master.repository.JobRepository;
 import org.refit.refitbackend.domain.master.repository.SkillRepository;
 import org.refit.refitbackend.domain.user.entity.*;
@@ -18,6 +22,7 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -29,9 +34,11 @@ public class AuthService {
     private final CareerLevelRepository careerLevelRepository;
     private final SkillRepository skillRepository;
     private final JobRepository jobRepository;
+    private final EmailDomainRepository emailDomainRepository;
     private final UserSkillRepository userSkillRepository;
     private final UserJobRepository userJobRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final EmailVerificationRepository emailVerificationRepository;
 
     @Transactional
     public User signup(AuthReq.SignUp signUpDto) {
@@ -42,7 +49,7 @@ public class AuthService {
 
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
-        createExpertProfileIfNeeded(user);
+        createExpertProfileIfNeeded(user, signUpDto);
         return user;
     }
 
@@ -99,16 +106,61 @@ public class AuthService {
         userSkillRepository.saveAll(userSkills);
     }
 
-    private void createExpertProfileIfNeeded(User user) {
+    private void createExpertProfileIfNeeded(User user, AuthReq.SignUp signUp) {
         if (user.getUserType() != UserType.EXPERT) {
             return;
         }
         if (user.getExpertProfile() != null) {
             return;
         }
-        String companyName = "TempCompany";
-        String companyEmail = "user" + user.getId() + "@tempcorp.com";
-        expertProfileRepository.save(ExpertProfile.create(user, companyName, companyEmail));
+        String companyEmail = normalizeEmail(signUp.companyEmail());
+        String companyName = resolveCompanyName(signUp.companyName(), companyEmail);
+
+        LocalDateTime verifiedAt = null;
+        if (companyEmail != null) {
+            verifiedAt = emailVerificationRepository.findTopByEmailOrderByIdDesc(companyEmail)
+                    .filter(v -> v.getStatus() == EmailVerificationStatus.VERIFIED)
+                    .map(v -> v.getVerifiedAt() != null ? v.getVerifiedAt() : v.getUpdatedAt())
+                    .orElse(null);
+        }
+
+        ExpertProfile profile = ExpertProfile.create(user, companyName, companyEmail);
+        if (verifiedAt != null) {
+            profile.markVerified(verifiedAt);
+        }
+        expertProfileRepository.save(profile);
+    }
+
+    private String resolveCompanyName(String companyName, String companyEmail) {
+        if (companyName != null && !companyName.isBlank()) {
+            return companyName;
+        }
+        if (companyEmail == null) {
+            return null;
+        }
+        String domain = extractDomain(companyEmail);
+        if (domain == null) {
+            return null;
+        }
+        return emailDomainRepository.findById(domain)
+                .map(d -> d.getCompanyName())
+                .orElse(null);
+    }
+
+    private String normalizeEmail(String email) {
+        if (email == null) {
+            return null;
+        }
+        String trimmed = email.trim();
+        return trimmed.isEmpty() ? null : trimmed.toLowerCase();
+    }
+
+    private String extractDomain(String email) {
+        int at = email.indexOf('@');
+        if (at < 0 || at == email.length() - 1) {
+            return null;
+        }
+        return email.substring(at + 1).toLowerCase();
     }
 
 
