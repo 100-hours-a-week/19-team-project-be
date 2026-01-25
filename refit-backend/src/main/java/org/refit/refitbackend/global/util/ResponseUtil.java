@@ -28,4 +28,9 @@ public final class ResponseUtil {
         return ResponseEntity.status(type.getStatus())
                 .body(ApiResponse.error(type.getCode(), type.getMessage()));
     }
+
+    public static <T> ResponseEntity<ApiResponse<T>> error(ExceptionType type, T data) {
+        return ResponseEntity.status(type.getStatus())
+                .body(ApiResponse.errorWithData(type.getCode(), type.getMessage(), data));
+    }
 }

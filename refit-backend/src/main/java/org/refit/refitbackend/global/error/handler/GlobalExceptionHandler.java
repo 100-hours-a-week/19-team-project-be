@@ -24,7 +24,7 @@ public class GlobalExceptionHandler {
 
     // @RequestBody @Valid 실패
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleMethodArgumentNotValid(MethodArgumentNotValidException ex) {
         FieldError error = ex.getBindingResult().getFieldErrors().stream()
                 .findFirst()
                 .orElse(null);
@@ -38,7 +38,7 @@ public class GlobalExceptionHandler {
 
     // @RequestParam @Validated 실패
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleConstraintViolation(ConstraintViolationException ex) {
         ConstraintViolation<?> violation = ex.getConstraintViolations().stream()
                 .findFirst()
                 .orElse(null);
@@ -64,13 +64,13 @@ public class GlobalExceptionHandler {
 
     // JSON 파싱 실패 등
     @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNotReadable(HttpMessageNotReadableException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleNotReadable(HttpMessageNotReadableException ex) {
         return ResponseUtil.error(ExceptionType.INVALID_JSON);
     }
 
     // DB 무결성 제약 위반 (ex: UNIQUE, FK 등)
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ApiResponse<Void>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
         log.warn("⚠Data integrity violation: {}", ex.getMessage());
 
         // 예외 메시지 기반으로 세분화 가능
@@ -80,13 +80,16 @@ public class GlobalExceptionHandler {
 
     // 커스텀 비즈니스 예외
     @ExceptionHandler(CustomException.class)
-    public ResponseEntity<ApiResponse<Void>> handleCustom(CustomException ex) {
+    public ResponseEntity<ApiResponse<Object>> handleCustom(CustomException ex) {
+        if (ex.getData() != null) {
+            return ResponseUtil.error(ex.getExceptionType(), ex.getData());
+        }
         return ResponseUtil.error(ex.getExceptionType());
     }
 
     // 그 외
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleAny(Exception ex) {
+    public ResponseEntity<ApiResponse<Object>> handleAny(Exception ex) {
         log.error("Unexpected", ex);
         return ResponseUtil.error(ExceptionType.INTERNAL_SERVER_ERROR);
     }
@@ -181,6 +184,15 @@ public class GlobalExceptionHandler {
 
             case "user_type_invalid" ->
                     ExceptionType.USER_TYPE_INVALID;
+
+            /* =======================
+             * Email Verification
+             * ======================= */
+            case "email_required", "email_invalid" ->
+                    ExceptionType.EMAIL_FORMAT_INVALID;
+
+            case "verification_code_required" ->
+                    ExceptionType.VERIFICATION_CODE_INVALID;
 
             /* =======================
              * Fallback

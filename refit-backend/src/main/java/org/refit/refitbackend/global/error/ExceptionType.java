@@ -89,6 +89,19 @@ public enum ExceptionType {
     EXPERT_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPERT_NOT_FOUND", "expert_not_found"),
 
     /* =======================
+     * Email Verification
+     * ======================= */
+    EMAIL_FORMAT_INVALID(HttpStatus.BAD_REQUEST, "EMAIL_FORMAT_INVALID", "invalid email format"),
+    EMAIL_DOMAIN_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "EMAIL_DOMAIN_NOT_ALLOWED", "email domain not allowed for verification"),
+    EMAIL_NOT_COMPANY_EMAIL(HttpStatus.BAD_REQUEST, "EMAIL_NOT_COMPANY_EMAIL", "must be a company email address"),
+    EMAIL_VERIFICATION_RATE_LIMIT(HttpStatus.TOO_MANY_REQUESTS, "EMAIL_VERIFICATION_RATE_LIMIT", "too many verification attempts"),
+    VERIFICATION_CODE_INVALID(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_INVALID", "invalid verification code"),
+    VERIFICATION_CODE_MISMATCH(HttpStatus.BAD_REQUEST, "VERIFICATION_CODE_MISMATCH", "verification code does not match"),
+    VERIFICATION_CODE_EXPIRED(HttpStatus.GONE, "VERIFICATION_CODE_EXPIRED", "verification code has expired"),
+    EMAIL_VERIFICATION_REQUIRED(HttpStatus.BAD_REQUEST, "EMAIL_VERIFICATION_REQUIRED", "email verification required"),
+    EMAIL_VERIFICATION_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "EMAIL_VERIFICATION_NOT_VERIFIED", "email not verified"),
+
+    /* =======================
      * Resume
      * ======================= */
     RESUME_NOT_FOUND(HttpStatus.NOT_FOUND, "RESUME_NOT_FOUND", "resume_not_found"),
