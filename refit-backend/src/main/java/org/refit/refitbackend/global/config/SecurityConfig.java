@@ -46,6 +46,8 @@ public class SecurityConfig {
                 "/api/v1/experts",
                 "/api/v1/experts/**",
                 "/api/v1/dev/**",
+                "/api/v1/email-verifications/public",
+                "/api/v1/email-domains",
 
                 "/api/ws/**",
                 "/ws/**",
