@@ -3,516 +3,233 @@ name: Re-Fit Backend CD
 on:
   workflow_run:
     workflows: ["Re-Fit Backend CI"]
-    types:
-      - completed
-    branches:
-      - develop
-      - main
+    types: [completed]
+    branches: [develop, main]
   workflow_dispatch:
     inputs:
       branch:
         description: 'Branch to deploy'
         required: true
         type: choice
-        options:
-          - develop
-          - main
+        options: [develop, main]
 
 permissions:
   contents: read
   actions: read
 
 jobs:
-  # 배포: release job 성공 후 자동 트리거된 배포 또는 수동 배포
-  # 목적: 검증된 코드를 서버에 배포
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # 중복 실행 방지: 같은 브랜치의 배포는 하나만 실행
+    # 동일 브랜치의 동시 배포 방지
     concurrency:
       group: deploy-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch }}
       cancel-in-progress: false
+    # CI 성공 후 또는 수동 배포 시에만 실행
     if: |
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
        (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main'))
-    environment: ${{ (github.event_name == 'workflow_dispatch' && github.event.inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') && 'production' || 'development' }}
+    # main 브랜치는 production, develop 브랜치는 development 환경 사용
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.event.inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
 
     steps:
+      # 배포 전 release job 성공 여부 확인
       - name: Check release job status
         if: github.event_name == 'workflow_run'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -euo pipefail
-          echo "[0/8] release job 성공 여부 확인 중..."
           RUN_ID="${{ github.event.workflow_run.id }}"
           REPO="${{ github.repository }}"
-          
-          # workflow run의 jobs 확인
           JOBS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[] | select(.name=="release") | .conclusion' 2>/dev/null || echo "")
-          
-          if [ "$JOBS" != "success" ]; then
-            echo "Error: release job이 성공하지 않았습니다. (conclusion: ${JOBS:-not_found})"
-            echo "CD 워크플로우는 release job이 성공했을 때만 실행됩니다."
-            exit 1
-          fi
-          
-          echo "release job 성공 확인 완료"
+          [ "$JOBS" = "success" ] || exit 1
 
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch }}
 
+      # CI 워크플로우에서 JAR 아티팩트 다운로드 (재시도 로직 포함)
       - name: Download JAR Artifact
         env:
           GH_TOKEN: ${{ github.token }}
+          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
         run: |
           set -euo pipefail
           REPO="${{ github.repository }}"
           mkdir -p build-output
           
+          # 트리거 타입에 따라 아티팩트 이름 결정
           if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            # 자동 트리거: 특정 workflow run의 아티팩트 다운로드
-            echo "[1/8] CI 아티팩트 다운로드 중..."
             RUN_ID="${{ github.event.workflow_run.id }}"
             ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}-${RUN_ID}"
-            
-            # 아티팩트 다운로드
-            echo "아티팩트 다운로드 시작..."
-            MAX_RETRIES=8
-            RETRY_INTERVAL=3
-            DOWNLOADED=false
-            
-            for i in $(seq 1 $MAX_RETRIES); do
-              # 첫 시도는 즉시, 이후에는 아티팩트 상태 확인 후 다운로드
-              if [ "$i" -gt 1 ]; then
-                ARTIFACT_STATUS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
-                  --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | .expired" 2>/dev/null || echo "true")
-                
-                if [ "$ARTIFACT_STATUS" != "false" ]; then
-                  echo "아티팩트 대기 중... (${RETRY_INTERVAL}초 후 재시도)"
-                  sleep "$RETRY_INTERVAL"
-                fi
-              fi
-              
-              echo "다운로드 시도 $i/$MAX_RETRIES: ${ARTIFACT_NAME} (run-id: ${RUN_ID})"
-              
-              # 네트워크 오류 처리
-              if ! gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output 2>&1; then
-                if [ "$i" -lt "$MAX_RETRIES" ]; then
-                  echo "다운로드 실패, ${RETRY_INTERVAL}초 후 재시도..."
-                  sleep "$RETRY_INTERVAL"
-                  continue
-                fi
-              fi
-              
-              if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-                FILE_SIZE=$(stat -f%z "build-output/refit-backend-0.0.1-SNAPSHOT.jar" 2>/dev/null || stat -c%s "build-output/refit-backend-0.0.1-SNAPSHOT.jar" 2>/dev/null || echo "0")
-                if [ "$FILE_SIZE" -gt 1000000 ]; then
-                  echo "아티팩트 다운로드 성공: ${ARTIFACT_NAME} (크기: ${FILE_SIZE} bytes)"
-                  DOWNLOADED=true
-                  break
-                else
-                  echo "경고: 다운로드된 파일 크기가 비정상적으로 작습니다 (${FILE_SIZE} bytes)"
-                  rm -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar"
-                fi
-              fi
-              
-              if [ "$i" -lt "$MAX_RETRIES" ]; then
-                sleep "$RETRY_INTERVAL"
-              fi
-            done
-            
-            if [ "$DOWNLOADED" != "true" ] || [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-              echo "Error: JAR 파일을 다운로드할 수 없습니다"
-              echo "build-output 목록:"
-              ls -lah build-output || true
-              echo "아티팩트 목록 확인:"
-              gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" --jq ".artifacts[] | select(.name | startswith(\"backend-jar-\"))" || true
-              exit 1
-            fi
           else
-            # 수동 트리거: 최근 아티팩트 찾기
-            echo "[1/8] 최근 CI 아티팩트 검색 중..."
             BRANCH="${{ github.event.inputs.branch }}"
-            
-            # 최근 성공한 CI workflow run 찾기 (release job이 성공한 run만)
-            LATEST_RUNS=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=success&event=push&per_page=10" \
-              --jq '.workflow_runs[] | .id' 2>/dev/null || echo "")
-            
-            if [ -z "$LATEST_RUNS" ]; then
-              echo "Error: ${BRANCH} 브랜치에서 성공한 CI workflow run을 찾을 수 없습니다"
-              exit 1
-            fi
-            
-            LATEST_RUN=""
-            ARTIFACT_NAME=""
-            for RUN_ID in $LATEST_RUNS; do
-              # 해당 run의 release job이 성공했는지 확인
-              RELEASE_JOB=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
-                --jq '.jobs[] | select(.name=="release") | .conclusion' 2>/dev/null || echo "")
-              
-              if [ "$RELEASE_JOB" = "success" ]; then
-                # 해당 run의 아티팩트 확인
-                ARTIFACTS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
-                  --jq '.artifacts[] | select(.name | startswith("backend-jar-") and .expired == false) | .name' 2>/dev/null | head -1)
-                
-                if [ -n "$ARTIFACTS" ]; then
-                  LATEST_RUN="$RUN_ID"
-                  ARTIFACT_NAME="$ARTIFACTS"
-                  break
-                fi
-              fi
-            done
-            
-            if [ -z "$LATEST_RUN" ] || [ -z "$ARTIFACT_NAME" ]; then
-              echo "Error: ${BRANCH} 브랜치에서 release job이 성공하고 아티팩트가 있는 CI workflow run을 찾을 수 없습니다"
-              exit 1
-            fi
-            
-            echo "최근 성공한 CI run ID: ${LATEST_RUN} (release job 성공)"
-            echo "아티팩트 발견: ${ARTIFACT_NAME}"
-            
-            # 아티팩트 크기 확인
-            ARTIFACT_SIZE=$(gh api "repos/${REPO}/actions/runs/${LATEST_RUN}/artifacts" \
-              --jq ".artifacts[] | select(.name == \"${ARTIFACT_NAME}\") | .size_in_bytes" 2>/dev/null || echo "0")
-            
-            if [ "$ARTIFACT_SIZE" -le 0 ]; then
-              echo "Error: 아티팩트 크기가 비정상적입니다 (${ARTIFACT_SIZE} bytes)"
-              exit 1
-            fi
-            echo "아티팩트 크기: ${ARTIFACT_SIZE} bytes"
-            
-            # 아티팩트 다운로드
-            MAX_RETRIES=8
-            RETRY_INTERVAL=2
-            DOWNLOADED=false
-            
-            for i in $(seq 1 $MAX_RETRIES); do
-              echo "다운로드 시도 $i/$MAX_RETRIES: ${ARTIFACT_NAME} (run-id: ${LATEST_RUN})"
-              
-              # 네트워크 오류 처리
-              if ! gh run download "$LATEST_RUN" -n "$ARTIFACT_NAME" -D build-output 2>&1; then
-                if [ "$i" -lt "$MAX_RETRIES" ]; then
-                  echo "다운로드 실패, ${RETRY_INTERVAL}초 후 재시도..."
-                  sleep "$RETRY_INTERVAL"
-                  continue
-                fi
-              fi
-              
-              if [ -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-                FILE_SIZE=$(stat -f%z "build-output/refit-backend-0.0.1-SNAPSHOT.jar" 2>/dev/null || stat -c%s "build-output/refit-backend-0.0.1-SNAPSHOT.jar" 2>/dev/null || echo "0")
-                if [ "$FILE_SIZE" -gt 1000000 ]; then
-                  echo "아티팩트 다운로드 성공: ${ARTIFACT_NAME} (크기: ${FILE_SIZE} bytes)"
-                  DOWNLOADED=true
-                  break
-                else
-                  echo "경고: 다운로드된 파일 크기가 비정상적으로 작습니다 (${FILE_SIZE} bytes)"
-                  rm -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar"
-                fi
-              fi
-              
-              if [ "$i" -lt "$MAX_RETRIES" ]; then
-                sleep "$RETRY_INTERVAL"
-              fi
-            done
-            
-            if [ "$DOWNLOADED" != "true" ] || [ ! -f "build-output/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-              echo "Error: JAR 파일을 다운로드할 수 없습니다"
-              echo "build-output 목록:"
-              ls -lah build-output || true
-              echo "아티팩트 목록 확인:"
-              gh api "repos/${REPO}/actions/runs/${LATEST_RUN}/artifacts" --jq ".artifacts[] | select(.name | startswith(\"backend-jar-\"))" || true
-              exit 1
-            fi
+            RUN_ID=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=success&event=push&per_page=1" \
+              --jq '.workflow_runs[0].id' 2>/dev/null)
+            [ -n "$RUN_ID" ] || exit 1
+            ARTIFACT_NAME=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.name | startswith("backend-jar-") and .expired == false) | .name' 2>/dev/null | head -1)
           fi
           
-          # JAR 파일 무결성 검증
-          echo "[2/8] 아티팩트 무결성 검증 중..."
-          
-          JAR_FILE="build-output/refit-backend-0.0.1-SNAPSHOT.jar"
-          
-          # 파일 존재 및 크기 확인
-          if [ ! -f "$JAR_FILE" ]; then
-            echo "Error: JAR 파일이 존재하지 않습니다"
-            exit 1
-          fi
-          
-          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
-          if [ "$FILE_SIZE" -lt 1000000 ]; then
-            echo "Error: JAR 파일 크기가 비정상적으로 작습니다 (${FILE_SIZE} bytes)"
-            exit 1
-          fi
-          echo "JAR 파일 크기: ${FILE_SIZE} bytes"
-          
-          # JAR 파일 구조 검증 (빠른 검증)
-          if ! jar tf "$JAR_FILE" > /dev/null 2>&1; then
-            echo "Error: JAR 파일 구조가 올바르지 않습니다"
-            exit 1
-          fi
-          
-          echo "아티팩트 검증 완료"
+          # 최대 5회 재시도, 파일 크기 1MB 이상 확인
+          for i in {1..5}; do
+            gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output 2>/dev/null && \
+            [ -f "build-output/${JAR_NAME}" ] && \
+            [ $(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0) -gt 1000000 ] && break
+            [ $i -lt 5 ] && sleep 3
+          done
+          [ -f "build-output/${JAR_NAME}" ] || exit 1
 
-      - name: Compress JAR for faster transfer
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      # JAR 압축 후 S3에 업로드
+      - name: Compress and Upload to S3
+        id: s3_upload
+        env:
+          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
         run: |
-          echo "[3/8] JAR 파일 압축 중..."
+          set -euo pipefail
           cd build-output
-          gzip -c refit-backend-0.0.1-SNAPSHOT.jar > refit-backend-0.0.1-SNAPSHOT.jar.gz
-          ORIGINAL_SIZE=$(stat -f%z refit-backend-0.0.1-SNAPSHOT.jar 2>/dev/null || stat -c%s refit-backend-0.0.1-SNAPSHOT.jar 2>/dev/null || echo "0")
-          COMPRESSED_SIZE=$(stat -f%z refit-backend-0.0.1-SNAPSHOT.jar.gz 2>/dev/null || stat -c%s refit-backend-0.0.1-SNAPSHOT.jar.gz 2>/dev/null || echo "0")
-          if [ "$COMPRESSED_SIZE" -gt 0 ] && [ "$ORIGINAL_SIZE" -gt 0 ]; then
-            RATIO=$((COMPRESSED_SIZE * 100 / ORIGINAL_SIZE))
-            echo "압축 완료: ${ORIGINAL_SIZE} bytes -> ${COMPRESSED_SIZE} bytes (약 ${RATIO}%)"
+          gzip -c ${JAR_NAME} > ${JAR_NAME}.gz
+          aws s3 cp ${JAR_NAME}.gz s3://${{ secrets.S3_ARTIFACTS_BUCKET }}/artifacts/backend/${JAR_NAME}.gz
+          echo "s3_key=artifacts/backend/${JAR_NAME}.gz" >> $GITHUB_OUTPUT
+
+      # SSM을 통해 EC2 인스턴스에 배포
+      - name: Deploy via SSM
+        env:
+          SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+          S3_BUCKET: ${{ secrets.S3_ARTIFACTS_BUCKET }}
+          S3_KEY: ${{ steps.s3_upload.outputs.s3_key }}
+        run: |
+          set -euo pipefail
+          
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          BASE_PATH="$SERVER_BASE_PATH"
+          JAR_PATH="${BASE_PATH}/app/backend/refit-backend/build/libs/${JAR_NAME}"
+          JAR_GZ_PATH="${JAR_PATH}.gz"
+          
+          DEPLOY_SCRIPT=$(cat <<'SCRIPT_END'
+          set -euo pipefail
+          BASE_PATH="$1"
+          JAR_PATH="$2"
+          JAR_GZ_PATH="$3"
+          S3_BUCKET="$4"
+          S3_KEY="$5"
+          HEALTH_CHECK_URL="$6"
+          
+          BACKUP_DIR="${BASE_PATH}/backups/backend"
+          APP_NAME="backend"
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          
+          trap 'pm2 status || true; exit $?' ERR
+          
+          # S3에서 압축된 JAR 다운로드
+          aws s3 cp "s3://${S3_BUCKET}/${S3_KEY}" "${JAR_GZ_PATH}" --region ap-northeast-2
+          mkdir -p ${BACKUP_DIR}
+          # 기존 JAR 백업
+          [ -f "${JAR_PATH}" ] && cp "${JAR_PATH}" "${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
+          gunzip -c "${JAR_GZ_PATH}" > "${JAR_PATH}"
+          rm -f "${JAR_GZ_PATH}"
+          
+          # JAR 파일 크기 검증 (1MB 이상)
+          [ $(stat -f%z "${JAR_PATH}" 2>/dev/null || stat -c%s "${JAR_PATH}" 2>/dev/null || echo 0) -gt 1000000 ] || exit 1
+          
+          sudo chown -R ubuntu:ubuntu "$(dirname "${JAR_PATH}")" 2>/dev/null || true
+          chmod 644 "${JAR_PATH}"
+          
+          # PM2로 애플리케이션 재시작 또는 시작
+          if pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+            pm2 restart ${APP_NAME} || pm2 delete ${APP_NAME}
+          else
+            pm2 start /usr/bin/java --name "${APP_NAME}" -- \
+              -Xms1024m -Xmx2560m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+              -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof \
+              -jar "${JAR_PATH}"
           fi
-
-      - name: Upload compressed JAR via SCP
-        id: scp_upload
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_KEY }}
-          source: "build-output/refit-backend-0.0.1-SNAPSHOT.jar.gz"
-          target: ${{ secrets.SERVER_BASE_PATH }}/app/backend/refit-backend/build/libs/
-          strip_components: 1
-          timeout: 180s
-        continue-on-error: false
-
-      - name: Deploy and restart backend
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          port: ${{ secrets.SSH_PORT }}
-          key: ${{ secrets.SSH_KEY }}
-          script_stop: true
-          timeout: 600s
-          script: |
-            set -euo pipefail
-            
-            BASE_PATH="${{ secrets.SERVER_BASE_PATH }}"
-            JAR_PATH="$BASE_PATH/app/backend/refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
-            JAR_GZ_PATH="$BASE_PATH/app/backend/refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar.gz"
-            BACKUP_DIR="$BASE_PATH/backups/backend"
-            APP_NAME="backend"
-            TIMESTAMP=$(date +%Y%m%d%H%M%S)
-            DEPLOY_START_TIME=$(date +%s)
-            
-            # 에러 핸들러 함수
-            cleanup_on_error() {
-              local exit_code=$?
-              echo "============================================"
-              echo "배포 중 오류 발생: $(date)"
-              echo "Exit Code: $exit_code"
-              echo "============================================"
-              
-              # PM2 상태 확인
-              echo "PM2 상태:"
-              pm2 status || true
-              
-              # 디스크 공간 확인
-              echo "디스크 사용량:"
-              df -h "$BASE_PATH" || true
-              
-              # 메모리 사용량 확인
-              echo "메모리 사용량:"
-              free -h || true
-              
-              exit $exit_code
-            }
-            trap cleanup_on_error ERR
-            
-            echo "============================================"
-            echo "[3/8] 서버 배포 시작: $(date)"
-            echo "============================================"
-            
-            # 압축 파일 압축 해제
-            echo "[3-1] 압축 파일 압축 해제 중..."
-            if [ ! -f "$JAR_GZ_PATH" ]; then
-              echo "에러: 압축 파일을 찾을 수 없습니다: $JAR_GZ_PATH"
-              exit 1
-            fi
-            
-            # 기존 JAR 백업 (압축 해제 전)
-            BACKUP_FILE="$BACKUP_DIR/backend-$TIMESTAMP.jar"
-            mkdir -p $BACKUP_DIR
-            if [ -f "$JAR_PATH" ]; then
-              echo "[3-2] 기존 버전 백업 중..."
-              if ! cp "$JAR_PATH" "$BACKUP_FILE"; then
-                echo "에러: 백업 파일 생성 실패"
-                exit 1
-              fi
-              echo "백업 완료: $BACKUP_FILE"
-            fi
-            
-            # 압축 해제
-            if ! gunzip -c "$JAR_GZ_PATH" > "$JAR_PATH"; then
-              echo "에러: 압축 해제 실패"
-              exit 1
-            fi
-            
-            # 압축 파일 삭제 (디스크 공간 절약)
-            rm -f "$JAR_GZ_PATH"
-            
-            # JAR 파일 검증
-            echo "[3-3] JAR 파일 검증 중..."
-            JAR_SIZE=$(stat -f%z "$JAR_PATH" 2>/dev/null || stat -c%s "$JAR_PATH" 2>/dev/null || echo "0")
-            if [ "$JAR_SIZE" -lt 1000000 ]; then
-              echo "에러: JAR 파일 크기가 비정상적으로 작습니다 (${JAR_SIZE} bytes)"
-              exit 1
-            fi
-            echo "JAR 파일 크기: ${JAR_SIZE} bytes"
-            
-            # 파일 권한 설정
-            echo "[3-4] 파일 권한 설정 중..."
-            sudo chown -R ubuntu:ubuntu "$(dirname "$JAR_PATH")" 2>/dev/null || true
-            chmod 644 "$JAR_PATH" 2>/dev/null || true
-            
-            # PM2 프로세스 재시작
-            echo "[3-5] PM2 프로세스 재시작 중..."
-            if pm2 describe $APP_NAME > /dev/null 2>&1; then
-              # 기존 프로세스가 있으면 restart (더 빠름)
-              echo "기존 프로세스 재시작 중..."
-              pm2 restart $APP_NAME 2>/dev/null || pm2 delete $APP_NAME 2>/dev/null || true
-              sleep 1
-            fi
-            
-            # 프로세스가 없거나 재시작 실패한 경우 새로 시작
-            if ! pm2 describe $APP_NAME > /dev/null 2>&1; then
-              echo "새 프로세스 시작 중..."
-              if ! pm2 start /usr/bin/java --name "$APP_NAME" -- \
-                -Xms1024m -Xmx2560m \
-                -XX:+UseG1GC \
-                -XX:MaxGCPauseMillis=200 \
-                -XX:+HeapDumpOnOutOfMemoryError \
-                -XX:HeapDumpPath=/tmp/heapdump.hprof \
-                -jar "$JAR_PATH" 2>/dev/null; then
-                echo "에러: PM2 프로세스 시작 실패"
-                pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
-                exit 1
-              fi
-            fi
-            
-            sleep 2
-            
-            # PM2 프로세스 시작 확인
-            echo "[3-6] PM2 프로세스 시작 확인 중..."
-            if ! pm2 describe $APP_NAME > /dev/null 2>&1; then
-              echo "에러: PM2 프로세스 시작 실패"
-              pm2 status 2>/dev/null || true
-              pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
-              exit 1
-            fi
-            
-            PM2_STATUS=$(pm2 jlist 2>/dev/null | jq -r ".[] | select(.name==\"$APP_NAME\") | .pm2_env.status" 2>/dev/null || echo "unknown")
-            echo "PM2 프로세스 시작 완료 (상태: $PM2_STATUS)"
-            
-            # Caddy 웹서버 리로드 (비동기)
-            echo "[3-7] Caddy 웹서버 리로드 중..."
-            systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
-            
-            echo "[5/8] 배포 검증 중..."
-            echo "Java 애플리케이션 시작 대기 중 (초기 15초)..."
-            sleep 15
-            
-            MAX_RETRIES=5
-            RETRY_INTERVAL=3
-            HTTP_STATUS="000"
-            HEALTH_CHECK_URL="https://re-fit.kr/actuator/health"
-            
-            for i in $(seq 1 $MAX_RETRIES); do
-              echo "헬스 체크 시도 $i/$MAX_RETRIES..."
-              
-              # 타임아웃 설정 (5초로 단축)
-              HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "$HEALTH_CHECK_URL" 2>/dev/null || echo "000")
-              echo "HTTP Status Code: $HTTP_STATUS"
-              
-              if [ "$HTTP_STATUS" = "200" ]; then
-                # 추가 검증: 헬스 체크 응답 본문 확인 (빠른 검증)
-                HEALTH_RESPONSE=$(timeout 5 curl -s "$HEALTH_CHECK_URL" 2>/dev/null || echo "")
-                if echo "$HEALTH_RESPONSE" | grep -qE "(UP|status.*UP)" 2>/dev/null; then
-                  DEPLOY_END_TIME=$(date +%s)
-                  DEPLOY_DURATION=$((DEPLOY_END_TIME - DEPLOY_START_TIME))
-                  echo "[5/8] 배포 성공! (HTTP $HTTP_STATUS, 소요 시간: ${DEPLOY_DURATION}초)"
-                  pm2 save 2>/dev/null || true
-                  
-                  # 배포 정보 기록
-                  echo "배포 정보:"
-                  echo "  - 배포 시간: $(date)"
-                  echo "  - 소요 시간: ${DEPLOY_DURATION}초"
-                  echo "  - JAR 파일: $JAR_PATH"
-                  echo "  - JAR 크기: ${JAR_SIZE} bytes"
-                  echo "  - 백업 파일: $BACKUP_FILE"
-                  
-                  # 오래된 백업 정리 (비동기로 실행하여 배포 시간에 영향 없음)
-                  echo "[6/8] 오래된 백업 파일 정리 중 (비동기)..."
-                  (find $BACKUP_DIR -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null && echo "백업 정리 완료") &
-                  
-                  break
-                else
-                  echo "경고: 헬스 체크 응답이 UP 상태가 아닙니다"
-                fi
-              fi
-              
-              if [ $i -lt $MAX_RETRIES ]; then
-                echo "${RETRY_INTERVAL}초 후 재시도..."
-                sleep $RETRY_INTERVAL
-              fi
-            done
-            
-            # 배포 실패 시 롤백
-            if [ "$HTTP_STATUS" != "200" ]; then
-              echo "[7/8] 배포 실패! (HTTP $HTTP_STATUS)"
-              echo "롤백 진행 중..."
-              
-              # 백업 파일 확인
-              if [ ! -f "$BACKUP_FILE" ]; then
-                echo "에러: 백업 파일을 찾을 수 없습니다: $BACKUP_FILE"
-                echo "사용 가능한 백업 파일:"
-                ls -lah $BACKUP_DIR/backend-*.jar 2>/dev/null | tail -5 || echo "없음"
-                exit 1
-              fi
-              
-              # 롤백 실행
-              if ! cp "$BACKUP_FILE" "$JAR_PATH"; then
-                echo "에러: 롤백 파일 복사 실패"
-                exit 1
-              fi
-              
-              echo "롤백 파일 복사 완료"
-              if ! pm2 restart $APP_NAME 2>/dev/null; then
-                echo "에러: PM2 재시작 실패"
-                pm2 logs $APP_NAME --lines 20 --nostream 2>/dev/null || true
-                exit 1
-              fi
-              
-              sleep 5
-              
-              # 롤백 후 헬스 체크
-              ROLLBACK_STATUS=$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "$HEALTH_CHECK_URL" 2>/dev/null || echo "000")
-              if [ "$ROLLBACK_STATUS" = "200" ]; then
-                echo "롤백 성공! (HTTP $ROLLBACK_STATUS)"
+          
+          sleep 2
+          pm2 describe ${APP_NAME} > /dev/null || exit 1
+          # Caddy 리로드
+          systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
+          sleep 15
+          
+          # 헬스체크 (최대 5회 재시도)
+          for i in {1..5}; do
+            HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
+            if [ "${HTTP_STATUS}" = "200" ]; then
+              HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
+              if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
                 pm2 save 2>/dev/null || true
-              else
-                echo "롤백 실패! (HTTP $ROLLBACK_STATUS)"
-                echo "PM2 상태:"
-                pm2 status 2>/dev/null || true
-                echo "백엔드 로그 (최근 50줄):"
-                pm2 logs $APP_NAME --lines 50 --nostream 2>/dev/null || true
-                echo "시스템 리소스:"
-                free -h || true
-                df -h "$BASE_PATH" || true
+                # 7일 이상 된 백업 파일 삭제 (백그라운드)
+                (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
+                exit 0
               fi
+            fi
+            [ $i -lt 5 ] && sleep 3
+          done
+          
+          # 헬스체크 실패 시 롤백
+          BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
+          if [ -f "${BACKUP_FILE}" ]; then
+            cp "${BACKUP_FILE}" "${JAR_PATH}"
+            pm2 restart ${APP_NAME}
+            sleep 5
+            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && pm2 save 2>/dev/null || true
+          fi
+          exit 1
+          SCRIPT_END
+          )
+          
+          # SSM 명령 실행
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands="[bash -c \"echo '$(echo "$DEPLOY_SCRIPT" | base64 -w 0)' | base64 -d | bash -s -- '$BASE_PATH' '$JAR_PATH' '$JAR_GZ_PATH' '$S3_BUCKET' '$S3_KEY' '$HEALTH_CHECK_URL'\"]" \
+            --timeout-seconds 600 \
+            --region ap-northeast-2 \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          [ -n "$COMMAND_ID" ] || exit 1
+          
+          # SSM 명령 실행 상태 확인 (최대 60회, 5분)
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ap-northeast-2 \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "InProgress")
+            
+            if [ "$STATUS" = "Success" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardOutputContent' \
+                --output text
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardErrorContent' \
+                --output text
               exit 1
             fi
-            
-            echo "[8/8] 배포 완료"
-            echo "============================================"
-            echo "Re-Fit BE 배포 완료: $(date)"
-            echo "============================================"
+            sleep 5
+          done
+          exit 1
