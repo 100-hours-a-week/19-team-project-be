@@ -20,6 +20,7 @@ import org.refit.refitbackend.global.response.ErrorResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @Slf4j
 @Tag(name = "Auth", description = "회원가입 / 인증")
@@ -32,7 +33,32 @@ public class AuthController {
     private final OAuth2RegistrationProperties registrationProperties;
     private final OAuth2ProviderProperties providerProperties;
 
-    @Operation(summary = "회원가입", description = "OAuth 정보 + 추가 정보로 회원가입")
+    @Operation(
+            summary = "회원가입",
+            description = """
+                OAuth 정보 + 추가 정보로 회원가입합니다.
+
+                - JOB_SEEKER: 회사 정보 없이 가입 가능
+                - EXPERT: company_email을 보낼 수 있으며, 인증 완료된 이메일이면 verified=true로 저장
+                - 인증되지 않은 이메일이거나 미입력 시 verified=false로 가입됩니다.
+            """
+    )
+    @io.swagger.v3.oas.annotations.parameters.RequestBody(
+            required = true,
+            content = @Content(
+                    schema = @Schema(implementation = AuthReq.SignUp.class),
+                    examples = {
+                            @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "job_seeker",
+                                    value = "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"JOB_SEEKER\", \"career_level_id\": 1, \"job_ids\": [1, 2], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\" }"
+                            ),
+                            @io.swagger.v3.oas.annotations.media.ExampleObject(
+                                    name = "expert_unverified",
+                                    value = "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"EXPERT\", \"career_level_id\": 1, \"job_ids\": [1], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\", \"company_name\": \"네이버\", \"company_email\": \"user@navercorp.com\" }"
+                            )
+                    }
+            )
+    )
     @ApiResponses({
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "201", description = "success"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(
