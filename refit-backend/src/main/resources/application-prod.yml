@@ -15,6 +15,16 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
 springdoc:
   swagger-ui:
     url: /v3/api-docs
