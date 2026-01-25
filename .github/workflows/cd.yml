@@ -5,13 +5,6 @@ on:
     workflows: ["Re-Fit Backend CI"]
     types: [completed]
     branches: [develop, main]
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Branch to deploy'
-        required: true
-        type: choice
-        options: [develop, main]
 
 permissions:
   contents: read
@@ -24,17 +17,16 @@ jobs:
     timeout-minutes: 30
     # 동일 브랜치의 동시 배포 방지
     concurrency:
-      group: deploy-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch }}
+      group: deploy-${{ github.event.workflow_run.head_branch }}
       cancel-in-progress: false
-    # CI 성공 후 또는 수동 배포 시에만 실행
+    # CI 성공 후에만 실행
     if: |
-      (github.event_name == 'workflow_dispatch') ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main'))
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+      (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')
     # main 브랜치는 production, develop 브랜치는 development 환경 사용
-    environment: ${{ ((github.event_name == 'workflow_dispatch' && github.event.inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
+    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
 
     steps:
       # 배포 전 release job 성공 여부 확인
@@ -51,7 +43,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.branch || github.event.workflow_run.head_branch }}
+          ref: ${{ github.event.workflow_run.head_branch }}
 
       # CI 워크플로우에서 JAR 아티팩트 다운로드 (재시도 로직 포함)
       - name: Download JAR Artifact
@@ -63,25 +55,9 @@ jobs:
           REPO="${{ github.repository }}"
           mkdir -p build-output
           
-          # 트리거 타입에 따라 아티팩트 이름 결정
-          if [ "${{ github.event_name }}" = "workflow_run" ]; then
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}-${RUN_ID}"
-          else
-            BRANCH="${{ github.event.inputs.branch }}"
-            RUN_ID=$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=success&event=push&per_page=1" \
-              --jq '.workflow_runs[0].id' 2>&1)
-            if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-              echo "Error: 성공한 CI run을 찾을 수 없습니다 (branch: ${BRANCH})"
-              exit 1
-            fi
-            ARTIFACT_NAME=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.name | startswith("backend-jar-") and .expired == false) | .name' 2>&1 | head -1)
-            if [ -z "$ARTIFACT_NAME" ]; then
-              echo "Error: 아티팩트를 찾을 수 없습니다 (run_id: ${RUN_ID})"
-              exit 1
-            fi
-          fi
+          # workflow_run에서 아티팩트 정보 가져오기
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}-${RUN_ID}"
           
           # 최대 5회 재시도, 파일 크기 1MB 이상 확인
           for i in {1..5}; do
