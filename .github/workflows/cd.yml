@@ -192,11 +192,14 @@ jobs:
           SCRIPT_END
           )
           
+          # base64 인코딩을 미리 수행하여 따옴표 이스케이프 문제 방지
+          DEPLOY_SCRIPT_ENCODED=$(echo "$DEPLOY_SCRIPT" | base64 -w 0)
+          
           # SSM 명령 실행
           COMMAND_ID=$(aws ssm send-command \
             --instance-ids "$EC2_INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --parameters commands="[bash -c \"echo '$(echo "$DEPLOY_SCRIPT" | base64 -w 0)' | base64 -d | bash -s -- '$BASE_PATH' '$JAR_PATH' '$JAR_GZ_PATH' '$S3_BUCKET' '$S3_KEY' '$HEALTH_CHECK_URL'\"]" \
+            --parameters "commands=[bash -c \"echo '$DEPLOY_SCRIPT_ENCODED' | base64 -d | bash -s -- '$BASE_PATH' '$JAR_PATH' '$JAR_GZ_PATH' '$S3_BUCKET' '$S3_KEY' '$HEALTH_CHECK_URL'\"]" \
             --timeout-seconds 600 \
             --region ap-northeast-2 \
             --query 'Command.CommandId' \
