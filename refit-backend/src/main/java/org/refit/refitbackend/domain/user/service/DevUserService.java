@@ -1,6 +1,9 @@
 package org.refit.refitbackend.domain.user.service;
 
 import lombok.RequiredArgsConstructor;
+import org.refit.refitbackend.domain.auth.entity.EmailVerification;
+import org.refit.refitbackend.domain.auth.entity.EmailVerificationStatus;
+import org.refit.refitbackend.domain.auth.repository.EmailVerificationRepository;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
 import org.refit.refitbackend.domain.user.dto.DevUserReq;
@@ -18,6 +21,7 @@ public class DevUserService {
 
     private final UserRepository userRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final EmailVerificationRepository emailVerificationRepository;
 
     @Transactional
     public void changeUserType(Long userId, DevUserReq.ChangeUserType request) {
@@ -30,9 +34,19 @@ public class DevUserService {
         if (targetType == UserType.EXPERT) {
             if (user.getExpertProfile() == null) {
                 String companyName = request.companyName() != null ? request.companyName() : "TestCompany";
-                String companyEmail = request.companyEmail() != null
-                        ? request.companyEmail()
-                        : "user" + userId + "@testcorp.com";
+                String companyEmail = request.companyEmail();
+                if (companyEmail == null || companyEmail.isBlank()) {
+                    throw new CustomException(ExceptionType.EMAIL_VERIFICATION_REQUIRED);
+                }
+
+                EmailVerification latest = emailVerificationRepository
+                        .findTopByEmailOrderByIdDesc(companyEmail)
+                        .orElseThrow(() -> new CustomException(ExceptionType.EMAIL_VERIFICATION_REQUIRED));
+
+                if (latest.getStatus() != EmailVerificationStatus.VERIFIED) {
+                    throw new CustomException(ExceptionType.EMAIL_VERIFICATION_NOT_VERIFIED);
+                }
+
                 expertProfileRepository.save(ExpertProfile.create(user, companyName, companyEmail));
             }
         } else {
