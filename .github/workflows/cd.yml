@@ -116,7 +116,7 @@ jobs:
           APP_NAME="backend"
           TIMESTAMP=$(date +%Y%m%d%H%M%S)
           
-          trap 'pm2 status || true; exit $?' ERR
+          trap 'sudo -u ubuntu pm2 status || true; exit $?' ERR
           
           # S3에서 압축된 JAR 다운로드
           aws s3 cp "s3://${S3_BUCKET}/${S3_KEY}" "${JAR_GZ_PATH}" --region ap-northeast-2
@@ -133,17 +133,17 @@ jobs:
           chmod 644 "${JAR_PATH}"
           
           # PM2로 애플리케이션 재시작 또는 시작
-          if pm2 describe ${APP_NAME} > /dev/null 2>&1; then
-            pm2 restart ${APP_NAME} || pm2 delete ${APP_NAME}
+          if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+            sudo -u ubuntu pm2 restart ${APP_NAME} || sudo -u ubuntu pm2 delete ${APP_NAME}
           else
-            pm2 start /usr/bin/java --name "${APP_NAME}" -- \
+            sudo -u ubuntu pm2 start /usr/bin/java --name "${APP_NAME}" -- \
               -Xms1024m -Xmx2560m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
               -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof \
               -jar "${JAR_PATH}"
           fi
           
           sleep 2
-          pm2 describe ${APP_NAME} > /dev/null || exit 1
+          sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null || exit 1
           # Caddy 리로드
           systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
           sleep 15
@@ -154,8 +154,7 @@ jobs:
             if [ "${HTTP_STATUS}" = "200" ]; then
               HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
               if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
-                pm2 save 2>/dev/null || true
-                # 7일 이상 된 백업 파일 삭제 (백그라운드)
+                sudo -u ubuntu pm2 save 2>/dev/null || true
                 (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
                 exit 0
               fi
@@ -167,9 +166,9 @@ jobs:
           BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
           if [ -f "${BACKUP_FILE}" ]; then
             cp "${BACKUP_FILE}" "${JAR_PATH}"
-            pm2 restart ${APP_NAME}
+            sudo -u ubuntu pm2 restart ${APP_NAME}
             sleep 5
-            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && pm2 save 2>/dev/null || true
+            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && sudo -u ubuntu pm2 save 2>/dev/null || true
           fi
           exit 1
           SCRIPT_END
