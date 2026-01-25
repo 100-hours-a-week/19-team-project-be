@@ -219,3 +219,38 @@ jobs:
             sleep 5
           done
           exit 1
+
+      - name: Notify Discord on Result
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+          else
+            COLOR=15158332
+          fi
+
+          payload=$(cat <<EOF
+          {
+            "embeds": [{
+              "title": "BE 배포 결과: $STATUS",
+              "color": $COLOR,
+              "fields": [
+                {"name": "서비스", "value": "Re-Fit Backend", "inline": true},
+                {"name": "브랜치", "value": "\`$BRANCH\`", "inline": true},
+                {"name": "커밋 SHA", "value": "\`$SHA\`", "inline": false},
+                {"name": "워크플로우", "value": "[상세 보기](https://github.com/${{ github.repository }}/actions/runs/$RUN_ID)", "inline": false}
+              ],
+              "footer": { "text": "Re-Fit Deployment System" },
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+          )
+
+          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"
