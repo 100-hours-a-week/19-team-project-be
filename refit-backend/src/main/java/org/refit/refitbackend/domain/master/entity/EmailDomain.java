@@ -9,7 +9,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "email_domain")
+@Table(name = "email_domains")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class EmailDomain {
