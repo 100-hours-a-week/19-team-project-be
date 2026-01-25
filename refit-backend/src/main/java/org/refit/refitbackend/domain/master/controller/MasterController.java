@@ -108,4 +108,38 @@ public class MasterController {
         log.info("GET /api/v1/skills -> keyword={}, count={}", keyword, count);
         return ResponseUtil.ok("success", result);
     }
+
+    /* =======================
+     * 이메일 도메인 목록 조회 (커서 페이지네이션)
+     * ======================= */
+    @Operation(
+            summary = "이메일 도메인 목록 조회",
+            description = """
+                    허용된 회사 이메일 도메인 목록을 조회합니다.
+
+                    - cursor: 마지막 도메인 값
+                    - size: 페이지 사이즈 (default 20)
+                    """,
+            responses = {
+                    @io.swagger.v3.oas.annotations.responses.ApiResponse(
+                            responseCode = "200",
+                            description = "이메일 도메인 목록 조회 성공",
+                            content = @Content(
+                                    schema = @Schema(implementation = MasterRes.EmailDomains.class)
+                            )
+                    )
+            }
+    )
+    @GetMapping("/email-domains")
+    public ResponseEntity<ApiResponse<MasterRes.EmailDomains>> getEmailDomains(
+            @Parameter(description = "다음 페이지 커서 (마지막 도메인 값)", example = "navercorp.com")
+            @RequestParam(required = false) String cursor,
+            @Parameter(description = "페이지 사이즈", example = "20")
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        MasterRes.EmailDomains result = masterService.getEmailDomains(cursor, size);
+        int count = result.emailDomains() == null ? 0 : result.emailDomains().size();
+        log.info("GET /api/v1/email-domains -> cursor={}, size={}, count={}", cursor, size, count);
+        return ResponseUtil.ok("success", result);
+    }
 }

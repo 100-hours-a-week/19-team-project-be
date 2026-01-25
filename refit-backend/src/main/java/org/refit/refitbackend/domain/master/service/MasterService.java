@@ -2,10 +2,13 @@ package org.refit.refitbackend.domain.master.service;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.master.dto.MasterRes;
+import org.refit.refitbackend.domain.master.entity.EmailDomain;
 import org.refit.refitbackend.domain.master.entity.Skill;
 import org.refit.refitbackend.domain.master.repository.CareerLevelRepository;
+import org.refit.refitbackend.domain.master.repository.EmailDomainRepository;
 import org.refit.refitbackend.domain.master.repository.JobRepository;
 import org.refit.refitbackend.domain.master.repository.SkillRepository;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,6 +22,7 @@ public class MasterService {
     private final JobRepository jobRepository;
     private final SkillRepository skillRepository;
     private final CareerLevelRepository careerLevelRepository;
+    private final EmailDomainRepository emailDomainRepository;
 
     public MasterRes.Jobs getJobs() {
         return new MasterRes.Jobs(
@@ -48,6 +52,26 @@ public class MasterService {
                         .map(MasterRes.CareerLevelDto::from)
                         .toList()
         );
+    }
+
+    public MasterRes.EmailDomains getEmailDomains(String cursor, int size) {
+        List<EmailDomain> domains = emailDomainRepository.findByCursor(
+                cursor,
+                PageRequest.of(0, size + 1)
+        );
+
+        boolean hasMore = domains.size() > size;
+        if (hasMore) {
+            domains = domains.subList(0, size);
+        }
+
+        List<MasterRes.EmailDomainDto> items = domains.stream()
+                .map(MasterRes.EmailDomainDto::from)
+                .toList();
+
+        String nextCursor = domains.isEmpty() ? null : domains.get(domains.size() - 1).getDomain();
+
+        return new MasterRes.EmailDomains(items, nextCursor, hasMore);
     }
 
 }

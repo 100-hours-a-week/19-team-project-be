@@ -3,6 +3,7 @@ package org.refit.refitbackend.domain.master.dto;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
+import org.refit.refitbackend.domain.master.entity.EmailDomain;
 import org.refit.refitbackend.domain.master.entity.Job;
 import org.refit.refitbackend.domain.master.entity.Skill;
 
@@ -37,8 +38,26 @@ public class MasterRes {
         }
     }
 
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record EmailDomainDto(
+            String domain,
+            String companyName
+    ) {
+        public static EmailDomainDto from(EmailDomain emailDomain) {
+            return new EmailDomainDto(
+                    emailDomain.getDomain(),
+                    emailDomain.getCompanyName()
+            );
+        }
+    }
+
     public record Jobs(List<MasterItemDto> jobs) {}
     public record Skills(List<MasterItemDto> skills) {}
     public record CareerLevels(List<CareerLevelDto> careerLevels) {}
+    public record EmailDomains(
+            List<EmailDomainDto> emailDomains,
+            String nextCursor,
+            boolean hasMore
+    ) {}
 
 }
