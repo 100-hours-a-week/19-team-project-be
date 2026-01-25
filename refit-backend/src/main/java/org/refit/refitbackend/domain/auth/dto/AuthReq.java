@@ -1,6 +1,5 @@
 package org.refit.refitbackend.domain.auth.dto;
 
-import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -46,21 +45,27 @@ public class AuthReq {
             String nickname,
 
             @NotNull(message = "signup_user_type_invalid")
-            @Schema(description = "사용자 유형")
+            @Schema(description = "사용자 유형", example = "JOB_SEEKER", name = "user_type")
             UserType userType,
 
             @NotNull(message = "career_level_not_found")
-            @Schema(description = "경력 레벨 ID")
+            @Schema(description = "경력 레벨 ID", name = "career_level_id", example = "1")
             Long careerLevelId,
 
-            @Schema(description = "직무 ID 목록")
+            @Schema(description = "직무 ID 목록", example = "[1, 2]")
             List<Long> jobIds,
 
             @Schema(description = "스킬 목록")
             List<SkillRequest> skills,
 
-            @Schema(description = "자기소개")
-            String introduction
+            @Schema(description = "자기소개", example = "백엔드 개발자입니다.")
+            String introduction,
+
+            @Schema(description = "회사명 (현직자 선택 시 선택)", example = "네이버")
+            String companyName,
+
+            @Schema(description = "회사 이메일 (현직자 선택 시 선택)", example = "user@navercorp.com")
+            String companyEmail
     ) {}
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -84,10 +89,10 @@ public class AuthReq {
     /* =======================
      * 개발용 토큰 발급 요청
      * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record DevTokenRequest(
             @NotNull(message = "user_id_required")
             @Schema(description = "User ID")
-            @JsonProperty("user_id")
             Long userId
     ) {}
 }
