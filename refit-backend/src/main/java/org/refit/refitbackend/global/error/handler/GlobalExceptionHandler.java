@@ -149,6 +149,27 @@ public class GlobalExceptionHandler {
                     ExceptionType.CAREER_LEVEL_NOT_FOUND;
 
             /* =======================
+             * Resume
+             * ======================= */
+            case "resume_title_empty" ->
+                    ExceptionType.RESUME_TITLE_EMPTY;
+
+            case "resume_title_too_long" ->
+                    ExceptionType.RESUME_TITLE_TOO_LONG;
+
+            case "resume_id_invalid" ->
+                    ExceptionType.RESUME_ID_INVALID;
+
+            case "resume_is_fresher_invalid" ->
+                    ExceptionType.RESUME_IS_FRESHER_INVALID;
+
+            case "resume_education_level_invalid" ->
+                    ExceptionType.RESUME_EDUCATION_LEVEL_INVALID;
+
+            case "resume_content_invalid" ->
+                    ExceptionType.RESUME_CONTENT_INVALID;
+
+            /* =======================
              * Chat
              * ======================= */
 
@@ -181,6 +202,9 @@ public class GlobalExceptionHandler {
              * ======================= */
             case "expert_user_id_invalid" ->
                     ExceptionType.EXPERT_USER_ID_INVALID;
+
+            case "embedding_empty" ->
+                    ExceptionType.EXPERT_EMBEDDING_EMPTY;
 
             case "user_type_invalid" ->
                     ExceptionType.USER_TYPE_INVALID;
