@@ -85,6 +85,7 @@ public enum ExceptionType {
      * Expert
      * ======================= */
     EXPERT_USER_ID_INVALID(HttpStatus.BAD_REQUEST, "EXPERT_USER_ID_INVALID", "invalid user id format"),
+    EXPERT_EMBEDDING_EMPTY(HttpStatus.BAD_REQUEST, "EXPERT_EMBEDDING_EMPTY", "embedding list is required"),
     EXPERT_FILTER_INVALID(HttpStatus.BAD_REQUEST, "EXPERT_FILTER_INVALID", "invalid filter parameter"),
     EXPERT_NOT_FOUND(HttpStatus.NOT_FOUND, "EXPERT_NOT_FOUND", "expert_not_found"),
 
@@ -105,6 +106,10 @@ public enum ExceptionType {
      * Resume
      * ======================= */
     RESUME_NOT_FOUND(HttpStatus.NOT_FOUND, "RESUME_NOT_FOUND", "resume_not_found"),
+    RESUME_ID_INVALID(HttpStatus.BAD_REQUEST, "RESUME_ID_INVALID", "resume_id_invalid"),
+    RESUME_IS_FRESHER_INVALID(HttpStatus.BAD_REQUEST, "RESUME_IS_FRESHER_INVALID", "resume_is_fresher_invalid"),
+    RESUME_EDUCATION_LEVEL_INVALID(HttpStatus.BAD_REQUEST, "RESUME_EDUCATION_LEVEL_INVALID", "resume_education_level_invalid"),
+    RESUME_CONTENT_INVALID(HttpStatus.BAD_REQUEST, "RESUME_CONTENT_INVALID", "resume_content_invalid"),
     RESUME_TITLE_EMPTY(HttpStatus.BAD_REQUEST, "RESUME_TITLE_EMPTY", "resume title is required"),
     RESUME_TITLE_TOO_LONG(HttpStatus.BAD_REQUEST, "RESUME_TITLE_TOO_LONG", "resume title is too long"),
     RESUME_LIMIT_EXCEEDED(HttpStatus.CONFLICT, "RESUME_LIMIT_EXCEEDED", "resume count exceeds maximum"),
