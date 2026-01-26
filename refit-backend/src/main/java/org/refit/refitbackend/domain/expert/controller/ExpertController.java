@@ -1,17 +1,13 @@
 package org.refit.refitbackend.domain.expert.controller;
 
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
-import io.swagger.v3.oas.annotations.media.Content;
-import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.expert.dto.ExpertRes;
 import org.refit.refitbackend.domain.expert.service.ExpertService;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.response.ApiResponse;
-import org.refit.refitbackend.global.response.ErrorResponse;
+import org.refit.refitbackend.global.swagger.spec.expert.ExpertSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -29,15 +25,7 @@ public class ExpertController {
 
     private final ExpertService expertService;
 
-    @Operation(summary = "현직자 목록 조회", description = "키워드/필터로 현직자 검색 (커서 기반)")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "success"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "400",
-                    description = "invalid_request",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
+    @ExpertSwaggerSpec.SearchExperts
     @GetMapping
     public ResponseEntity<ApiResponse<ExpertRes.ExpertCursorResponse>> searchExperts(
             @Parameter(description = "검색 키워드")
@@ -65,15 +53,7 @@ public class ExpertController {
         return ResponseUtil.ok("success", res);
     }
 
-    @Operation(summary = "현직자 상세 조회", description = "현직자 상세 프로필 조회")
-    @ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "success"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(
-                    responseCode = "404",
-                    description = "expert_not_found",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
+    @ExpertSwaggerSpec.GetExpertDetail
     @GetMapping("/{user_id}")
     public ResponseEntity<ApiResponse<ExpertRes.ExpertDetail>> getExpertDetail(
             @PathVariable("user_id") @Positive(message = "expert_user_id_invalid") Long userId
