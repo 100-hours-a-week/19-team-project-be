@@ -118,6 +118,18 @@ public class AuthController {
         return ResponseUtil.ok("login_result", oAuth2UserService.kakaoLogin(request));
     }
 
+    @PostMapping("/oauth/kakao/login/local")
+    public ResponseEntity<ApiResponse<AuthRes.OAuthLoginResponse>> kakaoLoginLocal(
+            @Valid @RequestBody AuthReq.KakaoLoginRequest request
+    ) {
+        log.info("[KAKAO][LOGIN][LOCAL] code={}", request.code());
+
+        return ResponseUtil.ok("login_result", oAuth2UserService.kakaoLoginWithRedirect(
+                request,
+                registrationProperties.kakao().redirectUriLocal()
+        ));
+    }
+
     @Operation(summary = "토큰 재발급", description = "RTR 방식으로 AT/RT 재발급")
     @SecurityRequirement(name = "refreshToken")
     @ApiResponses({
@@ -173,6 +185,26 @@ public class AuthController {
                 registrationProperties.kakao().redirectUri());
 
         log.info("[KAKAO][AUTHORIZE] redirectTo={}", kakaoAuthUrl);
+
+        return ResponseEntity.status(302)
+                .header("Location", kakaoAuthUrl)
+                .build();
+    }
+
+    @Operation(summary = "카카오 로그인 페이지로 리다이렉트(로컬)", description = "카카오 OAuth 인증 페이지로 리다이렉트(로컬)")
+    @GetMapping("/oauth/kakao/authorize/local")
+    public ResponseEntity<Void> kakaoAuthorizeLocal() {
+
+        log.info("[KAKAO][AUTHORIZE][LOCAL] authorizationUri={}", providerProperties.kakao().authorizationUri());
+        log.info("[KAKAO][AUTHORIZE][LOCAL] clientId={}", registrationProperties.kakao().clientId());
+        log.info("[KAKAO][AUTHORIZE][LOCAL] redirectUri={}", registrationProperties.kakao().redirectUriLocal());
+
+        String kakaoAuthUrl = String.format("%s?client_id=%s&redirect_uri=%s&response_type=code",
+                providerProperties.kakao().authorizationUri(),
+                registrationProperties.kakao().clientId(),
+                registrationProperties.kakao().redirectUriLocal());
+
+        log.info("[KAKAO][AUTHORIZE][LOCAL] redirectTo={}", kakaoAuthUrl);
 
         return ResponseEntity.status(302)
                 .header("Location", kakaoAuthUrl)

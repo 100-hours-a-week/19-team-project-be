@@ -12,6 +12,7 @@ public record OAuth2RegistrationProperties(
             String clientId,
             String clientSecret,
             String redirectUri,
+            String redirectUriLocal,
             List<String> scope
     ) {}
 }
