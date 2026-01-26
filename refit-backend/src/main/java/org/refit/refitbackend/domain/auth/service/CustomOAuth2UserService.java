@@ -53,6 +53,18 @@ public class CustomOAuth2UserService {
                 .orElseGet(() -> signupRequired(kakaoUserInfo));
     }
 
+    @Transactional
+    public AuthRes.OAuthLoginResponse kakaoLoginWithRedirect(AuthReq.KakaoLoginRequest request, String redirectUri) {
+        OAuth2TokenInfoDto tokenInfo = kakaoUtil.requestToken(request.code(), redirectUri);
+        OAuth2KakaoUserInfoDto kakaoUserInfo =
+                kakaoUtil.requestUserInfo(tokenInfo.getAccessToken());
+
+        return userRepository
+                .findByOauthProviderAndOauthId(OAuthProvider.KAKAO, kakaoUserInfo.getId())
+                .map(this::loginSuccess)
+                .orElseGet(() -> signupRequired(kakaoUserInfo));
+    }
+
 
     /* =======================
      * 회원가입

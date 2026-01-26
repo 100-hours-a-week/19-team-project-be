@@ -34,10 +34,14 @@ public class KakaoUtil {
     }
 
     public OAuth2TokenInfoDto requestToken(String authCode) {
+        return requestToken(authCode, oAuthRegistration.kakao().redirectUri());
+    }
+
+    public OAuth2TokenInfoDto requestToken(String authCode, String redirectUri) {
         MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
         params.add("grant_type", "authorization_code");
         params.add("client_id", oAuthRegistration.kakao().clientId());
-        params.add("redirect_uri", oAuthRegistration.kakao().redirectUri());
+        params.add("redirect_uri", redirectUri);
         params.add("code", authCode);
         params.add("client_secret", oAuthRegistration.kakao().clientSecret());
 
