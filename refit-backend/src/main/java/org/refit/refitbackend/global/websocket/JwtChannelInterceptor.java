@@ -31,8 +31,13 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
         if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
             log.info("[WS] CONNECT headers: {}", accessor.toNativeHeaderMap());
+            log.info("[WS] session attributes: {}", accessor.getSessionAttributes());
             String token = extractToken(accessor);
-            authenticateUser(accessor, token);
+            if (token != null && !token.isBlank()) {
+                authenticateUser(accessor, token);
+            } else {
+                log.warn("[WS] missing auth token on CONNECT");
+            }
         }
 
         return message;
@@ -61,7 +66,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             }
         }
 
-        throw new IllegalArgumentException("Missing authentication token");
+        return null;
     }
 
     private void authenticateUser(StompHeaderAccessor accessor, String token) {

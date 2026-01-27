@@ -54,7 +54,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:3000",
                         "http://localhost:8080",
                         "https://re-fit.kr"
-                );
+                )
+                .addInterceptors(jwtHandshakeInterceptor);
 
         registry.addEndpoint("/api/ws")
                 .setAllowedOrigins(
@@ -70,7 +71,8 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:3000",
                         "http://localhost:8080",
                         "https://re-fit.kr"
-                );
+                )
+                .addInterceptors(jwtHandshakeInterceptor);
     }
 
     @Override
