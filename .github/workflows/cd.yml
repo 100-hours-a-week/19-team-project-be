@@ -8,6 +8,7 @@ on:
         required: false
         type: string
       sha:
+
         description: 'Commit SHA (자동 입력 또는 직접 입력)'
         required: false
         type: string
@@ -97,7 +98,7 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_4xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -108,7 +109,7 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_5xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -119,24 +120,47 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
-            total_metric=$(echo "scale=0; $success_metric + $status_4xx + $status_5xx" | bc -l)
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
             
             if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
               continue
             fi
             
-            availability=$(echo "scale=4; $success_metric / $total_metric" | bc -l)
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
+            if (( $(echo "$total_metric < 10" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
             
             if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
               continue
             fi
             
-            actual_error=$(echo "1 - $availability" | bc -l)
-            burn_rate=$(echo "scale=2; ($actual_error / $error_budget) * 100" | bc -l)
+            # Error Budget 소진률 = (가용성 차이 / Error Budget) * 100
+            # 가용성 차이 = 목표 가용성 - 실제 가용성
+            # Error Budget = 1 - 목표 가용성
+            availability_diff=$(echo "scale=8; $target - $availability" | bc -l)
             
-            echo "${endpoint}: Error Budget 소진률 ${burn_rate}%"
+            # 가용성이 목표보다 높으면 소진률 0
+            if (( $(echo "$availability >= $target" | bc -l) )); then
+              burn_rate=0
+            else
+              burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
+            fi
+            
+            echo "${endpoint}:"
+            echo "  목표 가용성: $(echo "scale=4; $target * 100" | bc -l)%"
+            echo "  실제 가용성: $(echo "scale=4; $availability * 100" | bc -l)%"
+            echo "  가용성 차이: $(echo "scale=6; $availability_diff * 100" | bc -l)%"
+            echo "  Error Budget: $(echo "scale=6; $error_budget * 100" | bc -l)%"
+            echo "  Error Budget 소진률: ${burn_rate}%"
             
             if (( $(echo "$burn_rate >= 100" | bc -l) )); then
               echo "Error Budget 소진률이 100% 이상입니다. 배포를 중단합니다."
@@ -194,7 +218,7 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_4xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -205,7 +229,7 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_5xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -216,17 +240,26 @@ jobs:
               --period 3600 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
-            total_metric=$(echo "scale=0; $success_metric + $status_4xx + $status_5xx" | bc -l)
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
             
             if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
               continue
             fi
             
-            availability=$(echo "scale=4; $success_metric / $total_metric" | bc -l)
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
+            if (( $(echo "$total_metric < 10" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
             
             if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
               continue
             fi
             
@@ -586,7 +619,7 @@ jobs:
               --period 60 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_4xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -597,7 +630,7 @@ jobs:
               --period 60 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
             status_5xx=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -608,21 +641,30 @@ jobs:
               --period 60 \
               --statistics Sum \
               --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{sum+=$1} END {print sum+0}')
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
             
-            total_metric=$(echo "scale=0; $success_metric + $status_4xx + $status_5xx" | bc -l)
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
             
             if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
               continue
             fi
             
-            availability=$(echo "scale=4; $success_metric / $total_metric" | bc -l)
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
+            if (( $(echo "$total_metric < 10" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
             
             if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
               continue
             fi
             
-            error_rate=$(echo "scale=4; 1 - $availability" | bc -l)
+            error_rate=$(echo "scale=8; 1 - $availability" | bc -l)
             
             avail_threshold=$(echo "scale=4; $target_avail * 0.9" | bc -l)
             error_threshold=$(echo "scale=4; $target_error * 2" | bc -l)
