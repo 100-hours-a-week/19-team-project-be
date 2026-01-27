@@ -2,6 +2,7 @@ package org.refit.refitbackend.global.config;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.global.websocket.JwtChannelInterceptor;
+import org.refit.refitbackend.global.websocket.JwtHandshakeInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.converter.MessageConverter;
@@ -21,6 +22,7 @@ import java.util.List;
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtChannelInterceptor jwtChannelInterceptor;
+    private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -43,6 +45,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:8080",
                         "https://re-fit.kr"
                 )
+                .addInterceptors(jwtHandshakeInterceptor)
                 .withSockJS();  // SockJS fallback 옵션 활성화
 
         // SockJS 없이 순수 WebSocket만 사용하는 엔드포인트
@@ -59,6 +62,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                         "http://localhost:8080",
                         "https://re-fit.kr"
                 )
+                .addInterceptors(jwtHandshakeInterceptor)
                 .withSockJS();
 
         registry.addEndpoint("/api/ws")
