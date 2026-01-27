@@ -16,7 +16,7 @@ public class AuthReq {
      * 카카오 로그인 요청
      * ======================= */
     public static record KakaoLoginRequest(
-            @NotBlank(message = "auth_code_required")
+            @NotBlank(message = "인증 코드가 필요합니다.")
             @Schema(description = "카카오 인가 코드")
             String code
     ) {}
@@ -27,28 +27,28 @@ public class AuthReq {
      * ======================= */
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record SignUp(
-            @NotNull(message = "signup_oauth_provider_invalid")
+            @NotNull(message = "유효하지 않은 OAuth 제공자입니다.")
             @Schema(description = "OAuth Provider", example = "KAKAO")
             OAuthProvider oauthProvider,
 
-            @NotBlank(message = "signup_oauth_id_empty")
+            @NotBlank(message = "OAuth ID가 필요합니다.")
             @Schema(description = "OAuth 고유 ID")
             String oauthId,
 
-            @Email(message = "signup_email_invalid")
+            @Email(message = "회원가입 이메일 형식이 올바르지 않습니다.")
             @Schema(description = "이메일")
             String email,
 
-            @NotBlank(message = "nickname_empty")
-            @Size(min = 2, max = 10, message = "nickname_length_invalid")
+            @NotBlank(message = "닉네임을 입력해 주세요.")
+            @Size(min = 2, max = 10, message = "닉네임 길이가 올바르지 않습니다.")
             @Schema(description = "닉네임")
             String nickname,
 
-            @NotNull(message = "signup_user_type_invalid")
+            @NotNull(message = "회원가입 사용자 유형이 올바르지 않습니다.")
             @Schema(description = "사용자 유형", example = "JOB_SEEKER", name = "user_type")
             UserType userType,
 
-            @NotNull(message = "career_level_not_found")
+            @NotNull(message = "경력 레벨을 찾을 수 없습니다.")
             @Schema(description = "경력 레벨 ID", name = "career_level_id", example = "1")
             Long careerLevelId,
 
@@ -81,7 +81,7 @@ public class AuthReq {
      * ======================= */
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record RefreshTokenRequest(
-            @NotBlank(message = "refresh_token_required")
+            @NotBlank(message = "리프레시 토큰이 필요합니다.")
             @Schema(description = "Refresh Token")
             String refreshToken
     ) {}
@@ -91,7 +91,7 @@ public class AuthReq {
      * ======================= */
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public static record DevTokenRequest(
-            @NotNull(message = "user_id_required")
+            @NotNull(message = "사용자 ID가 필요합니다.")
             @Schema(description = "User ID")
             Long userId
     ) {}
