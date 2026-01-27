@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
+import java.net.HttpCookie;
 import java.util.Collections;
 import java.util.List;
 
@@ -39,11 +40,20 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     private String extractToken(StompHeaderAccessor accessor) {
         String authHeader = accessor.getFirstNativeHeader("Authorization");
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Missing Authorization header");
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            return authHeader.substring(7);
         }
 
-        return authHeader.substring(7);
+        String cookieHeader = getCookieHeader(accessor);
+        if (cookieHeader != null) {
+            for (HttpCookie cookie : HttpCookie.parse(cookieHeader)) {
+                if ("access_token".equals(cookie.getName())) {
+                    return cookie.getValue();
+                }
+            }
+        }
+
+        throw new IllegalArgumentException("Missing authentication token");
     }
 
     private void authenticateUser(StompHeaderAccessor accessor, String token) {
@@ -65,5 +75,17 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             log.error("WebSocket 인증 실패: {}", e.getMessage());
             throw new IllegalArgumentException("Invalid JWT token");
         }
+    }
+
+    private String getCookieHeader(StompHeaderAccessor accessor) {
+        List<String> headers = accessor.getNativeHeader("cookie");
+        if (headers != null && !headers.isEmpty()) {
+            return String.join("; ", headers);
+        }
+        headers = accessor.getNativeHeader("Cookie");
+        if (headers != null && !headers.isEmpty()) {
+            return String.join("; ", headers);
+        }
+        return null;
     }
 }
