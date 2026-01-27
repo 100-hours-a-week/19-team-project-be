@@ -1,6 +1,7 @@
 package org.refit.refitbackend.domain.chat.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
@@ -16,6 +17,7 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -64,6 +66,7 @@ public class ChatMessageService {
 
         // 1:1 채팅 - 채팅방 구독자에게 브로드캐스트
         messagingTemplate.convertAndSend("/queue/chat." + request.chatId(), payload);
+        log.info("메시지 전송 성공 - roomId: {}, senderId: {}", request.chatId(), senderId);
 
         return payload;
     }
