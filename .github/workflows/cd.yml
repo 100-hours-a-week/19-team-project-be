@@ -1,6 +1,29 @@
 name: Re-Fit Backend CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'CI workflow run ID (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      sha:
+        description: 'Commit SHA (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      branch:
+        description: 'Branch name'
+        required: true
+        type: choice
+        default: 'develop'
+        options:
+          - develop
+          - main
+      use_latest_artifact:
+        description: 'run_id/sha를 입력하지 않으면 선택한 브랜치의 최신 아티팩트 사용'
+        required: true
+        type: boolean
+        default: true
   workflow_run:
     workflows: ["Re-Fit Backend CI"]
     types: [completed]
@@ -16,17 +39,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     if: |
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-      (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')
-    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
+      github.event_name == 'workflow_dispatch'
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') ? 'production' : 'development' }}
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -226,23 +250,106 @@ jobs:
     needs: pre-deployment-validation
     # 동일 브랜치의 동시 배포 방지
     concurrency:
-      group: deploy-${{ github.event.workflow_run.head_branch }}
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
       cancel-in-progress: false
     # CI 성공 후에만 실행
     if: |
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-      (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
+      github.event_name == 'workflow_dispatch'
     # main 브랜치는 production, develop 브랜치는 development 환경 사용
-    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
+    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') ? 'production' : 'development' }}
 
     steps:
+      - name: Find Latest Artifact (if needed)
+        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
+        id: find-artifact
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            const branch = '${{ inputs.branch }}';
+            console.log(`Finding latest artifact for branch: ${branch}`);
+
+            // CI 워크플로우의 최근 성공한 실행 찾기
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              branch: branch,
+              status: 'success',
+              per_page: 10
+            });
+
+            if (runs.data.workflow_runs.length === 0) {
+              core.setFailed(`No successful CI runs found for branch: ${branch}`);
+              return;
+            }
+
+            // 아티팩트가 있는 최신 실행 찾기
+            for (const run of runs.data.workflow_runs) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+
+              const buildArtifact = artifacts.data.artifacts.find(
+                a => a.name.startsWith('backend-jar-')
+              );
+
+              if (buildArtifact) {
+                const sha = run.head_sha;
+                console.log(`Found artifact from run #${run.run_number}`);
+                console.log(`   Run ID: ${run.id}`);
+                console.log(`   SHA: ${sha}`);
+                console.log(`   Created: ${run.created_at}`);
+
+                core.setOutput('run_id', run.id.toString());
+                core.setOutput('sha', sha);
+                core.setOutput('run_number', run.run_number.toString());
+                return;
+              }
+            }
+
+            core.setFailed(`No artifacts found in recent CI runs for branch: ${branch}`);
+
+      - name: Set Deployment Variables
+        id: deploy-vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ inputs.use_latest_artifact }}" == "true" ] && ([ -z "${{ inputs.run_id }}" ] || [ "${{ inputs.run_id }}" == "" ]) && ([ -z "${{ inputs.sha }}" ] || [ "${{ inputs.sha }}" == "" ]); then
+              if [ -n "${{ steps.find-artifact.outputs.run_id }}" ]; then
+                echo "run_id=${{ steps.find-artifact.outputs.run_id }}" >> $GITHUB_OUTPUT
+                echo "sha=${{ steps.find-artifact.outputs.sha }}" >> $GITHUB_OUTPUT
+                echo "Using latest artifact from run #${{ steps.find-artifact.outputs.run_number }}"
+              else
+                echo "Error: Failed to find latest artifact"
+                exit 1
+              fi
+            else
+              if [ -z "${{ inputs.run_id }}" ] || [ -z "${{ inputs.sha }}" ]; then
+                echo "Error: run_id and sha must be provided when use_latest_artifact is false"
+                exit 1
+              fi
+              echo "run_id=${{ inputs.run_id }}" >> $GITHUB_OUTPUT
+              echo "sha=${{ inputs.sha }}" >> $GITHUB_OUTPUT
+              echo "Using manually specified artifact"
+            fi
+            echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          fi
+
       # 배포 전 release job 성공 여부 확인
       - name: Check release job status
         if: github.event_name == 'workflow_run'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           RUN_ID="${{ github.event.workflow_run.id }}"
           REPO="${{ github.repository }}"
@@ -252,30 +359,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ steps.deploy-vars.outputs.branch }}
 
-      # CI 워크플로우에서 JAR 아티팩트 다운로드 (재시도 로직 포함)
+      # CI 워크플로우에서 JAR 아티팩트 다운로드
       - name: Download JAR Artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar-${{ steps.deploy-vars.outputs.sha }}-${{ steps.deploy-vars.outputs.run_id }}
+          path: build-output
+          github-token: ${{ secrets.PAT }}
+          run-id: ${{ steps.deploy-vars.outputs.run_id }}
+
+      - name: Verify Downloaded JAR
         run: |
           set -euo pipefail
-          REPO="${{ github.repository }}"
-          mkdir -p build-output
-          
-          # workflow_run에서 아티팩트 정보 가져오기
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}-${RUN_ID}"
-          
-          # 최대 5회 재시도, 파일 크기 1MB 이상 확인
-          for i in {1..5}; do
-            gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output 2>/dev/null && \
-            [ -f "build-output/${JAR_NAME}" ] && \
-            [ $(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0) -gt 1000000 ] && break
-            [ $i -lt 5 ] && sleep 3
-          done
-          [ -f "build-output/${JAR_NAME}" ] || exit 1
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "build-output/${JAR_NAME}" ]; then
+            echo "JAR file not found"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0)
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "JAR file size is too small: ${FILE_SIZE} bytes"
+            exit 1
+          fi
+          echo "JAR file verified: ${FILE_SIZE} bytes"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -549,8 +657,8 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ steps.deploy-vars.outputs.branch }}
+          SHA: ${{ steps.deploy-vars.outputs.sha }}
           RUN_ID: ${{ github.run_id }}
         run: |
           if [ "$STATUS" = "success" ]; then
