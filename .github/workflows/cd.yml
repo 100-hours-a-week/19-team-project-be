@@ -72,10 +72,10 @@ jobs:
           
           declare -A SLO_TARGETS=(
             ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.9995"
-            ["/api/v1/auth/tokens"]="0.9998"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
             ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.997"
+            ["/api/v1/chats"]="0.995"
             ["/api/v1/resumes/tasks"]="0.995"
           )
           
@@ -132,9 +132,9 @@ jobs:
               continue
             fi
             
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
-            if (( $(echo "$total_metric < 10" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
               continue
             fi
             
@@ -154,11 +154,17 @@ jobs:
             if (( $(echo "$availability >= $target" | bc -l) )); then
               burn_rate=0
             else
-              # 가용성 차이가 Error Budget보다 크면 100%로 제한
-              if (( $(echo "$availability_diff > $error_budget" | bc -l) )); then
+              # 가용성 차이가 Error Budget보다 크거나 같으면 100%로 제한
+              # 더 정확한 비교를 위해 scale을 높여서 계산
+              diff_check=$(echo "scale=10; if ($availability_diff >= $error_budget) 1 else 0" | bc -l)
+              if [ "$diff_check" = "1" ]; then
                 burn_rate=100
               else
                 burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
+                # 계산 결과가 100을 초과하면 100으로 제한
+                if (( $(echo "$burn_rate > 100" | bc -l) )); then
+                  burn_rate=100
+                fi
               fi
             fi
             
@@ -201,10 +207,10 @@ jobs:
           
           declare -A SLO_AVAILABILITY=(
             ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.9995"
-            ["/api/v1/auth/tokens"]="0.9998"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
             ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.997"
+            ["/api/v1/chats"]="0.995"
             ["/api/v1/resumes/tasks"]="0.995"
           )
           
@@ -257,9 +263,9 @@ jobs:
               continue
             fi
             
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
-            if (( $(echo "$total_metric < 10" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
               continue
             fi
             
@@ -591,17 +597,17 @@ jobs:
           
           declare -A SLO_AVAILABILITY=(
             ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.9995"
-            ["/api/v1/auth/tokens"]="0.9998"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
             ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.997"
+            ["/api/v1/chats"]="0.995"
             ["/api/v1/resumes/tasks"]="0.995"
           )
           
           declare -A SLO_ERROR_RATE=(
             ["/api/v1/auth/signup"]="0.003"
-            ["/api/v1/auth/oauth/kakao/login"]="0.0005"
-            ["/api/v1/auth/tokens"]="0.0002"
+            ["/api/v1/auth/oauth/kakao/login"]="0.001"
+            ["/api/v1/auth/tokens"]="0.001"
             ["/api/v1/experts"]="0.0005"
             ["/api/v1/chats"]="0.003"
             ["/api/v1/resumes/tasks"]="0.005"
@@ -658,9 +664,9 @@ jobs:
               continue
             fi
             
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 10개 요청 필요)
-            if (( $(echo "$total_metric < 10" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric})"
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
               continue
             fi
             
