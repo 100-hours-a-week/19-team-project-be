@@ -57,15 +57,15 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserRes.NicknameCheck>> checkNickname(
             @Parameter(description = "닉네임", example = "테스터", required = true)
             @RequestParam
-            @NotBlank(message = "nickname_empty")
-            @Size(min = 2, max = 10, message = "nickname_length_invalid")
+            @NotBlank(message = "닉네임을 입력해 주세요.")
+            @Size(min = 2, max = 10, message = "닉네임 길이가 올바르지 않습니다.")
             String nickname
     ) {
         return ResponseUtil.ok("success", userService.checkNickname(nickname));
     }
 
     /**
-     * 전체 유저 검색
+     * 전체 유저 검색ㅈ
      */
     @UserSwaggerSpec.SearchUsers
     @GetMapping("/search")

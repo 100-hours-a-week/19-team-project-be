@@ -9,11 +9,11 @@ import java.util.List;
 public class ExpertReq {
 
     public record UpdateEmbedding(
-            @NotNull(message = "expert_user_id_invalid")
-            @Positive(message = "expert_user_id_invalid")
+            @NotNull(message = "유효하지 않은 현직자 ID입니다.")
+            @Positive(message = "유효하지 않은 현직자 ID입니다.")
             Long userId,
 
-            @NotEmpty(message = "embedding_empty")
+            @NotEmpty(message = "임베딩 벡터가 비어 있습니다.")
             List<Double> embedding
     ) {}
 }

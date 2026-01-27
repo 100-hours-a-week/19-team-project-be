@@ -19,6 +19,7 @@ import org.refit.refitbackend.global.swagger.annotation.SwaggerApiUnauthorizedEr
 import org.springdoc.core.customizers.OperationCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.AnnotatedElementUtils;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -30,7 +31,7 @@ public class SwaggerApiCustomizerConfig {
     @Bean
     public OperationCustomizer swaggerApiCustomizer() {
         return (operation, handlerMethod) -> {
-            SwaggerApiSuccess success = handlerMethod.getMethodAnnotation(SwaggerApiSuccess.class);
+            SwaggerApiSuccess success = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiSuccess.class);
             if (success != null) {
                 if (!success.summary().isBlank()) {
                     operation.setSummary(success.summary());
@@ -52,7 +53,7 @@ public class SwaggerApiCustomizerConfig {
                 }
             }
 
-            SwaggerApiNotFoundError notFound = handlerMethod.getMethodAnnotation(SwaggerApiNotFoundError.class);
+            SwaggerApiNotFoundError notFound = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiNotFoundError.class);
             if (notFound != null) {
                 Map<String, Example> examples = null;
                 ExceptionType[] types = notFound.types();
@@ -65,7 +66,7 @@ public class SwaggerApiCustomizerConfig {
                 addResponse(operation, notFound.responseCode(), notFound.description(), ErrorResponse.class, examples);
             }
 
-            SwaggerApiConflictError conflict = handlerMethod.getMethodAnnotation(SwaggerApiConflictError.class);
+            SwaggerApiConflictError conflict = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiConflictError.class);
             if (conflict != null) {
                 Map<String, Example> examples = null;
                 ExceptionType[] types = conflict.types();
@@ -78,7 +79,7 @@ public class SwaggerApiCustomizerConfig {
                 addResponse(operation, conflict.responseCode(), conflict.description(), ErrorResponse.class, examples);
             }
 
-            SwaggerApiBadRequestError badRequest = handlerMethod.getMethodAnnotation(SwaggerApiBadRequestError.class);
+            SwaggerApiBadRequestError badRequest = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiBadRequestError.class);
             if (badRequest != null) {
                 String description = badRequest.description();
                 Map<String, Example> examples = null;
@@ -95,7 +96,7 @@ public class SwaggerApiCustomizerConfig {
                 addResponse(operation, badRequest.responseCode(), description, ErrorResponse.class, examples);
             }
 
-            SwaggerApiUnauthorizedError unauthorized = handlerMethod.getMethodAnnotation(SwaggerApiUnauthorizedError.class);
+            SwaggerApiUnauthorizedError unauthorized = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiUnauthorizedError.class);
             if (unauthorized != null) {
                 Map<String, Example> examples = null;
                 ExceptionType[] types = unauthorized.types();
@@ -108,8 +109,9 @@ public class SwaggerApiCustomizerConfig {
                 addResponse(operation, unauthorized.responseCode(), unauthorized.description(), ErrorResponse.class, examples);
             }
 
-            SwaggerApiError[] errors = handlerMethod.getMethod().getAnnotationsByType(SwaggerApiError.class);
-            if (errors != null && errors.length > 0) {
+            java.util.Collection<SwaggerApiError> errors = AnnotatedElementUtils
+                    .findMergedRepeatableAnnotations(handlerMethod.getMethod(), SwaggerApiError.class);
+            if (errors != null && !errors.isEmpty()) {
                 for (SwaggerApiError error : errors) {
                     Map<String, Example> examples = null;
                     ExceptionType[] types = error.types();
@@ -123,7 +125,7 @@ public class SwaggerApiCustomizerConfig {
                 }
             }
 
-            SwaggerApiRequestBody requestBody = handlerMethod.getMethodAnnotation(SwaggerApiRequestBody.class);
+            SwaggerApiRequestBody requestBody = AnnotatedElementUtils.findMergedAnnotation(handlerMethod.getMethod(), SwaggerApiRequestBody.class);
             if (requestBody != null) {
                 operation.setRequestBody(buildRequestBody(requestBody));
             }
@@ -162,7 +164,7 @@ public class SwaggerApiCustomizerConfig {
         Map<String, Example> resolvedExamples = examples;
         if (resolvedExamples == null && isErrorSchema) {
             resolvedExamples = new LinkedHashMap<>();
-            resolvedExamples.put("example", buildErrorExample("INVALID_REQUEST", "invalid_request"));
+            resolvedExamples.put("example", buildErrorExample("INVALID_REQUEST", "요청이 올바르지 않습니다."));
         }
         if (resolvedExamples != null) {
             for (Map.Entry<String, Example> entry : resolvedExamples.entrySet()) {
@@ -259,7 +261,7 @@ public class SwaggerApiCustomizerConfig {
         Schema<String> message = new Schema<>();
         message.setType("string");
         message.setDescription("응답 메시지");
-        message.setExample("invalid_request");
+        message.setExample("요청이 올바르지 않습니다.");
 
         Schema<Object> data = new Schema<>();
         data.setDescription("응답 데이터");
