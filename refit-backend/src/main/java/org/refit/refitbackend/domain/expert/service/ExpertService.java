@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.expert.dto.ExpertRes;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.expert.repository.ExpertRepository;
+import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
+import org.refit.refitbackend.domain.expert.dto.ExpertReq;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.entity.UserJob;
 import org.refit.refitbackend.domain.user.entity.UserSkill;
@@ -26,6 +28,7 @@ import java.util.stream.Collectors;
 public class ExpertService {
 
     private final ExpertRepository expertRepository;
+    private final ExpertProfileRepository expertProfileRepository;
     private final UserJobRepository userJobRepository;
     private final UserSkillRepository userSkillRepository;
 
@@ -95,6 +98,29 @@ public class ExpertService {
                 profile != null ? profile.getRatingCount() : 0,
                 profile != null ? profile.getLastActiveAt() : null
         );
+    }
+
+    @Transactional
+    public void updateEmbedding(ExpertReq.UpdateEmbedding request) {
+        if (!expertProfileRepository.existsById(request.userId())) {
+            throw new CustomException(ExceptionType.EXPERT_NOT_FOUND);
+        }
+        String embedding = toVectorLiteral(request.embedding());
+        int updated = expertProfileRepository.updateEmbedding(request.userId(), embedding);
+        if (updated == 0) {
+            throw new CustomException(ExceptionType.EXPERT_NOT_FOUND);
+        }
+    }
+
+    private String toVectorLiteral(java.util.List<Double> embedding) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < embedding.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append(embedding.get(i));
+        }
+        sb.append(']');
+        return sb.toString();
     }
 
     private Map<Long, List<ExpertRes.JobDto>> getJobsByUserIds(List<User> users) {

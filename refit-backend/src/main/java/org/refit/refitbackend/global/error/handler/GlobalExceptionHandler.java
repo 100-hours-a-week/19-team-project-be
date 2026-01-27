@@ -205,6 +205,9 @@ public class GlobalExceptionHandler {
             case "embedding_empty" ->
                     ExceptionType.EXPERT_EMBEDDING_EMPTY;
 
+            case "embedding_empty" ->
+                    ExceptionType.EXPERT_EMBEDDING_EMPTY;
+
             case "user_type_invalid" ->
                     ExceptionType.USER_TYPE_INVALID;
 
