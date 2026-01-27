@@ -95,4 +95,16 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         }
         return null;
     }
+
+    private String getCookieHeader(StompHeaderAccessor accessor) {
+        List<String> headers = accessor.getNativeHeader("cookie");
+        if (headers != null && !headers.isEmpty()) {
+            return String.join("; ", headers);
+        }
+        headers = accessor.getNativeHeader("Cookie");
+        if (headers != null && !headers.isEmpty()) {
+            return String.join("; ", headers);
+        }
+        return null;
+    }
 }
