@@ -12,6 +12,7 @@ import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +24,7 @@ public class ChatMessageService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * 메시지 전송
@@ -58,6 +60,11 @@ public class ChatMessageService {
         // 채팅방의 마지막 메시지 업데이트
         chatRoom.updateLastMessage(savedMessage);
 
-        return ChatRes.MessageInfo.from(savedMessage);
+        ChatRes.MessageInfo payload = ChatRes.MessageInfo.from(savedMessage);
+
+        // 1:1 채팅 - 채팅방 구독자에게 브로드캐스트
+        messagingTemplate.convertAndSend("/queue/chat." + request.chatId(), payload);
+
+        return payload;
     }
 }
