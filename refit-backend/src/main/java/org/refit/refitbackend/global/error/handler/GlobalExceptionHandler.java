@@ -202,8 +202,6 @@ public class GlobalExceptionHandler {
              * ======================= */
             case "expert_user_id_invalid" ->
                     ExceptionType.EXPERT_USER_ID_INVALID;
-            case "embedding_empty" ->
-                    ExceptionType.EXPERT_EMBEDDING_EMPTY;
 
             case "embedding_empty" ->
                     ExceptionType.EXPERT_EMBEDDING_EMPTY;
