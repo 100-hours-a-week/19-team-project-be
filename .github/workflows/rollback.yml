@@ -1,0 +1,247 @@
+name: Backend System Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Operation Mode'
+        required: true
+        type: choice
+        options:
+          - list
+          - restore
+        default: 'list'
+      backup_id:
+        description: 'Backup file name to restore (e.g., backend-20240127120000.jar)'
+        required: false
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Execute Backend Rollback
+        env:
+          SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+          MODE: ${{ inputs.mode }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+        run: |
+          set -euo pipefail
+
+          BASE_PATH="$SERVER_BASE_PATH"
+          APP_DIR="${BASE_PATH}/app/backend/refit-backend"
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          JAR_PATH="${APP_DIR}/build/libs/${JAR_NAME}"
+          BACKUP_DIR="${BASE_PATH}/backups/backend"
+
+          SCRIPT=$(cat <<'SCRIPT_END'
+          set -euo pipefail
+          BASE_PATH="$1"
+          APP_DIR="$2"
+          JAR_PATH="$3"
+          BACKUP_DIR="$4"
+          MODE="$5"
+          BACKUP_ID="$6"
+          HEALTH_CHECK_URL="$7"
+
+          APP_NAME="backend"
+
+          echo "============================================"
+          echo "Re-Fit Backend Rollback Operation: ${MODE}"
+          echo "============================================"
+
+          if [ "${MODE}" = "list" ]; then
+            echo "Available Backend JAR Backups (Latest 10):"
+            if [ -d "${BACKUP_DIR}" ]; then
+              ls -lt "${BACKUP_DIR}"/backend-*.jar 2>/dev/null | head -n 10 | awk '{print $9, $6, $7, $8}' || echo "No backend-*.jar backups found."
+            else
+              echo "No backups directory found: ${BACKUP_DIR}"
+            fi
+            exit 0
+          fi
+
+          if [ "${MODE}" = "restore" ]; then
+            TARGET_BACKUP=""
+
+            if [ -z "${BACKUP_ID}" ]; then
+              # 가장 최신 백엔드 JAR 백업 찾기
+              TARGET_BACKUP=$(ls -t "${BACKUP_DIR}"/backend-*.jar 2>/dev/null | head -n 1 || echo "")
+              if [ -z "${TARGET_BACKUP}" ]; then
+                echo "Error: No backend-*.jar backups found in ${BACKUP_DIR}"
+                exit 1
+              fi
+              echo "Backup ID not specified. Using latest: $(basename "${TARGET_BACKUP}")"
+            else
+              TARGET_BACKUP="${BACKUP_DIR}/${BACKUP_ID}"
+            fi
+
+            if [ ! -f "${TARGET_BACKUP}" ]; then
+              echo "Error: Backup file not found: ${TARGET_BACKUP}"
+              exit 1
+            fi
+
+            echo "Restoring from: ${TARGET_BACKUP}"
+
+            # 현재 상태 Safety Backup
+            SAFETY_BACKUP="${BACKUP_DIR}/safety_before_rollback_$(date +%Y%m%d%H%M%S).jar"
+            if [ -f "${JAR_PATH}" ]; then
+              cp "${JAR_PATH}" "${SAFETY_BACKUP}"
+              echo "Safety backup created: ${SAFETY_BACKUP}"
+            fi
+
+            # JAR 복구
+            echo "Restore JAR file..."
+            cp "${TARGET_BACKUP}" "${JAR_PATH}"
+
+            # 권한 복구
+            sudo chown -R ubuntu:ubuntu "${APP_DIR}" 2>/dev/null || true
+            chmod 644 "${JAR_PATH}" 2>/dev/null || true
+
+            # 애플리케이션 재시작
+            echo "Restarting backend via PM2..."
+            if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+              sudo -u ubuntu pm2 restart ${APP_NAME} || sudo -u ubuntu pm2 delete ${APP_NAME}
+            fi
+
+            if ! sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+              sudo -u ubuntu pm2 start /usr/bin/java --name "${APP_NAME}" -- \
+                -Xms1024m -Xmx2560m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+                -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof \
+                -jar "${JAR_PATH}"
+            fi
+
+            sleep 15
+
+            # PM2 상태 확인
+            if ! sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+              echo "PM2 process not running after reload"
+              exit 1
+            fi
+
+            # Caddy 리로드
+            systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
+            sleep 5
+
+            # 헬스체크: 초기 15초 대기 후 최대 5회 재시도 (HTTP 200만 확인)
+            echo "Running backend health check (initial 15s wait, up to 5 retries)..."
+            if [ -n "${HEALTH_CHECK_URL}" ]; then
+              # 추가 대기 시간을 통해 백엔드 기동 여유 확보
+              sleep 15
+
+              for i in {1..5}; do
+                HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
+                if [ "${HTTP_STATUS}" = "200" ]; then
+                  echo "Rollback successful! Backend is healthy (HTTP ${HTTP_STATUS})"
+                  sudo -u ubuntu pm2 save 2>/dev/null || true
+                  sudo -u ubuntu pm2 status ${APP_NAME} || true
+                  exit 0
+                fi
+                echo "Attempt $i/5: HTTP ${HTTP_STATUS}"
+                [ $i -lt 5 ] && sleep 3
+              done
+
+              echo "Health check failed after backend rollback"
+              sudo -u ubuntu pm2 logs ${APP_NAME} --lines 20 --nostream || true
+              exit 1
+            else
+              echo "HEALTH_CHECK_URL not set. Skipping HTTP health check."
+              sudo -u ubuntu pm2 save 2>/dev/null || true
+              exit 0
+            fi
+          fi
+          SCRIPT_END
+          )
+          
+          # SSM 명령 실행
+          SCRIPT_ENCODED=$(echo "$SCRIPT" | base64 -w 0)
+          SSM_COMMAND="bash -c \"echo '$SCRIPT_ENCODED' | base64 -d | bash -s -- '$BASE_PATH' '$APP_DIR' '$JAR_PATH' '$BACKUP_DIR' '$MODE' '$BACKUP_ID' '$HEALTH_CHECK_URL'\""
+          
+          PARAMETERS_JSON=$(jq -n --arg cmd "$SSM_COMMAND" '{commands: [$cmd]}')
+          
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$PARAMETERS_JSON" \
+            --timeout-seconds 600 \
+            --region ap-northeast-2 \
+            --query 'Command.CommandId' \
+            --output text)
+            
+          [ -n "$COMMAND_ID" ] || exit 1
+          
+          # 실행 상태 확인
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ap-northeast-2 \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "InProgress")
+            
+            if [ "$STATUS" = "Success" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardOutputContent' \
+                --output text
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardErrorContent' \
+                --output text
+              exit 1
+            fi
+            sleep 3
+          done
+          exit 1
+
+      - name: Notify Discord on Result
+        if: always() && inputs.mode == 'restore'
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+            TITLE="Rollback Successful"
+          else
+            COLOR=15158332
+            TITLE="Rollback Failed"
+          fi
+
+          BACKUP_TEXT="${BACKUP_ID:-latest backend-*.jar}"
+
+          payload=$(cat <<EOF
+          {
+            "embeds": [{
+              "title": "BE Rollback Result: $TITLE",
+              "color": $COLOR,
+              "fields": [
+                {"name": "서비스", "value": "Re-Fit Backend", "inline": true},
+                {"name": "상태", "value": "\`$STATUS\`", "inline": true},
+                {"name": "롤백 대상", "value": "\`$BACKUP_TEXT\`", "inline": false},
+                {"name": "워크플로우", "value": "[상세 보기](https://github.com/${{ github.repository }}/actions/runs/$RUN_ID)", "inline": false}
+              ],
+              "footer": { "text": "Re-Fit Backend Rollback System" },
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+          )
+
+          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"
