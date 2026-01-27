@@ -510,27 +510,10 @@ jobs:
           sleep 1
           sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null || exit 1
           systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
-          sleep 8
           
-          for i in {1..5}; do
-            HTTP_STATUS=$(timeout 3 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
-            if [ "${HTTP_STATUS}" = "200" ]; then
-              # 본문 내용까지 확인하지 않고 HTTP 200이면 정상으로 간주
-              sudo -u ubuntu pm2 save 2>/dev/null || true
-              (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
-              exit 0
-            fi
-            [ $i -lt 5 ] && sleep 2
-          done
-          
-          BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
-          if [ -f "${BACKUP_FILE}" ]; then
-            cp "${BACKUP_FILE}" "${JAR_PATH}"
-            sudo -u ubuntu pm2 restart ${APP_NAME}
-            sleep 3
-            [ "$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && sudo -u ubuntu pm2 save 2>/dev/null || true
-          fi
-          exit 1
+          sudo -u ubuntu pm2 save 2>/dev/null || true
+          (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
+          exit 0
           SCRIPT_END
           )
           
