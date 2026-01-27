@@ -44,7 +44,7 @@ jobs:
        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
        (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
       github.event_name == 'workflow_dispatch'
-    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') ? 'production' : 'development' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
     
     steps:
       - name: Checkout code
@@ -260,7 +260,7 @@ jobs:
        (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
       github.event_name == 'workflow_dispatch'
     # main 브랜치는 production, develop 브랜치는 development 환경 사용
-    environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main') ? 'production' : 'development' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
 
     steps:
       - name: Find Latest Artifact (if needed)
