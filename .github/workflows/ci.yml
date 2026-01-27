@@ -2,12 +2,12 @@ name: Re-Fit Backend CI
 
 on:
   pull_request:
-    branches: [develop, main, ci/BE-62/cd-SLI-SLO-test]
+    branches: [develop, main]
     types: [opened, synchronize, reopened]
     paths:
       - 'refit-backend/**'
   push:
-    branches: [develop, main, ci/BE-62/cd-SLI-SLO-test]
+    branches: [develop, main]
     paths:
       - 'refit-backend/**'
   workflow_dispatch:
@@ -74,7 +74,7 @@ jobs:
   # 목적: develop 브랜치 병합 전 빌드 검증 및 보안 취약점 확인
   integration:
     if: |
-      (github.event_name == 'push' && (github.ref_name == 'develop' || github.ref_name == 'ci/BE-62/cd-SLI-SLO-test')) ||
+      (github.event_name == 'push' && github.ref_name == 'develop') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -125,7 +125,7 @@ jobs:
   # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
   release:
     if: |
-      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop' || github.ref_name == 'ci/BE-62/cd-SLI-SLO-test')) ||
+      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'develop')) ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'release')
     runs-on: ubuntu-latest
     timeout-minutes: 20
