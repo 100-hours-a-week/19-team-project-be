@@ -30,6 +30,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
         if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+            log.info("[WS] CONNECT headers: {}", accessor.toNativeHeaderMap());
             String token = extractToken(accessor);
             authenticateUser(accessor, token);
         }
@@ -42,6 +43,13 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7);
+        }
+
+        Object sessionToken = accessor.getSessionAttributes() != null
+                ? accessor.getSessionAttributes().get("access_token")
+                : null;
+        if (sessionToken instanceof String token && !token.isBlank()) {
+            return token;
         }
 
         String cookieHeader = getCookieHeader(accessor);
@@ -72,8 +80,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             log.info("WebSocket 인증 성공 - userId: {}", userId);
 
         } catch (Exception e) {
-            log.error("WebSocket 인증 실패: {}", e.getMessage());
-            throw new IllegalArgumentException("Invalid JWT token");
+            log.error("WebSocket 인증 실패", e);
         }
     }
 
