@@ -12,18 +12,18 @@ public class ChatReq {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CreateRoom(
             @Schema(description = "수신자(현직자) ID", example = "2")
-            @NotNull(message = "chat_receiver_required")
+            @NotNull(message = "수신자 ID가 필요합니다.")
             Long receiverId,
 
             @Schema(description = "이력서 ID (선택)", example = "1")
             Long resumeId,
 
             @Schema(description = "공고 URL (선택)", example = "https://example.com/job/123")
-            @Size(max = 500, message = "chat_job_post_url_too_long")
+            @Size(max = 500, message = "공고 링크가 너무 깁니다.")
             String jobPostUrl,
 
             @Schema(description = "채팅 요청 유형", example = "FEEDBACK / COFFEE_CHAT")
-            @NotNull(message = "chat_request_type_required")
+            @NotNull(message = "요청 타입이 필요합니다.")
             String requestType
     ) {}
 
@@ -31,12 +31,12 @@ public class ChatReq {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record SendMessage(
             @Schema(description = "채팅방 ID", example = "1")
-            @NotNull(message = "chat_id_required")
+            @NotNull(message = "채팅 ID가 필요합니다.")
             Long chatId,
 
             @Schema(description = "메시지 내용", example = "안녕하세요!")
-            @NotNull(message = "message_content_required")
-            @Size(min = 1, max = 500, message = "message_content_length_invalid")
+            @NotNull(message = "메시지 내용을 입력해 주세요.")
+            @Size(min = 1, max = 500, message = "메시지 내용이 너무 깁니다.")
             String content,
 
             @Schema(description = "메시지 타입", example = "TEXT")
@@ -47,11 +47,11 @@ public class ChatReq {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReadMessage(
             @Schema(description = "채팅방 ID", example = "1")
-            @NotNull(message = "chat_id_required")
+            @NotNull(message = "채팅 ID가 필요합니다.")
             Long chatId,
 
             @Schema(description = "읽은 메시지 ID", example = "100")
-            @NotNull(message = "message_id_required")
+            @NotNull(message = "메시지 ID가 필요합니다.")
             Long messageId
     ) {}
 
@@ -59,7 +59,7 @@ public class ChatReq {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CloseRoom(
             @Schema(description = "채팅방 상태", example = "CLOSED")
-            @NotNull(message = "chat_status_required")
+            @NotNull(message = "채팅 상태가 필요합니다.")
             String status
     ) {}
 }

@@ -12,7 +12,6 @@ import org.refit.refitbackend.global.swagger.spec.resume.ResumeSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -21,13 +20,10 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import io.swagger.v3.oas.annotations.tags.Tag;
 
 @RestController
 @RequiredArgsConstructor
-@Validated
 @RequestMapping("/api/v1/resumes")
-@Tag(name = "Resume", description = "이력서 API")
 public class ResumeController {
 
     private final ResumeService resumeService;
@@ -53,7 +49,7 @@ public class ResumeController {
     @GetMapping("/{resume_id}")
     public ResponseEntity<ApiResponse<ResumeRes.ResumeDetail>> detail(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable("resume_id") @Positive(message = "resume_id_invalid") Long resumeId
+            @PathVariable("resume_id") @Positive(message = "유효하지 않은 이력서 ID입니다.") Long resumeId
     ) {
         return ResponseUtil.ok("success", resumeService.getDetail(principal.getUserId(), resumeId));
     }
@@ -62,7 +58,7 @@ public class ResumeController {
     @PatchMapping("/{resume_id}")
     public ResponseEntity<ApiResponse<Void>> update(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable("resume_id") @Positive(message = "resume_id_invalid") Long resumeId,
+            @PathVariable("resume_id") @Positive(message = "유효하지 않은 이력서 ID입니다.") Long resumeId,
             @Valid @RequestBody ResumeReq.Update request
     ) {
         resumeService.update(principal.getUserId(), resumeId, request);
@@ -73,19 +69,18 @@ public class ResumeController {
     @PatchMapping("/{resume_id}/title")
     public ResponseEntity<ApiResponse<Void>> updateTitle(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable("resume_id") @Positive(message = "resume_id_invalid") Long resumeId,
+            @PathVariable("resume_id") @Positive(message = "유효하지 않은 이력서 ID입니다.") Long resumeId,
             @Valid @RequestBody ResumeReq.UpdateTitle request
     ) {
         resumeService.updateTitle(principal.getUserId(), resumeId, request);
         return ResponseUtil.ok("success");
     }
 
-
     @ResumeSwaggerSpec.DeleteResume
     @DeleteMapping("/{resume_id}")
     public ResponseEntity<ApiResponse<Void>> delete(
             @AuthenticationPrincipal CustomUserDetails principal,
-            @PathVariable("resume_id") @Positive(message = "resume_id_invalid") Long resumeId
+            @PathVariable("resume_id") @Positive(message = "유효하지 않은 이력서 ID입니다.") Long resumeId
     ) {
         resumeService.delete(principal.getUserId(), resumeId);
         return ResponseUtil.ok("success");
