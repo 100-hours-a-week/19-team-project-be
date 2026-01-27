@@ -86,8 +86,10 @@ jobs:
           FAILED_APIS=()
           
           for endpoint in "${!SLO_TARGETS[@]}"; do
+            # 변수 초기화
+            burn_rate=0
             target="${SLO_TARGETS[$endpoint]}"
-            error_budget=$(echo "1 - $target" | bc -l)
+            error_budget=$(echo "scale=8; 1 - $target" | bc -l)
             
             success_metric=$(aws cloudwatch get-metric-statistics \
               --namespace ReFit/Backend \
@@ -148,11 +150,16 @@ jobs:
             # Error Budget = 1 - 목표 가용성
             availability_diff=$(echo "scale=8; $target - $availability" | bc -l)
             
-            # 가용성이 목표보다 높으면 소진률 0
+            # 가용성이 목표보다 높거나 같으면 소진률 0
             if (( $(echo "$availability >= $target" | bc -l) )); then
               burn_rate=0
             else
-              burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
+              # 가용성 차이가 Error Budget보다 크면 100%로 제한
+              if (( $(echo "$availability_diff > $error_budget" | bc -l) )); then
+                burn_rate=100
+              else
+                burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
+              fi
             fi
             
             echo "${endpoint}:"
