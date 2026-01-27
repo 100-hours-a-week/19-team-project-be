@@ -109,6 +109,11 @@ public class GlobalExceptionHandler {
             message = "validation_error";
         }
 
+        ExceptionType byMessage = resolveByMessage(message);
+        if (byMessage != null) {
+            return byMessage;
+        }
+
         return switch (message) {
 
             /* =======================
@@ -217,6 +222,15 @@ public class GlobalExceptionHandler {
              * ======================= */
             default -> resolveByFieldAndConstraint(field, constraint, rejected);
         };
+    }
+
+    private ExceptionType resolveByMessage(String message) {
+        for (ExceptionType type : ExceptionType.values()) {
+            if (type.getMessage().equals(message)) {
+                return type;
+            }
+        }
+        return null;
     }
 
     private ExceptionType resolveByFieldAndConstraint(String field, String constraint, Object rejected) {
