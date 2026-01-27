@@ -1,6 +1,30 @@
 name: Re-Fit Backend CD
 
 on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'CI workflow run ID (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      sha:
+
+        description: 'Commit SHA (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      branch:
+        description: 'Branch name'
+        required: true
+        type: choice
+        default: 'develop'
+        options:
+          - develop
+          - main
+      use_latest_artifact:
+        description: 'run_id/sha를 입력하지 않으면 선택한 브랜치의 최신 아티팩트 사용'
+        required: true
+        type: boolean
+        default: true
   workflow_run:
     workflows: ["Re-Fit Backend CI"]
     types: [completed]
@@ -11,29 +35,367 @@ permissions:
   actions: read
 
 jobs:
+  pre-deployment-validation:
+    name: Pre-Deployment SLI/SLO Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
+      github.event_name == 'workflow_dispatch'
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc jq
+
+      - name: Validate Error Budget
+        run: |
+          set -euo pipefail
+          
+          declare -A SLO_TARGETS=(
+            ["/api/v1/auth/signup"]="0.997"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
+            ["/api/v1/experts"]="0.9995"
+            ["/api/v1/chats"]="0.995"
+            ["/api/v1/resumes/tasks"]="0.995"
+          )
+          
+          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
+          START_TIME=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-24H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S)
+          
+          MAX_ERROR_BUDGET_BURN=0
+          FAILED_APIS=()
+          
+          for endpoint in "${!SLO_TARGETS[@]}"; do
+            # 변수 초기화
+            burn_rate=0
+            target="${SLO_TARGETS[$endpoint]}"
+            error_budget=$(echo "scale=8; 1 - $target" | bc -l)
+            
+            success_metric=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_4xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_5xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
+            
+            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
+              continue
+            fi
+            
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
+            
+            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
+              continue
+            fi
+            
+            # Error Budget 소진률 = (가용성 차이 / Error Budget) * 100
+            # 가용성 차이 = 목표 가용성 - 실제 가용성
+            # Error Budget = 1 - 목표 가용성
+            availability_diff=$(echo "scale=8; $target - $availability" | bc -l)
+            
+            # 가용성이 목표보다 높거나 같으면 소진률 0
+            if (( $(echo "$availability >= $target" | bc -l) )); then
+              burn_rate=0
+            else
+              # 가용성 차이가 Error Budget보다 크거나 같으면 100%로 제한
+              # 더 정확한 비교를 위해 scale을 높여서 계산
+              diff_check=$(echo "scale=10; if ($availability_diff >= $error_budget) 1 else 0" | bc -l | tr -d '\n')
+              if [ -n "$diff_check" ] && [ "$diff_check" = "1" ]; then
+                burn_rate=100
+              else
+                burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
+                # 계산 결과가 100을 초과하면 100으로 제한
+                if (( $(echo "$burn_rate > 100" | bc -l) )); then
+                  burn_rate=100
+                fi
+              fi
+            fi
+            
+            echo "${endpoint}:"
+            echo "  목표 가용성: $(echo "scale=4; $target * 100" | bc -l)%"
+            echo "  실제 가용성: $(echo "scale=4; $availability * 100" | bc -l)%"
+            echo "  가용성 차이: $(echo "scale=6; $availability_diff * 100" | bc -l)%"
+            echo "  Error Budget: $(echo "scale=6; $error_budget * 100" | bc -l)%"
+            echo "  Error Budget 소진률: ${burn_rate}%"
+            
+            if (( $(echo "$burn_rate >= 100" | bc -l) )); then
+              echo "Error Budget 소진률이 100% 이상입니다. 배포를 중단합니다."
+              exit 1
+            fi
+            
+            if (( $(echo "$burn_rate >= 75" | bc -l) )); then
+              echo "Error Budget 소진률이 75% 이상입니다. 배포를 중단합니다."
+              exit 1
+            fi
+            
+            if (( $(echo "$burn_rate >= 50" | bc -l) )); then
+              FAILED_APIS+=("${endpoint}: ${burn_rate}%")
+              if (( $(echo "$burn_rate > $MAX_ERROR_BUDGET_BURN" | bc -l) )); then
+                MAX_ERROR_BUDGET_BURN=$burn_rate
+              fi
+            fi
+          done
+          
+          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
+            echo "Error Budget 소진률 경고:"
+            for api in "${FAILED_APIS[@]}"; do
+              echo "  - $api"
+            done
+            echo "Error Budget 소진률이 50% 이상이지만 75% 미만입니다. 배포를 계속 진행하되 주의가 필요합니다."
+          fi
+
+      - name: Validate Recent SLO Compliance
+        run: |
+          set -euo pipefail
+          
+          declare -A SLO_AVAILABILITY=(
+            ["/api/v1/auth/signup"]="0.997"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
+            ["/api/v1/experts"]="0.9995"
+            ["/api/v1/chats"]="0.995"
+            ["/api/v1/resumes/tasks"]="0.995"
+          )
+          
+          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
+          START_TIME=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-24H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S)
+          
+          FAILED_APIS=()
+          
+          for endpoint in "${!SLO_AVAILABILITY[@]}"; do
+            target="${SLO_AVAILABILITY[$endpoint]}"
+            
+            success_metric=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_4xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_5xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 3600 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
+            
+            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
+              continue
+            fi
+            
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
+            
+            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
+              continue
+            fi
+            
+            if (( $(echo "$availability < $target" | bc -l) )); then
+              echo "${endpoint}: SLO 미달성 (목표: $(echo "scale=2; $target * 100" | bc -l)%, 실제: $(echo "scale=2; $availability * 100" | bc -l)%)"
+              FAILED_APIS+=("${endpoint}")
+            fi
+          done
+          
+          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
+            echo "최근 24시간 동안 SLO를 달성하지 못한 Tier 1 API가 있습니다:"
+            for api in "${FAILED_APIS[@]}"; do
+              echo "  - $api"
+            done
+            echo "배포를 계속 진행하되, 배포 후 모니터링을 강화하세요."
+          fi
+
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: pre-deployment-validation
     # 동일 브랜치의 동시 배포 방지
     concurrency:
-      group: deploy-${{ github.event.workflow_run.head_branch }}
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
       cancel-in-progress: false
     # CI 성공 후에만 실행
     if: |
-      github.event_name == 'workflow_run' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-      (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
+      github.event_name == 'workflow_dispatch'
     # main 브랜치는 production, develop 브랜치는 development 환경 사용
-    environment: ${{ github.event.workflow_run.head_branch == 'main' && 'production' || 'development' }}
+    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
 
     steps:
+      - name: Find Latest Artifact (if needed)
+        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
+        id: find-artifact
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            const branch = '${{ inputs.branch }}';
+            console.log(`Finding latest artifact for branch: ${branch}`);
+
+            // CI 워크플로우의 최근 성공한 실행 찾기
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              branch: branch,
+              status: 'success',
+              per_page: 10
+            });
+
+            if (runs.data.workflow_runs.length === 0) {
+              core.setFailed(`No successful CI runs found for branch: ${branch}`);
+              return;
+            }
+
+            // 아티팩트가 있는 최신 실행 찾기
+            for (const run of runs.data.workflow_runs) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+
+              const buildArtifact = artifacts.data.artifacts.find(
+                a => a.name.startsWith('backend-jar-')
+              );
+
+              if (buildArtifact) {
+                const sha = run.head_sha;
+                console.log(`Found artifact from run #${run.run_number}`);
+                console.log(`   Run ID: ${run.id}`);
+                console.log(`   SHA: ${sha}`);
+                console.log(`   Created: ${run.created_at}`);
+
+                core.setOutput('run_id', run.id.toString());
+                core.setOutput('sha', sha);
+                core.setOutput('run_number', run.run_number.toString());
+                return;
+              }
+            }
+
+            core.setFailed(`No artifacts found in recent CI runs for branch: ${branch}`);
+
+      - name: Set Deployment Variables
+        id: deploy-vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ inputs.use_latest_artifact }}" == "true" ] && ([ -z "${{ inputs.run_id }}" ] || [ "${{ inputs.run_id }}" == "" ]) && ([ -z "${{ inputs.sha }}" ] || [ "${{ inputs.sha }}" == "" ]); then
+              if [ -n "${{ steps.find-artifact.outputs.run_id }}" ]; then
+                echo "run_id=${{ steps.find-artifact.outputs.run_id }}" >> $GITHUB_OUTPUT
+                echo "sha=${{ steps.find-artifact.outputs.sha }}" >> $GITHUB_OUTPUT
+                echo "Using latest artifact from run #${{ steps.find-artifact.outputs.run_number }}"
+              else
+                echo "Error: Failed to find latest artifact"
+                exit 1
+              fi
+            else
+              if [ -z "${{ inputs.run_id }}" ] || [ -z "${{ inputs.sha }}" ]; then
+                echo "Error: run_id and sha must be provided when use_latest_artifact is false"
+                exit 1
+              fi
+              echo "run_id=${{ inputs.run_id }}" >> $GITHUB_OUTPUT
+              echo "sha=${{ inputs.sha }}" >> $GITHUB_OUTPUT
+              echo "Using manually specified artifact"
+            fi
+            echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          fi
+
       # 배포 전 release job 성공 여부 확인
       - name: Check release job status
         if: github.event_name == 'workflow_run'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT }}
         run: |
           RUN_ID="${{ github.event.workflow_run.id }}"
           REPO="${{ github.repository }}"
@@ -43,30 +405,31 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_branch }}
+          ref: ${{ steps.deploy-vars.outputs.branch }}
 
-      # CI 워크플로우에서 JAR 아티팩트 다운로드 (재시도 로직 포함)
+      # CI 워크플로우에서 JAR 아티팩트 다운로드
       - name: Download JAR Artifact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar-${{ steps.deploy-vars.outputs.sha }}-${{ steps.deploy-vars.outputs.run_id }}
+          path: build-output
+          github-token: ${{ secrets.PAT }}
+          run-id: ${{ steps.deploy-vars.outputs.run_id }}
+
+      - name: Verify Downloaded JAR
         run: |
           set -euo pipefail
-          REPO="${{ github.repository }}"
-          mkdir -p build-output
-          
-          # workflow_run에서 아티팩트 정보 가져오기
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          ARTIFACT_NAME="backend-jar-${{ github.event.workflow_run.head_sha }}-${RUN_ID}"
-          
-          # 최대 5회 재시도, 파일 크기 1MB 이상 확인
-          for i in {1..5}; do
-            gh run download "$RUN_ID" -n "$ARTIFACT_NAME" -D build-output 2>/dev/null && \
-            [ -f "build-output/${JAR_NAME}" ] && \
-            [ $(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0) -gt 1000000 ] && break
-            [ $i -lt 5 ] && sleep 3
-          done
-          [ -f "build-output/${JAR_NAME}" ] || exit 1
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "build-output/${JAR_NAME}" ]; then
+            echo "JAR file not found"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0)
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "JAR file size is too small: ${FILE_SIZE} bytes"
+            exit 1
+          fi
+          echo "JAR file verified: ${FILE_SIZE} bytes"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -89,6 +452,7 @@ jobs:
 
       # SSM을 통해 EC2 인스턴스에 배포
       - name: Deploy via SSM
+        id: deploy
         env:
           SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
           EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
@@ -142,35 +506,13 @@ jobs:
               -jar "${JAR_PATH}"
           fi
           
-          sleep 2
+          sleep 1
           sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null || exit 1
-          # Caddy 리로드
           systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
-          sleep 15
           
-          # 헬스체크 (최대 5회 재시도)
-          for i in {1..5}; do
-            HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
-            if [ "${HTTP_STATUS}" = "200" ]; then
-              HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
-              if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
-                sudo -u ubuntu pm2 save 2>/dev/null || true
-                (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
-                exit 0
-              fi
-            fi
-            [ $i -lt 5 ] && sleep 3
-          done
-          
-          # 헬스체크 실패 시 롤백
-          BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
-          if [ -f "${BACKUP_FILE}" ]; then
-            cp "${BACKUP_FILE}" "${JAR_PATH}"
-            sudo -u ubuntu pm2 restart ${APP_NAME}
-            sleep 5
-            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && sudo -u ubuntu pm2 save 2>/dev/null || true
-          fi
-          exit 1
+          sudo -u ubuntu pm2 save 2>/dev/null || true
+          (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
+          exit 0
           SCRIPT_END
           )
           
@@ -200,33 +542,193 @@ jobs:
               --output text 2>/dev/null || echo "InProgress")
             
             if [ "$STATUS" = "Success" ]; then
+              echo "=== SSM 명령 실행 성공 ==="
               aws ssm get-command-invocation \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$EC2_INSTANCE_ID" \
                 --region ap-northeast-2 \
                 --query 'StandardOutputContent' \
                 --output text
+              echo "deploy_timestamp=$(date +%s)" >> $GITHUB_OUTPUT
               exit 0
             elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              echo "=== SSM 명령 실행 실패: $STATUS ==="
+              echo "=== Standard Output ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardOutputContent' \
+                --output text 2>/dev/null || echo "(없음)"
+              echo "=== Standard Error ==="
               aws ssm get-command-invocation \
                 --command-id "$COMMAND_ID" \
                 --instance-id "$EC2_INSTANCE_ID" \
                 --region ap-northeast-2 \
                 --query 'StandardErrorContent' \
-                --output text
+                --output text 2>/dev/null || echo "(없음)"
               exit 1
             fi
-            sleep 5
+            [ $i -lt 60 ] && sleep 3
           done
+          
+          # 타임아웃: 최종 상태 확인 및 에러 출력
+          echo "=== SSM 명령 타임아웃 (60회 시도 후) ==="
+          FINAL_STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'Status' \
+            --output text 2>/dev/null || echo "Unknown")
+          echo "최종 상태: $FINAL_STATUS"
+          echo "=== Standard Output ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'StandardOutputContent' \
+            --output text 2>/dev/null || echo "(없음)"
+          echo "=== Standard Error ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'StandardErrorContent' \
+            --output text 2>/dev/null || echo "(없음)"
           exit 1
+
+      - name: Post-Deployment SLI/SLO Validation
+        if: success() && vars.ENABLE_POST_DEPLOYMENT_VALIDATION != 'false'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: ap-northeast-2
+        run: |
+          set -euo pipefail
+          
+          echo "배포 후 SLI 검증을 위해 1분 대기 중..."
+          sleep 60
+          
+          declare -A SLO_AVAILABILITY=(
+            ["/api/v1/auth/signup"]="0.997"
+            ["/api/v1/auth/oauth/kakao/login"]="0.999"
+            ["/api/v1/auth/tokens"]="0.999"
+            ["/api/v1/experts"]="0.9995"
+            ["/api/v1/chats"]="0.995"
+            ["/api/v1/resumes/tasks"]="0.995"
+          )
+          
+          declare -A SLO_ERROR_RATE=(
+            ["/api/v1/auth/signup"]="0.003"
+            ["/api/v1/auth/oauth/kakao/login"]="0.001"
+            ["/api/v1/auth/tokens"]="0.001"
+            ["/api/v1/experts"]="0.0005"
+            ["/api/v1/chats"]="0.003"
+            ["/api/v1/resumes/tasks"]="0.005"
+          )
+          
+          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
+          START_TIME=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-5M +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '5 min ago' +%Y-%m-%dT%H:%M:%S)
+          
+          FAILED_APIS=()
+          WARNING_APIS=()
+          
+          for endpoint in "${!SLO_AVAILABILITY[@]}"; do
+            target_avail="${SLO_AVAILABILITY[$endpoint]}"
+            target_error="${SLO_ERROR_RATE[$endpoint]}"
+            
+            success_metric=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 60 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_4xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 60 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            status_5xx=$(aws cloudwatch get-metric-statistics \
+              --namespace ReFit/Backend \
+              --metric-name HttpServerRequests \
+              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
+              --start-time "${START_TIME}" \
+              --end-time "${END_TIME}" \
+              --period 60 \
+              --statistics Sum \
+              --region ap-northeast-2 \
+              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
+            
+            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
+            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
+            
+            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
+              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
+              continue
+            fi
+            
+            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
+            if (( $(echo "$total_metric < 100" | bc -l) )); then
+              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
+              continue
+            fi
+            
+            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
+            
+            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
+              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
+              continue
+            fi
+            
+            error_rate=$(echo "scale=8; 1 - $availability" | bc -l)
+            
+            avail_threshold=$(echo "scale=4; $target_avail * 0.9" | bc -l)
+            error_threshold=$(echo "scale=4; $target_error * 2" | bc -l)
+            avail_critical=$(echo "scale=4; $target_avail * 0.8" | bc -l)
+            error_critical=$(echo "scale=4; $target_error * 3" | bc -l)
+            
+            if (( $(echo "$availability < $avail_critical" | bc -l) )) || (( $(echo "$error_rate > $error_critical" | bc -l) )); then
+              echo "${endpoint}: 심각한 SLO 위반 감지"
+              FAILED_APIS+=("${endpoint}")
+            elif (( $(echo "$availability < $avail_threshold" | bc -l) )) || (( $(echo "$error_rate > $error_threshold" | bc -l) )); then
+              echo "${endpoint}: SLO 위반 가능성 감지"
+              WARNING_APIS+=("${endpoint}")
+            fi
+          done
+          
+          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
+            echo "배포 후 심각한 SLO 위반이 감지되었습니다:"
+            for api in "${FAILED_APIS[@]}"; do
+              echo "  - $api"
+            done
+            echo "롤백을 검토하세요. 배포는 성공했지만 서비스 품질이 크게 저하되었습니다."
+            exit 1
+          elif [ ${#WARNING_APIS[@]} -gt 0 ]; then
+            echo "배포 후 SLO 위반 가능성이 감지되었습니다:"
+            for api in "${WARNING_APIS[@]}"; do
+              echo "  - $api"
+            done
+            echo "배포는 성공했지만 모니터링을 강화하고 필요 시 롤백을 검토하세요."
+          fi
 
       - name: Notify Discord on Result
         if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
-          BRANCH: ${{ github.event.workflow_run.head_branch }}
-          SHA: ${{ github.event.workflow_run.head_sha }}
+          BRANCH: ${{ steps.deploy-vars.outputs.branch }}
+          SHA: ${{ steps.deploy-vars.outputs.sha }}
           RUN_ID: ${{ github.run_id }}
         run: |
           if [ "$STATUS" = "success" ]; then
