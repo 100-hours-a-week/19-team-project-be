@@ -2,8 +2,10 @@ package org.refit.refitbackend.domain.user.controller;
 
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.auth.jwt.CustomUserDetails;
+import org.refit.refitbackend.domain.user.dto.UserReq;
 import org.refit.refitbackend.domain.user.dto.UserRes;
 import org.refit.refitbackend.domain.user.service.UserService;
 import org.refit.refitbackend.global.common.dto.CursorPage;
@@ -50,6 +52,30 @@ public class UserController {
     }
 
     /**
+     * 내 정보 수정
+     */
+    @UserSwaggerSpec.UpdateMe
+    @PatchMapping("/me")
+    public ResponseEntity<ApiResponse<UserRes.Me>> updateMe(
+            @AuthenticationPrincipal CustomUserDetails principal,
+
+            @Valid @RequestBody UserReq.UpdateMe request
+    ) {
+        return ResponseUtil.ok("update_success", userService.updateMe(principal.getUserId(), request));
+    }
+
+    /**
+     * 현직자 인증 상태 조회
+     */
+    @UserSwaggerSpec.GetExpertVerificationStatus
+    @GetMapping("/me/expert-status")
+    public ResponseEntity<ApiResponse<UserRes.ExpertVerificationStatus>> getExpertVerificationStatus(
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        return ResponseUtil.ok("success", userService.getExpertVerificationStatus(principal.getUserId()));
+    }
+
+    /**
      * 닉네임 중복 검사
      */
     @UserSwaggerSpec.CheckNickname
@@ -65,7 +91,7 @@ public class UserController {
     }
 
     /**
-     * 전체 유저 검색ㅈ
+     * 전체 유저 검색
      */
     @UserSwaggerSpec.SearchUsers
     @GetMapping("/search")

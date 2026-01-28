@@ -111,4 +111,42 @@ public class User extends BaseEntity {
         this.email = email != null ? email : this.email;
         this.nickname = (nickname != null && !nickname.isBlank()) ? nickname : this.nickname;
     }
+
+    public void updateNickname(String nickname) {
+        if (nickname != null && !nickname.isBlank()) {
+            this.nickname = nickname;
+        }
+    }
+
+    public void updateIntroduction(String introduction) {
+        if (introduction != null) {
+            this.introduction = introduction;
+        }
+    }
+
+    public void updateProfileImageUrl(String profileImageUrl) {
+        if (profileImageUrl != null && !profileImageUrl.isBlank()) {
+            this.profileImageUrl = profileImageUrl;
+        }
+    }
+
+    public void updateCareerLevel(CareerLevel careerLevel) {
+        if (careerLevel != null) {
+            this.careerLevel = careerLevel;
+        }
+    }
+
+    public void replaceUserJobs(List<UserJob> jobs) {
+        this.userJobs.clear();
+        if (jobs != null) {
+            this.userJobs.addAll(jobs);
+        }
+    }
+
+    public void replaceUserSkills(List<UserSkill> skills) {
+        this.userSkills.clear();
+        if (skills != null) {
+            this.userSkills.addAll(skills);
+        }
+    }
 }

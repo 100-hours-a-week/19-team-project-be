@@ -179,4 +179,12 @@ public class UserRes {
             @Schema(description = "사용 가능 여부", example = "true")
             boolean available
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ExpertVerificationStatus(
+            boolean verified,
+            LocalDateTime verifiedAt,
+            String companyName,
+            String companyEmail
+    ) {}
 }
