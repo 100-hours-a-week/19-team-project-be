@@ -10,7 +10,7 @@ public class ResumeRes {
     public record ResumeListItem(
             Long resumeId,
             String title,
-            boolean isFresher,
+            Boolean isFresher,
             String educationLevel,
             String fileUrl,
             LocalDateTime createdAt,
@@ -20,7 +20,7 @@ public class ResumeRes {
     public record ResumeDetail(
             Long resumeId,
             String title,
-            boolean isFresher,
+            Boolean isFresher,
             String educationLevel,
             String fileUrl,
             JsonNode contentJson,

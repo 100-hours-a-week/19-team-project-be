@@ -101,7 +101,7 @@ public class ResumeService {
         return new ResumeRes.ResumeListItem(
                 resume.getId(),
                 resume.getTitle(),
-                resume.isFresher(),
+                resume.getIsFresher(),
                 resume.getEducationLevel(),
                 resume.getFileUrl(),
                 resume.getCreatedAt(),
@@ -113,7 +113,7 @@ public class ResumeService {
         return new ResumeRes.ResumeDetail(
                 resume.getId(),
                 resume.getTitle(),
-                resume.isFresher(),
+                resume.getIsFresher(),
                 resume.getEducationLevel(),
                 resume.getFileUrl(),
                 parseJson(resume.getContentJson()),
@@ -131,6 +131,9 @@ public class ResumeService {
     }
 
     private JsonNode parseJson(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
         try {
             return objectMapper.readTree(value);
         } catch (Exception e) {

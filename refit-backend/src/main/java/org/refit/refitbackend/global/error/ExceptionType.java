@@ -121,6 +121,7 @@ public enum ExceptionType {
     RESUME_FILE_TOO_LARGE(HttpStatus.BAD_REQUEST, "RESUME_FILE_TOO_LARGE", "이력서 파일 용량이 너무 큽니다."),
     RESUME_FILE_URL_INVALID(HttpStatus.BAD_REQUEST, "RESUME_FILE_URL_INVALID", "이력서 파일 URL이 올바르지 않습니다."),
     RESUME_MODE_INVALID(HttpStatus.BAD_REQUEST, "RESUME_MODE_INVALID", "파싱 모드는 sync 또는 async여야 합니다."),
+    RESUME_PARSE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "RESUME_PARSE_FAILED", "이력서 파싱에 실패했습니다."),
 
     TASK_NOT_FOUND(HttpStatus.NOT_FOUND, "TASK_NOT_FOUND", "작업을 찾을 수 없습니다."),
 
