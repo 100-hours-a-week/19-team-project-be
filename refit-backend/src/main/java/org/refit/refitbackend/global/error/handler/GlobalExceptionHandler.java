@@ -219,6 +219,20 @@ public class GlobalExceptionHandler {
                     ExceptionType.VERIFICATION_CODE_INVALID;
 
             /* =======================
+             * User profile
+             * ======================= */
+            case "경력 정보가 필요합니다." ->
+                    ExceptionType.CAREER_LEVEL_REQUIRED;
+            case "직무 ID가 필요합니다." ->
+                    ExceptionType.JOB_IDS_EMPTY;
+            case "스킬 ID가 필요합니다." ->
+                    ExceptionType.SKILL_IDS_EMPTY;
+            case "스킬 순서가 필요합니다." ->
+                    ExceptionType.SKILL_DISPLAY_ORDER_REQUIRED;
+            case "이미지 URL 형식이 올바르지 않습니다." ->
+                    ExceptionType.IMAGE_URL_INVALID;
+
+            /* =======================
              * Fallback
              * ======================= */
             default -> resolveByFieldAndConstraint(field, constraint, rejected);
