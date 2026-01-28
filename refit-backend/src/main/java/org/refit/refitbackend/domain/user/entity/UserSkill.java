@@ -45,4 +45,9 @@ public class UserSkill extends BaseEntity {
         return new UserSkill(user, skill, displayOrder);
     }
 
+    public void updateDisplayOrder(Integer displayOrder) {
+        if (displayOrder != null) {
+            this.displayOrder = displayOrder;
+        }
+    }
 }

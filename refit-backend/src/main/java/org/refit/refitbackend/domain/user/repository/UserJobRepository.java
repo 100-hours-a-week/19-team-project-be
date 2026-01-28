@@ -10,6 +10,8 @@ import java.util.List;
 
 @Repository
 public interface UserJobRepository extends JpaRepository<UserJob, Integer> {
+    void deleteByUser_Id(Long userId);
+
     @Query("""
       SELECT uj FROM UserJob uj
       JOIN FETCH uj.job

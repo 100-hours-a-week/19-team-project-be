@@ -23,6 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -86,16 +89,14 @@ public class UserService {
             if (request.jobIds().isEmpty()) {
                 throw new CustomException(ExceptionType.JOB_IDS_EMPTY);
             }
-            List<UserJob> jobs = buildUserJobs(user, request.jobIds());
-            user.replaceUserJobs(jobs);
+            syncUserJobs(user, request.jobIds());
         }
 
         if (request.skills() != null) {
             if (request.skills().isEmpty()) {
                 throw new CustomException(ExceptionType.SKILL_IDS_EMPTY);
             }
-            List<UserSkill> skills = buildUserSkills(user, request.skills());
-            user.replaceUserSkills(skills);
+            syncUserSkills(user, request.skills());
         }
 
         return UserRes.Me.from(user);
@@ -176,10 +177,7 @@ public class UserService {
         user.updateNickname(nickname);
     }
 
-    private List<UserJob> buildUserJobs(User user, List<Long> jobIds) {
-        if (jobIds.isEmpty()) {
-            return List.of();
-        }
+    private void syncUserJobs(User user, List<Long> jobIds) {
         long distinctCount = jobIds.stream().distinct().count();
         if (distinctCount != jobIds.size()) {
             throw new CustomException(ExceptionType.JOB_DUPLICATE);
@@ -188,15 +186,23 @@ public class UserService {
         if (jobs.size() != jobIds.size()) {
             throw new CustomException(ExceptionType.JOB_NOT_FOUND);
         }
-        return jobs.stream()
-                .map(job -> UserJob.of(user, job))
-                .toList();
+        List<UserJob> existing = user.getUserJobs();
+        Map<Long, UserJob> existingMap = existing.stream()
+                .collect(Collectors.toMap(uj -> uj.getJob().getId(), uj -> uj));
+
+        existing.removeIf(uj -> !jobIds.contains(uj.getJob().getId()));
+
+        Map<Long, Job> jobMap = jobs.stream()
+                .collect(Collectors.toMap(Job::getId, job -> job));
+        for (Long jobId : jobIds) {
+            if (!existingMap.containsKey(jobId)) {
+                Job job = jobMap.get(jobId);
+                existing.add(UserJob.of(user, job));
+            }
+        }
     }
 
-    private List<UserSkill> buildUserSkills(User user, List<UserReq.SkillOrder> skillOrders) {
-        if (skillOrders.isEmpty()) {
-            throw new CustomException(ExceptionType.SKILL_IDS_EMPTY);
-        }
+    private void syncUserSkills(User user, List<UserReq.SkillOrder> skillOrders) {
         if (skillOrders.stream().anyMatch(order -> order.skillId() == null)) {
             throw new CustomException(ExceptionType.SKILL_IDS_EMPTY);
         }
@@ -217,15 +223,25 @@ public class UserService {
         if (skills.size() != skillIds.size()) {
             throw new CustomException(ExceptionType.SKILL_NOT_FOUND);
         }
-        return skillOrders.stream()
-                .map(order -> {
-                    Skill skill = skills.stream()
-                            .filter(s -> s.getId().equals(order.skillId()))
-                            .findFirst()
-                            .orElseThrow(() -> new CustomException(ExceptionType.SKILL_NOT_FOUND));
-                    return UserSkill.of(user, skill, order.displayOrder());
-                })
-                .toList();
+        Map<Long, Skill> skillMap = skills.stream()
+                .collect(Collectors.toMap(Skill::getId, skill -> skill));
+
+        List<UserSkill> existing = user.getUserSkills();
+        Map<Long, UserSkill> existingMap = existing.stream()
+                .collect(Collectors.toMap(us -> us.getSkill().getId(), us -> us));
+
+        Set<Long> requested = new java.util.HashSet<>(skillIds);
+        existing.removeIf(us -> !requested.contains(us.getSkill().getId()));
+
+        for (UserReq.SkillOrder order : skillOrders) {
+            UserSkill current = existingMap.get(order.skillId());
+            if (current != null) {
+                current.updateDisplayOrder(order.displayOrder());
+                continue;
+            }
+            Skill skill = skillMap.get(order.skillId());
+            existing.add(UserSkill.of(user, skill, order.displayOrder()));
+        }
     }
 
     private void validateProfileImageUrl(String url) {
