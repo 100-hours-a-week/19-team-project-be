@@ -34,21 +34,21 @@ public class Resume extends BaseEntity {
 
     private String title;
 
-    @Column(name = "is_fresher", nullable = false)
-    private boolean isFresher;
+    @Column(name = "is_fresher")
+    private Boolean isFresher;
 
-    @Column(name = "education_level", nullable = false)
+    @Column(name = "education_level")
     private String educationLevel;
 
     @Column(name = "file_url")
     private String fileUrl;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "content_json", nullable = false, columnDefinition = "JSONB")
+    @Column(name = "content_json", columnDefinition = "JSONB")
     private String contentJson;
 
     @Builder
-    private Resume(User user, String title, boolean isFresher, String educationLevel, String fileUrl, String contentJson) {
+    private Resume(User user, String title, Boolean isFresher, String educationLevel, String fileUrl, String contentJson) {
         this.user = user;
         this.title = title;
         this.isFresher = isFresher;
