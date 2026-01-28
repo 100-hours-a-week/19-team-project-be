@@ -35,6 +35,15 @@ springdoc:
   api-docs:
     enabled: true
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  metrics:
+    enable:
+      hikari: true
+
 logging:
   level:
     root: info
