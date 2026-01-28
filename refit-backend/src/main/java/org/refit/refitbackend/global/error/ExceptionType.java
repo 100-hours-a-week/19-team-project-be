@@ -78,8 +78,11 @@ public enum ExceptionType {
     SKILL_NOT_FOUND(HttpStatus.BAD_REQUEST, "SKILL_NOT_FOUND", "스킬을 찾을 수 없습니다."),
     SKILL_DUPLICATE(HttpStatus.BAD_REQUEST, "SKILL_DUPLICATE", "중복된 스킬이 포함되어 있습니다."),
     SKILL_LIMIT_EXCEEDED(HttpStatus.BAD_REQUEST, "SKILL_LIMIT_EXCEEDED", "스킬 개수가 제한을 초과했습니다."),
+    SKILL_IDS_EMPTY(HttpStatus.BAD_REQUEST, "SKILL_IDS_EMPTY", "스킬 ID가 필요합니다."),
+    SKILL_DISPLAY_ORDER_REQUIRED(HttpStatus.BAD_REQUEST, "SKILL_DISPLAY_ORDER_REQUIRED", "스킬 순서가 필요합니다."),
 
     CAREER_LEVEL_NOT_FOUND(HttpStatus.BAD_REQUEST, "CAREER_LEVEL_NOT_FOUND", "경력 레벨을 찾을 수 없습니다."),
+    CAREER_LEVEL_REQUIRED(HttpStatus.BAD_REQUEST, "CAREER_LEVEL_REQUIRED", "경력 정보가 필요합니다."),
 
     /* =======================
      * Expert
