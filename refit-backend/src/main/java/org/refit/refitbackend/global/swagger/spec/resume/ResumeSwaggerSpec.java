@@ -2,6 +2,8 @@ package org.refit.refitbackend.global.swagger.spec.resume;
 
 import org.refit.refitbackend.domain.resume.dto.ResumeReq;
 import org.refit.refitbackend.domain.resume.dto.ResumeRes;
+import org.refit.refitbackend.domain.resume.dto.ResumeTaskReq;
+import org.refit.refitbackend.domain.resume.dto.ResumeTaskRes;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiBadRequestError;
@@ -140,4 +142,25 @@ public final class ResumeSwaggerSpec {
     })
     @SwaggerApiUnauthorizedError(types = { ExceptionType.AUTH_UNAUTHORIZED })
     public @interface DeleteResume {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "이력서 파싱(동기)",
+            operationDescription = "AI 서버로 이력서 파싱을 요청합니다. mode=async는 지원하지 않습니다.",
+            implementation = ResumeTaskRes.TaskResult.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.RESUME_FILE_URL_INVALID,
+            ExceptionType.RESUME_FILE_NOT_PDF,
+            ExceptionType.RESUME_MODE_INVALID
+    })
+    @SwaggerApiRequestBody(
+            implementation = ResumeTaskReq.Parse.class,
+            examples = {
+                    "{ \"file_url\": \"https://cdn.example.com/resume.pdf\", \"mode\": \"sync\" }"
+            },
+            exampleNames = { "resume_parse_sync" }
+    )
+    public @interface ParseResumeTask {}
 }
