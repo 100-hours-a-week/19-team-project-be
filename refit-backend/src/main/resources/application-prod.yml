@@ -14,6 +14,8 @@ spring:
 
   jackson:
     property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
 
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
@@ -32,6 +34,15 @@ springdoc:
     disable-swagger-default-url: true
   api-docs:
     enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  metrics:
+    enable:
+      hikari: true
 
 logging:
   level:
