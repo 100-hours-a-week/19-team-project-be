@@ -40,7 +40,10 @@ public class ChatReq {
             String content,
 
             @Schema(description = "메시지 타입", example = "TEXT")
-            String messageType  // TEXT, FILE, SYSTEM
+            String messageType,  // TEXT, FILE, SYSTEM
+
+            @Schema(description = "클라이언트 메시지 ID (중복 방지용)", example = "cmsg_1700000000000")
+            String clientMessageId
     ) {}
 
     @Schema(description = "메시지 읽음 처리 요청")
