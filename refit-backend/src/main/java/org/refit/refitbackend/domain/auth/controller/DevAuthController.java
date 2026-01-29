@@ -8,12 +8,14 @@ import org.refit.refitbackend.domain.auth.service.CustomOAuth2UserService;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.swagger.spec.auth.AuthSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Profile("dev")
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v1/auth")
