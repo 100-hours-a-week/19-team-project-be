@@ -125,6 +125,9 @@ public class ChatRes {
             @Schema(description = "메시지 내용", example = "안녕하세요!")
             String content,
 
+            @Schema(description = "클라이언트 메시지 ID", example = "cmsg_1700000000000")
+            String clientMessageId,
+
             @Schema(description = "전송 시각")
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime createdAt
@@ -136,6 +139,7 @@ public class ChatRes {
                     UserInfo.from(message.getSender()),
                     message.getMessageType().name(),
                     message.getContent(),
+                    message.getClientMessageId(),
                     message.getCreatedAt()
             );
         }
