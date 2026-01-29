@@ -9,6 +9,7 @@ import org.refit.refitbackend.domain.user.service.DevUserService;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.swagger.spec.user.UserSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
+import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+@Profile("dev")
 @Tag(name = "DevUser", description = "개발용 유저 전환 API")
 @RestController
 @Validated

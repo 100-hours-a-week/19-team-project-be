@@ -12,10 +12,12 @@ import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Profile("dev")
 @RequiredArgsConstructor
 public class DevUserService {
 
