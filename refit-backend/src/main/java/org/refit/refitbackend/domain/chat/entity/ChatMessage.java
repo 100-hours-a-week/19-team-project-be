@@ -39,12 +39,16 @@ public class ChatMessage extends BaseEntity {
     @Column(name = "room_sequence", nullable = false)
     private Long roomSequence;
 
+    @Column(name = "client_message_id", length = 64)
+    private String clientMessageId;
+
     @Builder
-    private ChatMessage(ChatRoom chatRoom, User sender, MessageType messageType, String content, Long roomSequence) {
+    private ChatMessage(ChatRoom chatRoom, User sender, MessageType messageType, String content, Long roomSequence, String clientMessageId) {
         this.chatRoom = chatRoom;
         this.sender = sender;
         this.messageType = messageType;
         this.content = content;
         this.roomSequence = roomSequence;
+        this.clientMessageId = clientMessageId;
     }
 }

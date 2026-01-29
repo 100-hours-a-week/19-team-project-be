@@ -55,6 +55,7 @@ public class ChatMessageService {
                 .messageType(messageType)
                 .content(request.content())
                 .roomSequence(roomSequence)
+                .clientMessageId(request.clientMessageId())
                 .build();
 
         ChatMessage savedMessage = chatMessageRepository.save(message);
