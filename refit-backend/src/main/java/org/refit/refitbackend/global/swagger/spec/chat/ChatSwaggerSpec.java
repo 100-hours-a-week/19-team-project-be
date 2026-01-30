@@ -74,6 +74,27 @@ public final class ChatSwaggerSpec {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
+            summary = "채팅방 이력서 다운로드 URL 발급",
+            operationDescription = "채팅방에 연결된 이력서 원본 다운로드용 presigned URL을 발급합니다",
+            implementation = ApiResponse.class
+    )
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "403", description = "forbidden", types = {
+            ExceptionType.STORAGE_ACCESS_FORBIDDEN
+    })
+    @SwaggerApiError(responseCode = "404", description = "not_found", types = {
+            ExceptionType.CHAT_ROOM_NOT_FOUND,
+            ExceptionType.RESUME_NOT_FOUND
+    })
+    public @interface GetResumeDownloadUrl {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
             summary = "채팅방 종료",
             operationDescription = "채팅방을 종료합니다",
             implementation = ApiResponse.class

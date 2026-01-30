@@ -42,4 +42,43 @@ public final class StorageSwaggerSpec {
             }
     )
     public @interface IssuePresignedUrl {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "Presigned URL 발급 (다운로드, POST)",
+            operationDescription = "S3 다운로드용 presigned URL을 발급합니다. (POST)",
+            implementation = PresignedUrlResponse.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.INVALID_REQUEST
+    })
+    @SwaggerApiUnauthorizedError(types = {
+            ExceptionType.AUTH_UNAUTHORIZED
+    })
+    @SwaggerApiRequestBody(
+            implementation = StorageReq.PresignedDownloadRequest.class,
+            examples = {
+                    "{ \"file_url\": \"https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/resumes/original/1/abc123.pdf\" }"
+            },
+            exampleNames = {
+                    "download_url"
+            }
+    )
+    public @interface IssuePresignedDownloadUrlPost {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "Presigned URL 발급 (다운로드, GET)",
+            operationDescription = "S3 다운로드용 presigned URL을 발급합니다. (GET)",
+            implementation = PresignedUrlResponse.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.INVALID_REQUEST
+    })
+    @SwaggerApiUnauthorizedError(types = {
+            ExceptionType.AUTH_UNAUTHORIZED
+    })
+    public @interface IssuePresignedDownloadUrlGet {}
 }
