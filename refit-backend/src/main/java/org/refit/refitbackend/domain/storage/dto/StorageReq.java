@@ -15,6 +15,11 @@ public class StorageReq {
             String fileName
     ) {}
 
+    public record PresignedDownloadRequest(
+            @NotBlank(message = "파일 URL이 필요합니다.")
+            String fileUrl
+    ) {}
+
     public enum UploadTarget {
         PROFILE_IMAGE,
         RESUME_PDF
