@@ -12,6 +12,7 @@ import org.refit.refitbackend.domain.chat.service.ChatRoomService;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
+import org.refit.refitbackend.global.storage.PresignedUrlResponse;
 import org.refit.refitbackend.global.swagger.spec.chat.ChatSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
@@ -70,6 +71,20 @@ public class ChatRoomController {
     ) {
         ChatRes.RoomDetail room = chatRoomService.getRoomDetail(principal.getUserId(), chatId);
         return ResponseUtil.ok("success", room);
+    }
+
+    /**
+     * 채팅방 이력서 원본 다운로드용 presigned URL 발급
+     */
+    @ChatSwaggerSpec.GetResumeDownloadUrl
+    @GetMapping("/{chat_id}/resume/presigned-url")
+    public ResponseEntity<ApiResponse<PresignedUrlResponse>> getResumePresignedUrl(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @Parameter(description = "채팅방 ID", example = "1", required = true)
+            @PathVariable("chat_id") Long chatId
+    ) {
+        PresignedUrlResponse response = chatRoomService.getResumeDownloadUrl(principal.getUserId(), chatId);
+        return ResponseUtil.ok("presigned_url_issued", response);
     }
 
     /**

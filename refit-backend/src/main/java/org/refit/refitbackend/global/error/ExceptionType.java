@@ -25,6 +25,7 @@ public enum ExceptionType {
     OAUTH_DUPLICATE(HttpStatus.CONFLICT, "OAUTH_DUPLICATE", "이미 연동된 OAuth 계정입니다."),
 
     FORBIDDEN(HttpStatus.FORBIDDEN, "FORBIDDEN", "접근 권한이 없습니다."),
+    STORAGE_ACCESS_FORBIDDEN(HttpStatus.FORBIDDEN, "STORAGE_ACCESS_FORBIDDEN", "해당 파일에 접근 권한이 없습니다."),
 
 
     SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "SERVICE_UNAVAILABLE", "서비스를 사용할 수 없습니다. 잠시 후 다시 시도해 주세요."),
