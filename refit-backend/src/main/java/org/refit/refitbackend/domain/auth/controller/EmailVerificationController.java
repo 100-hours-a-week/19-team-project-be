@@ -28,7 +28,7 @@ public class EmailVerificationController {
     private final EmailVerificationService emailVerificationService;
 
     @AuthSwaggerSpec.SendEmailVerificationCode
-    @SecurityRequirement(name = "accessToken")
+    @SecurityRequirement(name = "bearerAuth")
     @PostMapping
     public ResponseEntity<ApiResponse<EmailVerificationRes.Send>> sendCode(
             @AuthenticationPrincipal CustomUserDetails principal,
@@ -48,7 +48,7 @@ public class EmailVerificationController {
     }
 
     @AuthSwaggerSpec.VerifyEmailCode
-    @SecurityRequirement(name = "accessToken")
+    @SecurityRequirement(name = "bearerAuth")
     @PatchMapping
     public ResponseEntity<ApiResponse<EmailVerificationRes.Verify>> verifyCode(
             @AuthenticationPrincipal CustomUserDetails principal,
