@@ -5,7 +5,11 @@ import org.refit.refitbackend.domain.auth.dto.EmailVerificationRes;
 import org.refit.refitbackend.domain.auth.entity.EmailVerification;
 import org.refit.refitbackend.domain.auth.entity.EmailVerificationStatus;
 import org.refit.refitbackend.domain.auth.repository.EmailVerificationRepository;
+import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
+import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
+import org.refit.refitbackend.domain.master.repository.EmailDomainRepository;
 import org.refit.refitbackend.domain.user.entity.User;
+import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
@@ -44,6 +48,8 @@ public class EmailVerificationService {
 
     private final EmailVerificationRepository emailVerificationRepository;
     private final UserRepository userRepository;
+    private final ExpertProfileRepository expertProfileRepository;
+    private final EmailDomainRepository emailDomainRepository;
     private final JavaMailSender mailSender;
 
     @Transactional
@@ -116,6 +122,9 @@ public class EmailVerificationService {
     public EmailVerificationRes.Verify verifyCode(Long userId, String email, String code) {
         validateEmail(email);
 
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+
         EmailVerification latest = emailVerificationRepository
                 .findTopByUserIdAndEmailOrderByIdDesc(userId, email)
                 .orElseThrow(() -> new CustomException(ExceptionType.VERIFICATION_CODE_INVALID));
@@ -131,6 +140,7 @@ public class EmailVerificationService {
         }
 
         latest.markVerified(now);
+        promoteExpertIfNeeded(user, email, now);
         return new EmailVerificationRes.Verify(email, now);
     }
 
@@ -153,6 +163,8 @@ public class EmailVerificationService {
         }
 
         latest.markVerified(now);
+        userRepository.findByEmail(email)
+                .ifPresent(user -> promoteExpertIfNeeded(user, email, now));
         return new EmailVerificationRes.Verify(email, now);
     }
 
@@ -184,5 +196,40 @@ public class EmailVerificationService {
         message.setSubject("[Re-fit] Email Verification Code");
         message.setText("Your verification code is " + code + ". It expires in 5 minutes.");
         mailSender.send(message);
+    }
+
+    private void promoteExpertIfNeeded(User user, String email, LocalDateTime verifiedAt) {
+        if (user.getUserType() != UserType.EXPERT) {
+            user.updateUserType(UserType.EXPERT);
+        }
+
+        ExpertProfile profile = user.getExpertProfile();
+        if (profile == null) {
+            String companyName = resolveCompanyName(email);
+            ExpertProfile newProfile = ExpertProfile.create(user, companyName, email);
+            newProfile.markVerified(verifiedAt);
+            expertProfileRepository.save(newProfile);
+            return;
+        }
+
+        profile.markVerified(verifiedAt);
+    }
+
+    private String resolveCompanyName(String email) {
+        String domain = extractDomain(email);
+        if (domain == null) {
+            return null;
+        }
+        return emailDomainRepository.findById(domain)
+                .map(d -> d.getCompanyName())
+                .orElse(null);
+    }
+
+    private String extractDomain(String email) {
+        int at = email.indexOf('@');
+        if (at < 0 || at == email.length() - 1) {
+            return null;
+        }
+        return email.substring(at + 1).toLowerCase();
     }
 }
