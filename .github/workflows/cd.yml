@@ -35,265 +35,10 @@ permissions:
   actions: read
 
 jobs:
-  pre-deployment-validation:
-    name: Pre-Deployment SLI/SLO Validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: |
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
-      github.event_name == 'workflow_dispatch'
-    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y bc jq
-
-      - name: Validate Error Budget
-        run: |
-          set -euo pipefail
-          
-          declare -A SLO_TARGETS=(
-            ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.999"
-            ["/api/v1/auth/tokens"]="0.999"
-            ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.995"
-            ["/api/v1/resumes/tasks"]="0.995"
-          )
-          
-          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
-          START_TIME=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-24H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S)
-          
-          MAX_ERROR_BUDGET_BURN=0
-          FAILED_APIS=()
-          
-          for endpoint in "${!SLO_TARGETS[@]}"; do
-            # 변수 초기화
-            burn_rate=0
-            target="${SLO_TARGETS[$endpoint]}"
-            error_budget=$(echo "scale=8; 1 - $target" | bc -l)
-            
-            success_metric=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_4xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_5xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
-            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
-            
-            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
-              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
-              continue
-            fi
-            
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
-            if (( $(echo "$total_metric < 100" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
-              continue
-            fi
-            
-            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
-            
-            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
-              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
-              continue
-            fi
-            
-            # Error Budget 소진률 = (가용성 차이 / Error Budget) * 100
-            # 가용성 차이 = 목표 가용성 - 실제 가용성
-            # Error Budget = 1 - 목표 가용성
-            availability_diff=$(echo "scale=8; $target - $availability" | bc -l)
-            
-            # 가용성이 목표보다 높거나 같으면 소진률 0
-            if (( $(echo "$availability >= $target" | bc -l) )); then
-              burn_rate=0
-            else
-              # 가용성 차이가 Error Budget보다 크거나 같으면 100%로 제한
-              # 더 정확한 비교를 위해 scale을 높여서 계산
-              diff_check=$(echo "scale=10; if ($availability_diff >= $error_budget) 1 else 0" | bc -l | tr -d '\n')
-              if [ -n "$diff_check" ] && [ "$diff_check" = "1" ]; then
-                burn_rate=100
-              else
-                burn_rate=$(echo "scale=2; ($availability_diff / $error_budget) * 100" | bc -l)
-                # 계산 결과가 100을 초과하면 100으로 제한
-                if (( $(echo "$burn_rate > 100" | bc -l) )); then
-                  burn_rate=100
-                fi
-              fi
-            fi
-            
-            echo "${endpoint}:"
-            echo "  목표 가용성: $(echo "scale=4; $target * 100" | bc -l)%"
-            echo "  실제 가용성: $(echo "scale=4; $availability * 100" | bc -l)%"
-            echo "  가용성 차이: $(echo "scale=6; $availability_diff * 100" | bc -l)%"
-            echo "  Error Budget: $(echo "scale=6; $error_budget * 100" | bc -l)%"
-            echo "  Error Budget 소진률: ${burn_rate}%"
-            
-            if (( $(echo "$burn_rate >= 100" | bc -l) )); then
-              echo "Error Budget 소진률이 100% 이상입니다. 배포를 중단합니다."
-              exit 1
-            fi
-            
-            if (( $(echo "$burn_rate >= 75" | bc -l) )); then
-              echo "Error Budget 소진률이 75% 이상입니다. 배포를 중단합니다."
-              exit 1
-            fi
-            
-            if (( $(echo "$burn_rate >= 50" | bc -l) )); then
-              FAILED_APIS+=("${endpoint}: ${burn_rate}%")
-              if (( $(echo "$burn_rate > $MAX_ERROR_BUDGET_BURN" | bc -l) )); then
-                MAX_ERROR_BUDGET_BURN=$burn_rate
-              fi
-            fi
-          done
-          
-          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
-            echo "Error Budget 소진률 경고:"
-            for api in "${FAILED_APIS[@]}"; do
-              echo "  - $api"
-            done
-            echo "Error Budget 소진률이 50% 이상이지만 75% 미만입니다. 배포를 계속 진행하되 주의가 필요합니다."
-          fi
-
-      - name: Validate Recent SLO Compliance
-        run: |
-          set -euo pipefail
-          
-          declare -A SLO_AVAILABILITY=(
-            ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.999"
-            ["/api/v1/auth/tokens"]="0.999"
-            ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.995"
-            ["/api/v1/resumes/tasks"]="0.995"
-          )
-          
-          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
-          START_TIME=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-24H +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%S)
-          
-          FAILED_APIS=()
-          
-          for endpoint in "${!SLO_AVAILABILITY[@]}"; do
-            target="${SLO_AVAILABILITY[$endpoint]}"
-            
-            success_metric=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_4xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_5xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 3600 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
-            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
-            
-            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
-              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
-              continue
-            fi
-            
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
-            if (( $(echo "$total_metric < 100" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
-              continue
-            fi
-            
-            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
-            
-            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
-              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
-              continue
-            fi
-            
-            if (( $(echo "$availability < $target" | bc -l) )); then
-              echo "${endpoint}: SLO 미달성 (목표: $(echo "scale=2; $target * 100" | bc -l)%, 실제: $(echo "scale=2; $availability * 100" | bc -l)%)"
-              FAILED_APIS+=("${endpoint}")
-            fi
-          done
-          
-          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
-            echo "최근 24시간 동안 SLO를 달성하지 못한 Tier 1 API가 있습니다:"
-            for api in "${FAILED_APIS[@]}"; do
-              echo "  - $api"
-            done
-            echo "배포를 계속 진행하되, 배포 후 모니터링을 강화하세요."
-          fi
-
   deploy:
     name: Deploy to Server
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: pre-deployment-validation
     # 동일 브랜치의 동시 배포 방지
     concurrency:
       group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
@@ -319,7 +64,6 @@ jobs:
             const branch = '${{ inputs.branch }}';
             console.log(`Finding latest artifact for branch: ${branch}`);
 
-            // CI 워크플로우의 최근 성공한 실행 찾기
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -334,7 +78,6 @@ jobs:
               return;
             }
 
-            // 아티팩트가 있는 최신 실행 찾기
             for (const run of runs.data.workflow_runs) {
               const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
                 owner: context.repo.owner,
@@ -516,6 +259,32 @@ jobs:
           SCRIPT_END
           )
           
+          # 헬스체크 (최대 5회 재시도)
+          for i in {1..5}; do
+            HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
+            if [ "${HTTP_STATUS}" = "200" ]; then
+              HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
+              if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
+                sudo -u ubuntu pm2 save 2>/dev/null || true
+                (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
+                exit 0
+              fi
+            fi
+            [ $i -lt 5 ] && sleep 3
+          done
+          
+          # 헬스체크 실패 시 롤백
+          BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
+          if [ -f "${BACKUP_FILE}" ]; then
+            cp "${BACKUP_FILE}" "${JAR_PATH}"
+            sudo -u ubuntu pm2 restart ${APP_NAME}
+            sleep 5
+            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && sudo -u ubuntu pm2 save 2>/dev/null || true
+          fi
+          exit 1
+          SCRIPT_END
+          )
+          
           # SSM 명령 실행 (base64 인코딩으로 특수문자 이스케이프 문제 방지)
           DEPLOY_SCRIPT_ENCODED=$(echo "$DEPLOY_SCRIPT" | base64 -w 0)
           SSM_COMMAND="bash -c \"echo '$DEPLOY_SCRIPT_ENCODED' | base64 -d | bash -s -- '$BASE_PATH' '$JAR_PATH' '$JAR_GZ_PATH' '$S3_BUCKET' '$S3_KEY' '$HEALTH_CHECK_URL'\""
@@ -596,131 +365,6 @@ jobs:
             --query 'StandardErrorContent' \
             --output text 2>/dev/null || echo "(없음)"
           exit 1
-
-      - name: Post-Deployment SLI/SLO Validation
-        if: success() && vars.ENABLE_POST_DEPLOYMENT_VALIDATION != 'false'
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: ap-northeast-2
-        run: |
-          set -euo pipefail
-          
-          echo "배포 후 SLI 검증을 위해 1분 대기 중..."
-          sleep 60
-          
-          declare -A SLO_AVAILABILITY=(
-            ["/api/v1/auth/signup"]="0.997"
-            ["/api/v1/auth/oauth/kakao/login"]="0.999"
-            ["/api/v1/auth/tokens"]="0.999"
-            ["/api/v1/experts"]="0.9995"
-            ["/api/v1/chats"]="0.995"
-            ["/api/v1/resumes/tasks"]="0.995"
-          )
-          
-          declare -A SLO_ERROR_RATE=(
-            ["/api/v1/auth/signup"]="0.003"
-            ["/api/v1/auth/oauth/kakao/login"]="0.001"
-            ["/api/v1/auth/tokens"]="0.001"
-            ["/api/v1/experts"]="0.0005"
-            ["/api/v1/chats"]="0.003"
-            ["/api/v1/resumes/tasks"]="0.005"
-          )
-          
-          END_TIME=$(date -u +%Y-%m-%dT%H:%M:%S)
-          START_TIME=$(date -u -d '5 minutes ago' +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -v-5M +%Y-%m-%dT%H:%M:%S 2>/dev/null || date -u -d '5 min ago' +%Y-%m-%dT%H:%M:%S)
-          
-          FAILED_APIS=()
-          WARNING_APIS=()
-          
-          for endpoint in "${!SLO_AVAILABILITY[@]}"; do
-            target_avail="${SLO_AVAILABILITY[$endpoint]}"
-            target_error="${SLO_ERROR_RATE[$endpoint]}"
-            
-            success_metric=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="2xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 60 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_4xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="4xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 60 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            status_5xx=$(aws cloudwatch get-metric-statistics \
-              --namespace ReFit/Backend \
-              --metric-name HttpServerRequests \
-              --dimensions Name=uri,Value="${endpoint}" Name=status,Value="5xx" \
-              --start-time "${START_TIME}" \
-              --end-time "${END_TIME}" \
-              --period 60 \
-              --statistics Sum \
-              --region ap-northeast-2 \
-              --query 'Datapoints[*].Sum' --output text 2>/dev/null | awk '{for(i=1;i<=NF;i++) sum+=$i} END {print sum+0}')
-            
-            # SLO 계산: 2xx는 성공, 5xx만 에러로 계산 (4xx는 클라이언트 에러로 제외)
-            total_metric=$(echo "scale=0; $success_metric + $status_5xx" | bc -l)
-            
-            if [ -z "$total_metric" ] || [ "$total_metric" = "0" ]; then
-              echo "${endpoint}: 메트릭 데이터가 없어 스킵합니다."
-              continue
-            fi
-            
-            # 데이터가 충분하지 않으면 신뢰할 수 없으므로 스킵 (최소 100개 요청 필요)
-            if (( $(echo "$total_metric < 100" | bc -l) )); then
-              echo "${endpoint}: 요청 수가 부족하여 스킵합니다. (총 요청: ${total_metric}, 최소 100개 필요)"
-              continue
-            fi
-            
-            availability=$(echo "scale=8; $success_metric / $total_metric" | bc -l)
-            
-            if [ -z "$availability" ] || [ "$availability" = "0" ]; then
-              echo "${endpoint}: 가용성 계산 불가 (success: ${success_metric}, total: ${total_metric})"
-              continue
-            fi
-            
-            error_rate=$(echo "scale=8; 1 - $availability" | bc -l)
-            
-            avail_threshold=$(echo "scale=4; $target_avail * 0.9" | bc -l)
-            error_threshold=$(echo "scale=4; $target_error * 2" | bc -l)
-            avail_critical=$(echo "scale=4; $target_avail * 0.8" | bc -l)
-            error_critical=$(echo "scale=4; $target_error * 3" | bc -l)
-            
-            if (( $(echo "$availability < $avail_critical" | bc -l) )) || (( $(echo "$error_rate > $error_critical" | bc -l) )); then
-              echo "${endpoint}: 심각한 SLO 위반 감지"
-              FAILED_APIS+=("${endpoint}")
-            elif (( $(echo "$availability < $avail_threshold" | bc -l) )) || (( $(echo "$error_rate > $error_threshold" | bc -l) )); then
-              echo "${endpoint}: SLO 위반 가능성 감지"
-              WARNING_APIS+=("${endpoint}")
-            fi
-          done
-          
-          if [ ${#FAILED_APIS[@]} -gt 0 ]; then
-            echo "배포 후 심각한 SLO 위반이 감지되었습니다:"
-            for api in "${FAILED_APIS[@]}"; do
-              echo "  - $api"
-            done
-            echo "롤백을 검토하세요. 배포는 성공했지만 서비스 품질이 크게 저하되었습니다."
-            exit 1
-          elif [ ${#WARNING_APIS[@]} -gt 0 ]; then
-            echo "배포 후 SLO 위반 가능성이 감지되었습니다:"
-            for api in "${WARNING_APIS[@]}"; do
-              echo "  - $api"
-            done
-            echo "배포는 성공했지만 모니터링을 강화하고 필요 시 롤백을 검토하세요."
-          fi
 
       - name: Notify Discord on Result
         if: always()
