@@ -63,8 +63,8 @@ public class User extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String introduction;
 
-    @Column(nullable = false, length = 255)
-    private String profileImageUrl = "https://cdn.refit.com/default-profile.png";
+    @Column(length = 255)
+    private String profileImageUrl;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
@@ -104,7 +104,6 @@ public class User extends BaseEntity {
         this.introduction = introduction;
 
         this.role = Role.USER;
-        this.profileImageUrl = "https://cdn.refit.com/default-profile.png";
     }
 
     public void updateProfile(String email, String nickname) {
