@@ -8,11 +8,16 @@ import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.resume.entity.Resume;
+import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
+import org.refit.refitbackend.domain.storage.dto.StorageReq;
+import org.refit.refitbackend.domain.storage.service.StorageService;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.refit.refitbackend.global.storage.PresignedUrlResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +32,8 @@ public class ChatRoomService {
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
+    private final ResumeRepository resumeRepository;
+    private final StorageService storageService;
 
     /**
      * 채팅방 생성
@@ -113,6 +120,30 @@ public class ChatRoomService {
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
         return ChatRes.RoomDetail.from(room);
+    }
+
+    /**
+     * 채팅방 이력서 원본 다운로드용 presigned URL 발급
+     */
+    public PresignedUrlResponse getResumeDownloadUrl(Long userId, Long roomId) {
+        ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
+
+        Long resumeId = room.getResumeId();
+        if (resumeId == null) {
+            throw new CustomException(ExceptionType.RESUME_NOT_FOUND);
+        }
+
+        Resume resume = resumeRepository.findById(resumeId)
+                .orElseThrow(() -> new CustomException(ExceptionType.RESUME_NOT_FOUND));
+
+        String fileUrl = resume.getFileUrl();
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new CustomException(ExceptionType.RESUME_NOT_FOUND);
+        }
+
+        StorageReq.PresignedDownloadRequest request = new StorageReq.PresignedDownloadRequest(fileUrl);
+        return storageService.issuePresignedDownloadUrl(userId, request);
     }
 
     /**

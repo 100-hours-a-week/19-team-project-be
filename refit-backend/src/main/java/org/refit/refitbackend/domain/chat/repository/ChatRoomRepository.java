@@ -51,4 +51,14 @@ public interface ChatRoomRepository extends JpaRepository<ChatRoom, Long> {
             @Param("userId1") Long userId1,
             @Param("userId2") Long userId2
     );
+
+    @Query("""
+          SELECT COUNT(cr) > 0 FROM ChatRoom cr
+          WHERE cr.resumeId = :resumeId
+            AND (cr.requester.id = :userId OR cr.receiver.id = :userId)
+      """)
+    boolean existsByResumeIdAndUserId(
+            @Param("resumeId") Long resumeId,
+            @Param("userId") Long userId
+    );
 }
