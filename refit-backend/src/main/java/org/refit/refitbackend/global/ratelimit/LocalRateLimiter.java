@@ -20,17 +20,17 @@ public class LocalRateLimiter {
         if (counter == null || now - counter.windowStartMs >= windowMs) {
             store.put(key, new Counter(now, 1));
             cleanupIfNeeded(now, windowMs);
-            return RateLimitResult.allowed();
+            return RateLimitResult.allow();
         }
 
         if (counter.count < limit) {
             counter.count += 1;
-            return RateLimitResult.allowed();
+            return RateLimitResult.allow();
         }
 
         long retryAfterMs = windowMs - (now - counter.windowStartMs);
         long retryAfterSeconds = Math.max(1, retryAfterMs / 1000);
-        return RateLimitResult.blocked(retryAfterSeconds);
+        return RateLimitResult.block(retryAfterSeconds);
     }
 
     private void cleanupIfNeeded(long now, long windowMs) {

@@ -1,11 +1,11 @@
 package org.refit.refitbackend.global.ratelimit;
 
 public record RateLimitResult(boolean allowed, long retryAfterSeconds) {
-    public static RateLimitResult allowed() {
+    public static RateLimitResult allow() {
         return new RateLimitResult(true, 0);
     }
 
-    public static RateLimitResult blocked(long retryAfterSeconds) {
+    public static RateLimitResult block(long retryAfterSeconds) {
         return new RateLimitResult(false, retryAfterSeconds);
     }
 }
