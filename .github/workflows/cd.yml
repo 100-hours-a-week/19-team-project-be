@@ -267,7 +267,8 @@ jobs:
           systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
           sudo -u ubuntu pm2 save 2>/dev/null || true
           
-          # EC2 내부에서 헬스체크 (최대 5회 재시도)
+          # 기본 15초 대기 후 헬스체크 (3초 간격 5회 재시도)
+          sleep 15
           for i in 1 2 3 4 5; do
             HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
             if [ "${HTTP_STATUS}" = "200" ]; then
