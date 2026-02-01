@@ -86,6 +86,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     }
 
     private boolean shouldSkip(String path, String method, HttpServletRequest request) {
+        if (isSwaggerPath(path)) {
+            return true;
+        }
         for (String pattern : allowUrls) {
             if ("/".equals(pattern)) {
                 if ("/".equals(path)) return true;
@@ -99,6 +102,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             if (path.equals(pattern)) return true;
         }
         return false;
+    }
+
+    private boolean isSwaggerPath(String path) {
+        return path.startsWith("/swagger-ui")
+                || path.startsWith("/swagger-resources")
+                || path.startsWith("/v3/api-docs")
+                || path.startsWith("/api/swagger-ui")
+                || path.startsWith("/api/swagger-resources")
+                || path.startsWith("/api/v3/api-docs");
     }
 
 
