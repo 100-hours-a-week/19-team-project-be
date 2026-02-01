@@ -37,7 +37,7 @@ public class EmailVerificationService {
             Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
 
     private static final Set<String> FREE_EMAIL_DOMAINS = Set.of(
-//            "gmail.com", "naver.com", "daum.net", "kakao.com", "hanmail.net",
+            "gmail.com", "naver.com", "daum.net", "kakao.com", "hanmail.net",
             "hotmail.com", "outlook.com", "live.com", "yahoo.com", "icloud.com",
             "proton.me", "protonmail.com"
     );
