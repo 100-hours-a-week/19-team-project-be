@@ -225,6 +225,19 @@ jobs:
           
           trap 'sudo -u ubuntu pm2 status || true; exit $?' ERR
           
+          # PM2가 이미 실행 중이면 실제 사용 중인 JAR 경로로 배포
+          if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+            PID=$(sudo -u ubuntu pm2 pid ${APP_NAME} 2>/dev/null || true)
+            if [ -n "${PID}" ] && [ -r /proc/${PID}/cmdline ]; then
+              PM2_JAR=$(tr '\0' '\n' < /proc/${PID}/cmdline 2>/dev/null | grep '\.jar$' | head -1 || true)
+              if [ -n "${PM2_JAR}" ] && [ -f "${PM2_JAR}" ]; then
+                JAR_PATH="${PM2_JAR}"
+                JAR_GZ_PATH="${JAR_PATH}.gz"
+                echo "Using PM2 JAR path: ${JAR_PATH}"
+              fi
+            fi
+          fi
+          
           # S3에서 압축된 JAR 다운로드
           aws s3 cp "s3://${S3_BUCKET}/${S3_KEY}" "${JAR_GZ_PATH}" --region ap-northeast-2
           mkdir -p ${BACKUP_DIR}
@@ -249,23 +262,17 @@ jobs:
               -jar "${JAR_PATH}"
           fi
           
-          sleep 1
+          sleep 2
           sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null || exit 1
           systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
-          
           sudo -u ubuntu pm2 save 2>/dev/null || true
-          (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
-          exit 0
-          SCRIPT_END
-          )
           
-          # 헬스체크 (최대 5회 재시도)
-          for i in {1..5}; do
+          # EC2 내부에서 헬스체크 (최대 5회 재시도)
+          for i in 1 2 3 4 5; do
             HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
             if [ "${HTTP_STATUS}" = "200" ]; then
               HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
               if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
-                sudo -u ubuntu pm2 save 2>/dev/null || true
                 (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
                 exit 0
               fi
@@ -273,7 +280,7 @@ jobs:
             [ $i -lt 5 ] && sleep 3
           done
           
-          # 헬스체크 실패 시 롤백
+          # 헬스체크 실패 시 롤백 (EC2에서 실행)
           BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
           if [ -f "${BACKUP_FILE}" ]; then
             cp "${BACKUP_FILE}" "${JAR_PATH}"
