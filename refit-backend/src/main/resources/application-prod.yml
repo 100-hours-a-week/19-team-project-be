@@ -1,11 +1,65 @@
 spring:
-  datasource:
-    url: ${DB_URL}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: update
     show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  jwt:
+    issuer: re-fit
+    access-exp-ms: 20000 # 20초
+    refresh-exp-ms: 1209600000 # 2주
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  cloud:
+    aws:
+      credentials:
+        access-key: ${AWS_ACCESS_KEY}
+        secret-key: ${AWS_SECRET_KEY}
+      region:
+        static: ${AWS_S3_REGION:ap-northeast-2}
+      s3:
+        bucket: ${AWS_S3_BUCKET:refit-storage-prod}
+        domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
+
+springdoc:
+  swagger-ui:
+    url: /v3/api-docs
+    config-url: /v3/api-docs/swagger-config
+    disable-swagger-default-url: true
+  api-docs:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  metrics:
+    enable:
+      hikari: true
+
+logging:
+  level:
+    root: info
+    org.springframework: warn
+    org.hibernate: warn
+
+server:
+  forward-headers-strategy: framework

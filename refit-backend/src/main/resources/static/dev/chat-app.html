@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Re-Fit Chat Studio</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0b1220;
+        --panel: #0f172a;
+        --panel-2: #0c1426;
+        --panel-3: #111c33;
+        --accent: #22d3ee;
+        --accent-2: #f59e0b;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --line: #1f2a3a;
+        --good: #34d399;
+        --bad: #f87171;
+        --shadow: 0 18px 40px rgba(2, 8, 23, 0.55);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 800px at -10% 10%, rgba(34, 211, 238, 0.18), transparent 60%),
+          radial-gradient(1000px 700px at 110% -10%, rgba(245, 158, 11, 0.14), transparent 60%),
+          linear-gradient(180deg, #0b1220, #0e172a 45%, #0b1220);
+        min-height: 100vh;
+      }
+      header {
+        padding: 20px 24px 8px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: 0.5px;
+      }
+      header .meta {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .shell {
+        display: grid;
+        grid-template-columns: 320px 1fr;
+        gap: 16px;
+        padding: 8px 24px 28px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        box-shadow: var(--shadow);
+      }
+      .sidebar {
+        display: flex;
+        flex-direction: column;
+        min-height: 70vh;
+        overflow: hidden;
+      }
+      .sidebar .section {
+        padding: 16px;
+        border-bottom: 1px solid var(--line);
+      }
+      .label {
+        font-size: 12px;
+        color: var(--muted);
+        margin-bottom: 6px;
+        display: block;
+      }
+      input, textarea, select, button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      button {
+        cursor: pointer;
+        border: none;
+        margin-top: 8px;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #051424;
+        font-weight: 700;
+      }
+      button.secondary {
+        background: #0f1a2e;
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      .chat-list {
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        overflow: auto;
+        flex: 1;
+        background: var(--panel-2);
+      }
+      .chat-card {
+        padding: 12px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: #0c162b;
+        cursor: pointer;
+        transition: transform 0.15s ease, border 0.15s ease;
+      }
+      .chat-card:hover { transform: translateY(-2px); border-color: rgba(34, 211, 238, 0.5); }
+      .chat-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.3); }
+      .chat-card .title {
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .chat-card .header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .chat-card .preview {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .chat-card .meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 8px;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .chat-card .meta span {
+        display: inline-flex;
+        gap: 6px;
+      }
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 20px;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: rgba(245, 158, 11, 0.2);
+        color: #fbbf24;
+        border: 1px solid rgba(245, 158, 11, 0.5);
+        font-weight: 600;
+      }
+      .main {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 70vh;
+      }
+      .main .topbar {
+        padding: 16px 18px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .main .topbar h2 {
+        margin: 0;
+        font-size: 16px;
+      }
+      .pill {
+        padding: 4px 10px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: #0b1324;
+        border: 1px solid var(--line);
+        color: var(--muted);
+      }
+      .messages {
+        padding: 18px;
+        overflow: auto;
+        background:
+          radial-gradient(500px 280px at 10% 10%, rgba(34, 211, 238, 0.07), transparent 65%),
+          radial-gradient(500px 280px at 90% 90%, rgba(245, 158, 11, 0.08), transparent 65%);
+      }
+      .bubble {
+        max-width: 70%;
+        padding: 10px 12px;
+        border-radius: 14px;
+        margin-bottom: 10px;
+        background: #0c162b;
+        border: 1px solid var(--line);
+      }
+      .bubble.me {
+        margin-left: auto;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #04111f;
+        border: none;
+      }
+      .bubble .meta {
+        font-size: 11px;
+        color: var(--muted);
+        margin-top: 4px;
+      }
+      .composer {
+        padding: 14px 18px;
+        border-top: 1px solid var(--line);
+        display: grid;
+        grid-template-columns: 1fr 120px;
+        gap: 12px;
+      }
+      .status {
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .toast {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        background: #0c162b;
+        border: 1px solid var(--line);
+        padding: 10px 14px;
+        border-radius: 12px;
+        box-shadow: var(--shadow);
+        font-size: 12px;
+        display: none;
+      }
+      @media (max-width: 980px) {
+        .shell { grid-template-columns: 1fr; }
+        .composer { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div>
+        <h1>Re-Fit Chat Studio</h1>
+        <div class="meta">Local test UI for Chat v1</div>
+      </div>
+      <div class="meta">build 2026-01-22-3</div>
+    </header>
+
+    <div class="shell">
+      <div class="panel sidebar">
+        <div class="section">
+          <label class="label">Base API URL</label>
+          <input id="baseUrl" value="http://localhost:8080/api" />
+          <label class="label">Access Token</label>
+          <textarea id="token"></textarea>
+          <button id="btnLoadChats">Load Chats</button>
+          <button id="btnConnect" class="secondary">Connect WS</button>
+          <div class="status" id="wsStatus">WS: disconnected</div>
+        </div>
+        <div class="section">
+          <label class="label">Room ID</label>
+          <input id="chatId" placeholder="자동 선택됨" />
+          <button id="btnLoadMessages" class="secondary">Load Messages</button>
+        </div>
+        <div class="chat-list" id="chatList"></div>
+      </div>
+
+      <div class="panel main">
+        <div class="topbar">
+          <h2 id="roomTitle">채팅방을 선택하세요</h2>
+          <span class="pill" id="roomStatus">-</span>
+        </div>
+        <div class="messages" id="messageList"></div>
+        <div class="composer">
+          <textarea id="composer" placeholder="메시지를 입력하세요"></textarea>
+          <button id="btnSend">Send</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+      function makeStompClient(wsUrl, headers, onMessage, onError, onClose, onConnect) {
+        let ws = null;
+        let connected = false;
+        let subId = 0;
+        const subs = new Map();
+
+        function sendFrame(command, frameHeaders, body) {
+          const lines = [command];
+          Object.entries(frameHeaders || {}).forEach(([k, v]) => lines.push(`${k}:${v}`));
+          lines.push("", body || "");
+          ws.send(lines.join("\n") + "\0");
+        }
+
+        function parseFrames(data) {
+          const frames = data.split("\0").filter(Boolean);
+          frames.forEach((raw) => {
+            const parts = raw.split("\n\n");
+            const head = parts[0] || "";
+            const body = parts.slice(1).join("\n\n");
+            const lines = head.split("\n");
+            const command = lines.shift();
+            const headers = {};
+            lines.forEach((line) => {
+              const idx = line.indexOf(":");
+              if (idx > -1) headers[line.slice(0, idx)] = line.slice(idx + 1);
+            });
+            if (command === "CONNECTED") {
+              connected = true;
+              onConnect && onConnect();
+              return;
+            }
+            if (command === "MESSAGE") {
+              const dest = headers.destination;
+              const cb = subs.get(dest);
+              if (cb) cb(body);
+              onMessage && onMessage(body, headers);
+              return;
+            }
+            if (command === "ERROR") {
+              onError && onError(body || "stomp error");
+            }
+          });
+        }
+
+        return {
+          connect() {
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => sendFrame("CONNECT", { "accept-version": "1.2", ...headers }, "");
+            ws.onmessage = (evt) => parseFrames(evt.data);
+            ws.onerror = () => onError && onError("websocket error");
+            ws.onclose = () => {
+              connected = false;
+              onClose && onClose();
+            };
+          },
+          subscribe(destination, callback) {
+            const id = `sub-${subId++}`;
+            subs.set(destination, callback);
+            sendFrame("SUBSCRIBE", { id, destination }, "");
+            return { unsubscribe: () => subs.delete(destination) };
+          },
+          send(destination, body) {
+            sendFrame("SEND", { destination, "content-type": "application/json" }, body);
+          },
+          disconnect() {
+            if (ws) {
+              sendFrame("DISCONNECT", {}, "");
+              ws.close();
+            }
+          },
+          isConnected() { return connected; },
+        };
+      }
+
+      const baseUrlEl = document.getElementById("baseUrl");
+      const tokenEl = document.getElementById("token");
+      const chatListEl = document.getElementById("chatList");
+      const msgListEl = document.getElementById("messageList");
+      const roomTitleEl = document.getElementById("roomTitle");
+      const roomStatusEl = document.getElementById("roomStatus");
+      const chatIdEl = document.getElementById("chatId");
+      const wsStatusEl = document.getElementById("wsStatus");
+      const toastEl = document.getElementById("toast");
+
+      let stomp = null;
+      let currentChatId = null;
+      let currentSub = null;
+      let connecting = false;
+      let messageIdCache = new Set();
+
+      function showToast(text, kind = "ok") {
+        toastEl.textContent = text;
+        toastEl.style.borderColor = kind === "err" ? "var(--bad)" : "var(--line)";
+        toastEl.style.display = "block";
+        setTimeout(() => (toastEl.style.display = "none"), 1800);
+      }
+
+      function apiUrl(path) {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        return base + path;
+      }
+
+      function authHeader() {
+        const raw = tokenEl.value.trim();
+        if (!raw) return {};
+        return { Authorization: raw.startsWith("Bearer ") ? raw : `Bearer ${raw}` };
+      }
+
+      async function request(method, path, body) {
+        const options = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeader(),
+          },
+        };
+        if (body) options.body = JSON.stringify(body);
+        const res = await fetch(apiUrl(path), options);
+        const text = await res.text();
+        try {
+          return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+        } catch {
+          return { ok: res.ok, status: res.status, data: text };
+        }
+      }
+
+      function wsUrl() {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        const url = new URL(base);
+        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+        let path = url.pathname;
+        if (url.host.includes("re-fit.kr")) {
+          path = "/api";
+        } else if (path === "/api") {
+          path = "";
+        }
+        if (path === "/") path = "";
+        return `${wsProtocol}//${url.host}${path}/ws`;
+      }
+
+      function renderMessage(payload, myId) {
+        let msg = payload;
+        if (typeof payload === "string") {
+          try { msg = JSON.parse(payload); } catch { msg = { content: payload }; }
+        }
+        const id = msg?.message_id ?? msg?.messageId ?? msg?.id ?? null;
+        if (id) {
+          const key = String(id);
+          if (messageIdCache.has(key)) return;
+          messageIdCache.add(key);
+        }
+        const senderId = msg?.sender?.user_id ?? msg?.sender_id ?? null;
+        const isMe = myId && senderId ? String(senderId) === String(myId) : false;
+        const bubble = document.createElement("div");
+        bubble.className = "bubble" + (isMe ? " me" : "");
+        bubble.textContent = msg?.content || "";
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const time = msg?.created_at ?? msg?.last_message_at ?? "";
+        const idLabel = id ?? "?";
+        meta.textContent = `#${idLabel} · ${time}${senderId ? " · " + senderId : ""}`;
+        bubble.appendChild(meta);
+        msgListEl.appendChild(bubble);
+        msgListEl.scrollTop = msgListEl.scrollHeight;
+      }
+
+      function clearMessages() {
+        msgListEl.innerHTML = "";
+        messageIdCache = new Set();
+      }
+
+      document.getElementById("btnLoadChats").addEventListener("click", async () => {
+        const res = await request("GET", "/v1/chats?status=ACTIVE&size=20");
+        if (!res.ok) return showToast("채팅 목록 실패", "err");
+        chatListEl.innerHTML = "";
+        const chats = res.data?.data?.chats || [];
+        chats.forEach((chat) => {
+          const card = document.createElement("div");
+          card.className = "chat-card";
+          card.dataset.chatId = chat.chat_id ?? chat.id;
+          const unread = chat.unread_count ?? chat.unreadCount ?? 0;
+          const lastMessageAt = chat.last_message?.last_message_at
+            || chat.last_message?.created_at
+            || chat.updated_at
+            || chat.created_at
+            || "-";
+          const createdAt = chat.created_at || "-";
+          card.innerHTML = `
+            <div class="header">
+              <div class="title">${chat.requester?.nickname || "?"} · ${chat.receiver?.nickname || "?"}</div>
+              ${unread ? `<span class="badge">${unread}</span>` : ""}
+            </div>
+            <div class="preview">${chat.last_message?.content || "대화 없음"}</div>
+            <div class="meta">
+              <span>마지막 메시지 · ${lastMessageAt}</span>
+              <span>생성 · ${createdAt}</span>
+            </div>
+          `;
+          card.addEventListener("click", () => {
+            document.querySelectorAll(".chat-card").forEach((c) => c.classList.remove("active"));
+            card.classList.add("active");
+            currentChatId = card.dataset.chatId;
+            chatIdEl.value = currentChatId;
+            roomTitleEl.textContent = `Chat #${currentChatId}`;
+            roomStatusEl.textContent = chat.status || "-";
+            clearMessages();
+            if (stomp && stomp.isConnected()) {
+              if (currentSub) currentSub.unsubscribe();
+              const myId = decodeJwtSub(tokenEl.value.trim());
+              currentSub = stomp.subscribe(`/queue/chat.${currentChatId}`, (body) => renderMessage(body, myId));
+            }
+          });
+          chatListEl.appendChild(card);
+        });
+      });
+
+      document.getElementById("btnLoadMessages").addEventListener("click", async () => {
+        const chatId = chatIdEl.value.trim();
+        if (!chatId) return showToast("chatId 필요", "err");
+        clearMessages();
+        const res = await request("GET", `/v1/chats/${chatId}/messages?size=50`);
+        if (!res.ok) return showToast("메시지 조회 실패", "err");
+        const messages = res.data?.data?.messages || [];
+        const myId = decodeJwtSub(tokenEl.value.trim());
+        messages.slice().reverse().forEach((m) => renderMessage(m, myId));
+      });
+
+      document.getElementById("btnConnect").addEventListener("click", () => {
+        if (!tokenEl.value.trim()) return showToast("token 필요", "err");
+        if (connecting) return showToast("연결 중...", "err");
+        if (stomp && stomp.isConnected()) return showToast("이미 연결됨");
+        if (stomp) {
+          try { stomp.disconnect(); } catch {}
+          stomp = null;
+        }
+        connecting = true;
+        document.getElementById("btnConnect").disabled = true;
+        const myId = decodeJwtSub(tokenEl.value.trim());
+        stomp = makeStompClient(
+          wsUrl(),
+          authHeader(),
+          (body) => renderMessage(body, myId),
+          () => showToast("WS 오류", "err"),
+          () => {
+            wsStatusEl.textContent = "WS: disconnected";
+            connecting = false;
+            document.getElementById("btnConnect").disabled = false;
+            if (currentSub) currentSub.unsubscribe();
+            currentSub = null;
+          },
+          () => {
+            wsStatusEl.textContent = "WS: connected";
+            connecting = false;
+            document.getElementById("btnConnect").disabled = true;
+        if (currentChatId) {
+          if (currentSub) currentSub.unsubscribe();
+          currentSub = stomp.subscribe(`/queue/chat.${currentChatId}`, (body) => renderMessage(body, myId));
+        }
+      }
+    );
+    stomp.connect();
+  });
+
+  document.getElementById("btnSend").addEventListener("click", () => {
+    if (!stomp || !stomp.isConnected()) return showToast("WS 연결 필요", "err");
+    const chatId = chatIdEl.value.trim();
+    const content = document.getElementById("composer").value.trim();
+    if (!chatId || !content) return showToast("chatId/content 필요", "err");
+        stomp.send("/app/chat.sendMessage", JSON.stringify({
+          chat_id: Number(chatId),
+          content,
+          message_type: "TEXT"
+        }));
+    document.getElementById("composer").value = "";
+  });
+
+      function decodeJwtSub(token) {
+        try {
+          const raw = token.replace(/^Bearer\\s+/i, "");
+          const parts = raw.split(".");
+          if (parts.length < 2) return null;
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+          return payload.sub || null;
+        } catch {
+          return null;
+        }
+      }
+
+      (function initBaseUrl() {
+        const host = window.location.host;
+        if (host.includes("re-fit.kr")) {
+          baseUrlEl.value = "https://re-fit.kr/api";
+        } else {
+          baseUrlEl.value = "http://localhost:8080/api";
+        }
+      })();
+    </script>
+  </body>
+</html>

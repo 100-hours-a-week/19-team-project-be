@@ -1,7 +1,12 @@
 spring:
+  config:
+    import:
+      - optional:classpath:application-secret.yml
+      
   application:
     name: refit-backend
 
   profiles:
-    active: local
-    include: secret
+    active: prod
+    include:
+    - oauth2

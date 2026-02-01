@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Chat V1 Test Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0f172a;
+        --panel: #101827;
+        --panel-2: #0b1320;
+        --accent: #22d3ee;
+        --accent-2: #f59e0b;
+        --text: #e5e7eb;
+        --muted: #94a3b8;
+        --line: #1f2a3a;
+        --ok: #34d399;
+        --err: #f87171;
+        --shadow: 0 10px 30px rgba(2, 8, 23, 0.55);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", system-ui, -apple-system, sans-serif;
+        color: var(--text);
+        background:
+          radial-gradient(1200px 800px at 10% -10%, rgba(34, 211, 238, 0.15), transparent 60%),
+          radial-gradient(1000px 700px at 110% 10%, rgba(245, 158, 11, 0.12), transparent 60%),
+          linear-gradient(180deg, #0b1220, #0f172a 40%, #0b1220);
+        min-height: 100vh;
+      }
+      header {
+        padding: 28px 24px 8px;
+      }
+      header h1 {
+        margin: 0 0 6px;
+        font-size: 28px;
+        letter-spacing: 0.4px;
+      }
+      header p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 14px;
+      }
+      main {
+        display: grid;
+        grid-template-columns: minmax(280px, 360px) 1fr;
+        gap: 16px;
+        padding: 16px 24px 32px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: var(--shadow);
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        color: var(--muted);
+      }
+      label {
+        display: block;
+        font-size: 12px;
+        margin: 10px 0 6px;
+        color: var(--muted);
+      }
+      input,
+      select,
+      textarea,
+      button {
+        width: 100%;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--text);
+        padding: 10px 12px;
+        font-size: 14px;
+      }
+      input::placeholder,
+      textarea::placeholder {
+        color: #64748b;
+      }
+      textarea {
+        min-height: 70px;
+        resize: vertical;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      button {
+        cursor: pointer;
+        background: linear-gradient(135deg, #0ea5e9, #22d3ee);
+        color: #04111f;
+        font-weight: 700;
+        border: none;
+        margin-top: 10px;
+      }
+      button.secondary {
+        background: #111827;
+        color: var(--text);
+        border: 1px solid var(--line);
+      }
+      button.warn {
+        background: linear-gradient(135deg, #fb7185, #f97316);
+        color: #150a0a;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+      }
+      .log {
+        background: #0b1220;
+        border-radius: 12px;
+        border: 1px dashed var(--line);
+        padding: 12px;
+        height: 480px;
+        overflow: auto;
+        font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 12px;
+      }
+      .log p {
+        margin: 0 0 8px;
+        color: var(--muted);
+      }
+      .log .ok {
+        color: var(--ok);
+      }
+      .log .err {
+        color: var(--err);
+      }
+      .log .tag {
+        display: inline-block;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #111827;
+        border: 1px solid var(--line);
+        color: #cbd5f5;
+        margin-right: 6px;
+      }
+      .wide {
+        grid-column: 1 / -1;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 12px;
+      }
+      @media (max-width: 980px) {
+        main {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Chat V1 Test Console</h1>
+      <p>REST + WebSocket (STOMP) 테스트용 단일 페이지</p>
+    </header>
+    <main>
+      <section>
+        <h2>Env</h2>
+        <label>Base API URL</label>
+        <input id="baseUrl" placeholder="http://localhost:8080/api" />
+        <label>JWT Access Token</label>
+        <textarea id="token" placeholder="Bearer 토큰에서 access token만 넣어도 됨"></textarea>
+        <div class="row">
+          <div>
+            <label>Dev Token (userId)</label>
+            <input id="devUserId" placeholder="예: 1" />
+          </div>
+          <div>
+            <label>Message Type</label>
+            <select id="messageType">
+              <option value="TEXT">TEXT</option>
+              <option value="SYSTEM">SYSTEM</option>
+              <option value="FILE">FILE</option>
+            </select>
+          </div>
+        </div>
+        <button id="btnDevToken">Get Dev Token</button>
+        <button class="secondary" id="btnWsConnect">Connect WS</button>
+        <button class="secondary" id="btnWsDisconnect">Disconnect WS</button>
+        <div class="muted">WS endpoint는 base URL 기준으로 자동 계산됨. 필요 시 /api 프리픽스 제거 후 /ws로 접속.</div>
+      </section>
+
+      <section>
+        <h2>Chat Room</h2>
+        <div class="row">
+          <div>
+            <label>Receiver ID</label>
+            <input id="receiverId" placeholder="예: 2" />
+          </div>
+          <div>
+            <label>Resume ID (optional)</label>
+            <input id="resumeId" placeholder="예: 10" />
+          </div>
+        </div>
+        <label>Job Post URL (optional)</label>
+        <input id="jobPostUrl" placeholder="https://example.com/job/123" />
+        <button id="btnCreateRoom">Create Room</button>
+
+        <div class="row">
+          <div>
+            <label>Chat ID</label>
+            <input id="chatId" placeholder="예: 1" />
+          </div>
+          <div>
+            <label>Message ID (read)</label>
+            <input id="messageId" placeholder="예: 100" />
+          </div>
+        </div>
+        <div class="row">
+          <button class="secondary" id="btnListRooms">List Rooms</button>
+          <button class="secondary" id="btnRoomDetail">Room Detail</button>
+        </div>
+        <div class="row">
+          <button class="secondary" id="btnListMessages">List Messages</button>
+          <button class="warn" id="btnCloseRoom">Close Room</button>
+        </div>
+        <button class="secondary" id="btnMarkRead">Mark Read</button>
+      </section>
+
+      <section>
+        <h2>Send Message (WS)</h2>
+        <label>Chat ID</label>
+        <input id="wsChatId" placeholder="예: 1" />
+        <label>Content</label>
+        <textarea id="wsContent" placeholder="메시지 내용을 입력"></textarea>
+        <button id="btnSendMessage">Send Message</button>
+        <p class="muted">구독 채널: <code>/queue/chat.{chatId}</code></p>
+      </section>
+
+      <section class="wide">
+        <h2>Log</h2>
+        <div id="log" class="log"></div>
+      </section>
+    </main>
+
+    <script>
+      function makeStompClient(wsUrl, headers, onMessage, onError, onClose, onConnect) {
+        let ws = null;
+        let connected = false;
+        let subId = 0;
+        const subs = new Map();
+
+        function sendFrame(command, frameHeaders, body) {
+          const lines = [command];
+          Object.entries(frameHeaders || {}).forEach(([k, v]) => lines.push(`${k}:${v}`));
+          lines.push("", body || "");
+          const payload = lines.join("\n") + "\0";
+          ws.send(payload);
+        }
+
+        function parseFrames(data) {
+          const frames = data.split("\0").filter(Boolean);
+          frames.forEach((raw) => {
+            const parts = raw.split("\n\n");
+            const head = parts[0] || "";
+            const body = parts.slice(1).join("\n\n");
+            const lines = head.split("\n");
+            const command = lines.shift();
+            const headers = {};
+            lines.forEach((line) => {
+              const idx = line.indexOf(":");
+              if (idx > -1) headers[line.slice(0, idx)] = line.slice(idx + 1);
+            });
+
+            if (command === "CONNECTED") {
+              connected = true;
+              onConnect && onConnect();
+              return;
+            }
+            if (command === "MESSAGE") {
+              const dest = headers.destination;
+              const cb = subs.get(dest);
+              if (cb) cb(body);
+              onMessage && onMessage(body, headers);
+              return;
+            }
+            if (command === "ERROR") {
+              onError && onError(body || "stomp error");
+            }
+          });
+        }
+
+        return {
+          connect() {
+            ws = new WebSocket(wsUrl);
+            ws.onopen = () => {
+              sendFrame("CONNECT", { "accept-version": "1.2", ...headers }, "");
+            };
+            ws.onmessage = (evt) => parseFrames(evt.data);
+            ws.onerror = () => onError && onError("websocket error");
+            ws.onclose = () => {
+              connected = false;
+              onClose && onClose();
+            };
+          },
+          subscribe(destination, callback) {
+            const id = `sub-${subId++}`;
+            subs.set(destination, callback);
+            sendFrame("SUBSCRIBE", { id, destination }, "");
+            return { unsubscribe: () => subs.delete(destination) };
+          },
+          send(destination, body) {
+            sendFrame("SEND", { destination, "content-type": "application/json" }, body);
+          },
+          disconnect() {
+            if (ws) {
+              sendFrame("DISCONNECT", {}, "");
+              ws.close();
+            }
+          },
+          isConnected() {
+            return connected;
+          },
+        };
+      }
+    </script>
+    <script>
+      const logEl = document.getElementById("log");
+      const baseUrlEl = document.getElementById("baseUrl");
+      const tokenEl = document.getElementById("token");
+      const messageTypeEl = document.getElementById("messageType");
+      let stompClient = null;
+      let currentRoomSub = null;
+
+      function log(tag, message, kind = "ok") {
+        const p = document.createElement("p");
+        p.innerHTML = `<span class="tag">${tag}</span> <span class="${kind}">${message}</span>`;
+        logEl.prepend(p);
+      }
+
+      function apiUrl(path) {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        return base + path;
+      }
+
+      function authHeader() {
+        const raw = tokenEl.value.trim();
+        if (!raw) return {};
+        return { Authorization: raw.startsWith("Bearer ") ? raw : `Bearer ${raw}` };
+      }
+
+      function decodeJwtSub(token) {
+        try {
+          const parts = token.split(".");
+          if (parts.length < 2) return null;
+          const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+          return payload.sub || null;
+        } catch {
+          return null;
+        }
+      }
+
+      async function request(method, path, body) {
+        const options = {
+          method,
+          headers: {
+            "Content-Type": "application/json",
+            ...authHeader(),
+          },
+        };
+        if (body) options.body = JSON.stringify(body);
+        const res = await fetch(apiUrl(path), options);
+        const text = await res.text();
+        try {
+          return { ok: res.ok, status: res.status, data: JSON.parse(text) };
+        } catch {
+          return { ok: res.ok, status: res.status, data: text };
+        }
+      }
+
+      function wsUrl() {
+        const base = baseUrlEl.value.trim().replace(/\/$/, "");
+        if (!base) throw new Error("Base API URL is empty");
+        let normalized = base;
+        if (normalized.startsWith("ws://")) normalized = "http://" + normalized.slice(5);
+        if (normalized.startsWith("wss://")) normalized = "https://" + normalized.slice(6);
+        const url = new URL(normalized);
+        const wsProtocol = url.protocol === "https:" ? "wss:" : "ws:";
+        let path = url.pathname;
+        // 배포는 /api 유지, 로컬은 보통 context-path가 없으므로 /api 제거
+        if (url.host.includes("re-fit.kr")) {
+          path = "/api";
+        } else if (path === "/api") {
+          path = "";
+        }
+        if (path === "/") path = "";
+        const httpEndpoint = `${url.protocol}//${url.host}${path}/ws`;
+        const wsEndpoint = `${wsProtocol}//${url.host}${path}/ws`;
+        return { httpEndpoint, wsEndpoint };
+      }
+
+      function subscribeChat(chatId) {
+        if (!stompClient || !stompClient.connected) return;
+        if (currentRoomSub) currentRoomSub.unsubscribe();
+        currentRoomSub = stompClient.subscribe(`/queue/chat.${chatId}`, (msg) => {
+          log("WS", msg.body);
+        });
+        log("WS", `Subscribed /queue/chat.${chatId}`);
+      }
+
+      document.getElementById("btnDevToken").addEventListener("click", async () => {
+        const userId = document.getElementById("devUserId").value.trim();
+        if (!userId) return log("DEV", "userId required", "err");
+        const res = await request("POST", "/v1/auth/dev/token", { user_id: Number(userId) });
+        if (res.ok) {
+          const token = res.data?.data?.access_token || res.data?.data?.accessToken || "";
+          tokenEl.value = token;
+          const sub = decodeJwtSub(token);
+          log("DEV", `Token issued (len=${token.length}, sub=${sub ?? "?"})`);
+        } else {
+          log("DEV", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+        }
+      });
+
+      document.getElementById("btnCreateRoom").addEventListener("click", async () => {
+        const receiverId = Number(document.getElementById("receiverId").value);
+        if (!receiverId) return log("ROOM", "receiverId required", "err");
+        const resumeIdRaw = document.getElementById("resumeId").value.trim();
+        const jobPostUrl = document.getElementById("jobPostUrl").value.trim();
+        const body = {
+          receiver_id: receiverId,
+          resume_id: resumeIdRaw ? Number(resumeIdRaw) : null,
+          job_post_url: jobPostUrl || null,
+          request_type: "FEEDBACK",
+        };
+        log("REQ", JSON.stringify(body));
+        const res = await request("POST", "/v1/chats", body);
+        if (res.ok) {
+          const chatId = res.data?.data?.chat_id ?? res.data?.data?.chatId;
+          if (chatId) {
+            document.getElementById("chatId").value = chatId;
+            document.getElementById("wsChatId").value = chatId;
+            subscribeChat(chatId);
+          }
+          log("ROOM", JSON.stringify(res.data));
+        } else {
+          log("ROOM", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+        }
+      });
+
+      document.getElementById("btnListRooms").addEventListener("click", async () => {
+        const res = await request("GET", "/v1/chats?status=ACTIVE&size=20");
+        if (!res.ok) return log("ROOMS", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+        const chats = res.data?.data?.chats || [];
+        if (!chats.length) return log("ROOMS", "no chats");
+        const lines = chats.map((c) => {
+          const last = c.last_message?.content || "-";
+          const opponent = c.opponent?.nickname || c.receiver?.nickname || c.requester?.nickname || "?";
+          return `#${c.chat_id ?? c.id} · ${opponent} · ${c.status} · ${last}`;
+        });
+        log("ROOMS", lines.join("<br/>"));
+      });
+
+      document.getElementById("btnRoomDetail").addEventListener("click", async () => {
+        const chatId = document.getElementById("chatId").value.trim();
+        if (!chatId) return log("ROOM", "chatId required", "err");
+        const res = await request("GET", `/v1/chats/${chatId}`);
+        res.ok ? log("ROOM", JSON.stringify(res.data)) : log("ROOM", `Error ${res.status}`, "err");
+      });
+
+      document.getElementById("btnCloseRoom").addEventListener("click", async () => {
+        const chatId = document.getElementById("chatId").value.trim();
+        if (!chatId) return log("ROOM", "chatId required", "err");
+        const res = await request("PATCH", `/v1/chats/${chatId}`, { status: "CLOSED" });
+        res.ok ? log("ROOM", JSON.stringify(res.data)) : log("ROOM", `Error ${res.status}`, "err");
+      });
+
+      document.getElementById("btnListMessages").addEventListener("click", async () => {
+        const chatId = document.getElementById("chatId").value.trim();
+        if (!chatId) return log("MSG", "chatId required", "err");
+        const res = await request("GET", `/v1/chats/${chatId}/messages?size=50`);
+        res.ok ? log("MSG", JSON.stringify(res.data)) : log("MSG", `Error ${res.status}`, "err");
+      });
+
+      document.getElementById("btnMarkRead").addEventListener("click", async () => {
+        const chatId = document.getElementById("chatId").value.trim();
+        const messageId = document.getElementById("messageId").value.trim();
+        if (!chatId || !messageId) return log("READ", "chatId and messageId required", "err");
+        const res = await request("PATCH", "/v1/chats/messages/read", {
+          chat_id: Number(chatId),
+          message_id: Number(messageId),
+        });
+        res.ok ? log("READ", JSON.stringify(res.data)) : log("READ", `Error ${res.status}`, "err");
+      });
+
+      document.getElementById("btnWsConnect").addEventListener("click", () => {
+        let url;
+        let httpEndpoint;
+        try {
+          const endpoints = wsUrl();
+          url = endpoints.wsEndpoint;
+          httpEndpoint = endpoints.httpEndpoint;
+        } catch (err) {
+          log("WS-ERR", err.message || "invalid base url", "err");
+          return;
+        }
+        if (!tokenEl.value.trim()) return log("WS", "token required", "err");
+        const sub = decodeJwtSub(tokenEl.value.trim().replace(/^Bearer\\s+/i, ""));
+        log("WS", `Token sub=${sub ?? "?"}`);
+
+        log("WS", `Connecting to ${url}`);
+        stompClient = makeStompClient(
+          url,
+          authHeader(),
+          (body) => log("WS", body),
+          (err) => log("WS-ERR", err, "err"),
+          () => log("WS-ERR", "socket closed", "err"),
+          () => {
+            log("WS", `Connected: ${url}`);
+            const chatId = document.getElementById("wsChatId").value.trim();
+            if (chatId) subscribeChat(chatId);
+          }
+        );
+        stompClient.connect();
+      });
+
+      document.getElementById("btnWsDisconnect").addEventListener("click", () => {
+        if (stompClient) {
+          stompClient.disconnect();
+          log("WS", "Disconnected");
+        }
+      });
+
+      document.getElementById("btnSendMessage").addEventListener("click", () => {
+        if (!stompClient || !stompClient.isConnected()) return log("WS", "not connected", "err");
+        const chatId = document.getElementById("wsChatId").value.trim();
+        const content = document.getElementById("wsContent").value.trim();
+        if (!chatId || !content) return log("WS", "chatId/content required", "err");
+        stompClient.send(
+          "/app/chat.sendMessage",
+          JSON.stringify({
+            chat_id: Number(chatId),
+            content,
+            message_type: messageTypeEl.value,
+          })
+        );
+        log("WS", `Sent to chat ${chatId}`);
+      });
+
+      baseUrlEl.value = "http://localhost:8080/api";
+      log("SYS", "page ready");
+      log("SYS", "stomp-lite loaded");
+    </script>
+  </body>
+</html>

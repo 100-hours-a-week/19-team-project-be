@@ -1,0 +1,409 @@
+name: Re-Fit Backend CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'CI workflow run ID (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      sha:
+
+        description: 'Commit SHA (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      branch:
+        description: 'Branch name'
+        required: true
+        type: choice
+        default: 'main'
+        options:
+          - main
+      use_latest_artifact:
+        description: 'run_id/sha를 입력하지 않으면 선택한 브랜치의 최신 아티팩트 사용'
+        required: true
+        type: boolean
+        default: true
+  workflow_run:
+    workflows: ["Re-Fit Backend CI"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  deploy:
+    name: Deploy to Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 동일 브랜치의 동시 배포 방지
+    concurrency:
+      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
+      cancel-in-progress: false
+    # CI 성공 후에만 실행
+    if: |
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
+       github.event.workflow_run.head_branch == 'main') ||
+      github.event_name == 'workflow_dispatch'
+    # main 브랜치는 production, develop 브랜치는 development 환경 사용
+    environment: production
+
+    steps:
+      - name: Find Latest Artifact (if needed)
+        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
+        id: find-artifact
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            const branch = '${{ inputs.branch }}';
+            console.log(`Finding latest artifact for branch: ${branch}`);
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              branch: branch,
+              status: 'success',
+              per_page: 10
+            });
+
+            if (runs.data.workflow_runs.length === 0) {
+              core.setFailed(`No successful CI runs found for branch: ${branch}`);
+              return;
+            }
+
+            for (const run of runs.data.workflow_runs) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+
+              const buildArtifact = artifacts.data.artifacts.find(
+                a => a.name.startsWith('backend-jar-')
+              );
+
+              if (buildArtifact) {
+                const sha = run.head_sha;
+                console.log(`Found artifact from run #${run.run_number}`);
+                console.log(`   Run ID: ${run.id}`);
+                console.log(`   SHA: ${sha}`);
+                console.log(`   Created: ${run.created_at}`);
+
+                core.setOutput('run_id', run.id.toString());
+                core.setOutput('sha', sha);
+                core.setOutput('run_number', run.run_number.toString());
+                return;
+              }
+            }
+
+            core.setFailed(`No artifacts found in recent CI runs for branch: ${branch}`);
+
+      - name: Set Deployment Variables
+        id: deploy-vars
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            if [ "${{ inputs.use_latest_artifact }}" == "true" ] && ([ -z "${{ inputs.run_id }}" ] || [ "${{ inputs.run_id }}" == "" ]) && ([ -z "${{ inputs.sha }}" ] || [ "${{ inputs.sha }}" == "" ]); then
+              if [ -n "${{ steps.find-artifact.outputs.run_id }}" ]; then
+                echo "run_id=${{ steps.find-artifact.outputs.run_id }}" >> $GITHUB_OUTPUT
+                echo "sha=${{ steps.find-artifact.outputs.sha }}" >> $GITHUB_OUTPUT
+                echo "Using latest artifact from run #${{ steps.find-artifact.outputs.run_number }}"
+              else
+                echo "Error: Failed to find latest artifact"
+                exit 1
+              fi
+            else
+              if [ -z "${{ inputs.run_id }}" ] || [ -z "${{ inputs.sha }}" ]; then
+                echo "Error: run_id and sha must be provided when use_latest_artifact is false"
+                exit 1
+              fi
+              echo "run_id=${{ inputs.run_id }}" >> $GITHUB_OUTPUT
+              echo "sha=${{ inputs.sha }}" >> $GITHUB_OUTPUT
+              echo "Using manually specified artifact"
+            fi
+            echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
+          else
+            echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
+            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+          fi
+
+      # 배포 전 release job 성공 여부 확인
+      - name: Check release job status
+        if: github.event_name == 'workflow_run'
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          REPO="${{ github.repository }}"
+          JOBS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[] | select(.name=="release") | .conclusion' 2>/dev/null || echo "")
+          [ "$JOBS" = "success" ] || exit 1
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.deploy-vars.outputs.branch }}
+
+      # CI 워크플로우에서 JAR 아티팩트 다운로드
+      - name: Download JAR Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar-${{ steps.deploy-vars.outputs.sha }}-${{ steps.deploy-vars.outputs.run_id }}
+          path: build-output
+          github-token: ${{ secrets.PAT }}
+          run-id: ${{ steps.deploy-vars.outputs.run_id }}
+
+      - name: Verify Downloaded JAR
+        run: |
+          set -euo pipefail
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "build-output/${JAR_NAME}" ]; then
+            echo "JAR file not found"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0)
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "JAR file size is too small: ${FILE_SIZE} bytes"
+            exit 1
+          fi
+          echo "JAR file verified: ${FILE_SIZE} bytes"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      # JAR 압축 후 S3에 업로드
+      - name: Compress and Upload to S3
+        id: s3_upload
+        env:
+          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
+        run: |
+          set -euo pipefail
+          cd build-output
+          gzip -c ${JAR_NAME} > ${JAR_NAME}.gz
+          aws s3 cp ${JAR_NAME}.gz s3://${{ secrets.S3_ARTIFACTS_BUCKET }}/artifacts/backend/${JAR_NAME}.gz
+          echo "s3_key=artifacts/backend/${JAR_NAME}.gz" >> $GITHUB_OUTPUT
+
+      # SSM을 통해 EC2 인스턴스에 배포
+      - name: Deploy via SSM
+        id: deploy
+        env:
+          SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+          S3_BUCKET: ${{ secrets.S3_ARTIFACTS_BUCKET }}
+          S3_KEY: ${{ steps.s3_upload.outputs.s3_key }}
+        run: |
+          set -euo pipefail
+          
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          BASE_PATH="$SERVER_BASE_PATH"
+          JAR_PATH="${BASE_PATH}/app/backend/refit-backend/build/libs/${JAR_NAME}"
+          JAR_GZ_PATH="${JAR_PATH}.gz"
+          
+          DEPLOY_SCRIPT=$(cat <<'SCRIPT_END'
+          set -euo pipefail
+          BASE_PATH="$1"
+          JAR_PATH="$2"
+          JAR_GZ_PATH="$3"
+          S3_BUCKET="$4"
+          S3_KEY="$5"
+          HEALTH_CHECK_URL="$6"
+          
+          BACKUP_DIR="${BASE_PATH}/backups/backend"
+          APP_NAME="backend"
+          TIMESTAMP=$(date +%Y%m%d%H%M%S)
+          
+          trap 'sudo -u ubuntu pm2 status || true; exit $?' ERR
+          
+          # PM2가 이미 실행 중이면 실제 사용 중인 JAR 경로로 배포
+          if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+            PID=$(sudo -u ubuntu pm2 pid ${APP_NAME} 2>/dev/null || true)
+            if [ -n "${PID}" ] && [ -r /proc/${PID}/cmdline ]; then
+              PM2_JAR=$(tr '\0' '\n' < /proc/${PID}/cmdline 2>/dev/null | grep '\.jar$' | head -1 || true)
+              if [ -n "${PM2_JAR}" ] && [ -f "${PM2_JAR}" ]; then
+                JAR_PATH="${PM2_JAR}"
+                JAR_GZ_PATH="${JAR_PATH}.gz"
+                echo "Using PM2 JAR path: ${JAR_PATH}"
+              fi
+            fi
+          fi
+          
+          # S3에서 압축된 JAR 다운로드
+          aws s3 cp "s3://${S3_BUCKET}/${S3_KEY}" "${JAR_GZ_PATH}" --region ap-northeast-2
+          mkdir -p ${BACKUP_DIR}
+          # 기존 JAR 백업
+          [ -f "${JAR_PATH}" ] && cp "${JAR_PATH}" "${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
+          gunzip -c "${JAR_GZ_PATH}" > "${JAR_PATH}"
+          rm -f "${JAR_GZ_PATH}"
+          
+          # JAR 파일 크기 검증 (1MB 이상)
+          [ $(stat -f%z "${JAR_PATH}" 2>/dev/null || stat -c%s "${JAR_PATH}" 2>/dev/null || echo 0) -gt 1000000 ] || exit 1
+          
+          sudo chown -R ubuntu:ubuntu "$(dirname "${JAR_PATH}")" 2>/dev/null || true
+          chmod 644 "${JAR_PATH}"
+          
+          # PM2로 애플리케이션 재시작 또는 시작
+          if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
+            sudo -u ubuntu pm2 restart ${APP_NAME} || sudo -u ubuntu pm2 delete ${APP_NAME}
+          else
+            sudo -u ubuntu pm2 start /usr/bin/java --name "${APP_NAME}" -- \
+              -Xms1024m -Xmx2560m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+              -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof \
+              -jar "${JAR_PATH}"
+          fi
+          
+          sleep 2
+          sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null || exit 1
+          systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
+          sudo -u ubuntu pm2 save 2>/dev/null || true
+          
+          # 기본 15초 대기 후 헬스체크 (3초 간격 5회 재시도)
+          sleep 15
+          for i in 1 2 3 4 5; do
+            HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
+            if [ "${HTTP_STATUS}" = "200" ]; then
+              HEALTH_RESPONSE=$(timeout 5 curl -s "${HEALTH_CHECK_URL}" 2>/dev/null || echo "")
+              if echo "${HEALTH_RESPONSE}" | grep -qE "(UP|status.*UP)"; then
+                (find ${BACKUP_DIR} -name "backend-*.jar" -type f -mtime +7 -delete 2>/dev/null) &
+                exit 0
+              fi
+            fi
+            [ $i -lt 5 ] && sleep 3
+          done
+          
+          # 헬스체크 실패 시 롤백 (EC2에서 실행)
+          BACKUP_FILE="${BACKUP_DIR}/backend-${TIMESTAMP}.jar"
+          if [ -f "${BACKUP_FILE}" ]; then
+            cp "${BACKUP_FILE}" "${JAR_PATH}"
+            sudo -u ubuntu pm2 restart ${APP_NAME}
+            sleep 5
+            [ "$(timeout 10 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")" = "200" ] && sudo -u ubuntu pm2 save 2>/dev/null || true
+          fi
+          exit 1
+          SCRIPT_END
+          )
+          
+          # SSM 명령 실행 (base64 인코딩으로 특수문자 이스케이프 문제 방지)
+          DEPLOY_SCRIPT_ENCODED=$(echo "$DEPLOY_SCRIPT" | base64 -w 0)
+          SSM_COMMAND="bash -c \"echo '$DEPLOY_SCRIPT_ENCODED' | base64 -d | bash -s -- '$BASE_PATH' '$JAR_PATH' '$JAR_GZ_PATH' '$S3_BUCKET' '$S3_KEY' '$HEALTH_CHECK_URL'\""
+          PARAMETERS_JSON=$(jq -n --arg cmd "$SSM_COMMAND" '{commands: [$cmd]}')
+          
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters "$PARAMETERS_JSON" \
+            --timeout-seconds 600 \
+            --region ap-northeast-2 \
+            --query 'Command.CommandId' \
+            --output text)
+          
+          [ -n "$COMMAND_ID" ] || exit 1
+          
+          # SSM 명령 실행 상태 확인 (최대 60회, 5분)
+          for i in {1..60}; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$EC2_INSTANCE_ID" \
+              --region ap-northeast-2 \
+              --query 'Status' \
+              --output text 2>/dev/null || echo "InProgress")
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "=== SSM 명령 실행 성공 ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardOutputContent' \
+                --output text
+              echo "deploy_timestamp=$(date +%s)" >> $GITHUB_OUTPUT
+              exit 0
+            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
+              echo "=== SSM 명령 실행 실패: $STATUS ==="
+              echo "=== Standard Output ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardOutputContent' \
+                --output text 2>/dev/null || echo "(없음)"
+              echo "=== Standard Error ==="
+              aws ssm get-command-invocation \
+                --command-id "$COMMAND_ID" \
+                --instance-id "$EC2_INSTANCE_ID" \
+                --region ap-northeast-2 \
+                --query 'StandardErrorContent' \
+                --output text 2>/dev/null || echo "(없음)"
+              exit 1
+            fi
+            [ $i -lt 60 ] && sleep 3
+          done
+          
+          # 타임아웃: 최종 상태 확인 및 에러 출력
+          echo "=== SSM 명령 타임아웃 (60회 시도 후) ==="
+          FINAL_STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'Status' \
+            --output text 2>/dev/null || echo "Unknown")
+          echo "최종 상태: $FINAL_STATUS"
+          echo "=== Standard Output ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'StandardOutputContent' \
+            --output text 2>/dev/null || echo "(없음)"
+          echo "=== Standard Error ==="
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$EC2_INSTANCE_ID" \
+            --region ap-northeast-2 \
+            --query 'StandardErrorContent' \
+            --output text 2>/dev/null || echo "(없음)"
+          exit 1
+
+      - name: Notify Discord on Result
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          BRANCH: ${{ steps.deploy-vars.outputs.branch }}
+          SHA: ${{ steps.deploy-vars.outputs.sha }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+          else
+            COLOR=15158332
+          fi
+
+          payload=$(cat <<EOF
+          {
+            "embeds": [{
+              "title": "BE 배포 결과: $STATUS",
+              "color": $COLOR,
+              "fields": [
+                {"name": "서비스", "value": "Re-Fit Backend", "inline": true},
+                {"name": "브랜치", "value": "\`$BRANCH\`", "inline": true},
+                {"name": "커밋 SHA", "value": "\`$SHA\`", "inline": false},
+                {"name": "워크플로우", "value": "[상세 보기](https://github.com/${{ github.repository }}/actions/runs/$RUN_ID)", "inline": false}
+              ],
+              "footer": { "text": "Re-Fit Deployment System" },
+              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            }]
+          }
+          EOF
+          )
+
+          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"

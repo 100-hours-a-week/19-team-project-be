@@ -1,0 +1,221 @@
+name: Re-Fit Backend CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'refit-backend/**'
+  push:
+    branches: [develop, main]
+    paths:
+      - 'refit-backend/**'
+  workflow_dispatch:
+    inputs:
+      job_to_run:
+        description: 'Which job to run'
+        required: true
+        type: choice
+        options:
+          - lint-and-test
+          - integration
+          - release
+
+env:
+  JAVA_VERSION: 21
+  GRADLE_OPTS: -Dorg.gradle.jvmargs=-Xmx2048m -Dorg.gradle.parallel=true -Dorg.gradle.caching=true
+
+permissions:
+  contents: write
+
+jobs:
+  # PR 검증: 컴파일 체크
+  # 목적: 빠른 피드백을 통한 코드 품질 검증
+  lint-and-test:
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'lint-and-test')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Compile Check
+        run: ./gradlew compileJava --no-daemon
+
+      - name: Build Check
+        run: |
+          set -e
+          ./gradlew bootJar --no-daemon
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          ls -lh build/libs/*.jar | head -1
+
+  # 통합 검증: develop 브랜치 빌드 검증 및 보안 스캔
+  # 목적: develop 브랜치 병합 전 빌드 검증 및 보안 취약점 확인
+  integration:
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'develop') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Secret Configuration Files
+        run: |
+          mkdir -p src/main/resources
+          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+
+      - name: Security Scan
+        run: |
+          ./gradlew dependencies --no-daemon > dependencies.txt 2>&1 || true
+          if grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt 2>/dev/null; then
+            echo "Warning: Potential security issues detected"
+            grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt | head -20
+            echo "Please review dependencies.txt for details"
+          else
+            echo "No obvious security vulnerabilities detected"
+          fi
+        continue-on-error: true
+
+  # 릴리즈: develop/main 브랜치 프로덕션 빌드 및 아티팩트 생성
+  # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
+  release:
+    if: |
+      (github.event_name == 'push' && github.ref_name == 'main') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'release')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: ${{ github.event_name == 'push' && 0 || 1 }}
+          token: ${{ secrets.PAT }}
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Inject Secret Configuration Files
+        run: |
+          mkdir -p src/main/resources
+          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
+            echo "Error: APPLICATION_SECRET_YML secret not found"
+            exit 1
+          fi
+          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+
+      - name: Production Build
+        run: ./gradlew clean bootJar --no-daemon
+
+      - name: Verify JAR
+        run: |
+          set -e
+          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
+            echo "Error: JAR file not found"
+            exit 1
+          fi
+          # JAR 파일 무결성 확인
+          if ! jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar > /dev/null 2>&1; then
+            echo "Error: Invalid JAR file"
+            exit 1
+          fi
+          ls -lh build/libs/*.jar
+
+      - name: Archive JAR Artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-jar-${{ github.sha }}-${{ github.run_id }}
+          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 6
+      
+      - name: Verify Artifact Upload
+        if: success()
+        run: |
+          set -e
+          echo "아티팩트 업로드 검증 중..."
+          JAR_FILE="build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "$JAR_FILE" ]; then
+            echo "Error: JAR 파일이 존재하지 않습니다"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
+          echo "업로드된 JAR 파일 크기: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "Error: JAR 파일 크기가 비정상적으로 작습니다"
+            exit 1
+          fi
+          echo "아티팩트 업로드 검증 완료"
+
+      - name: Create Release Tag
+        if: github.event_name == 'push'
+        env:
+          GITHUB_TOKEN: ${{ secrets.PAT }}
+        run: |
+          TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')-${GITHUB_SHA::7}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
+          git push origin "$TAG_NAME"
+          echo "Release tag created: $TAG_NAME"
