@@ -16,9 +16,8 @@ on:
         description: 'Branch name'
         required: true
         type: choice
-        default: 'develop'
+        default: 'main'
         options:
-          - develop
           - main
       use_latest_artifact:
         description: 'run_id/sha를 입력하지 않으면 선택한 브랜치의 최신 아티팩트 사용'
@@ -28,7 +27,7 @@ on:
   workflow_run:
     workflows: ["Re-Fit Backend CI"]
     types: [completed]
-    branches: [develop, main]
+    branches: [main]
 
 permissions:
   contents: read
@@ -48,10 +47,10 @@ jobs:
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.conclusion == 'success' &&
        (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-       (github.event.workflow_run.head_branch == 'develop' || github.event.workflow_run.head_branch == 'main')) ||
+       github.event.workflow_run.head_branch == 'main') ||
       github.event_name == 'workflow_dispatch'
     # main 브랜치는 production, develop 브랜치는 development 환경 사용
-    environment: ${{ ((github.event_name == 'workflow_dispatch' && inputs.branch == 'main') || (github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main')) && 'production' || 'development' }}
+    environment: production
 
     steps:
       - name: Find Latest Artifact (if needed)
