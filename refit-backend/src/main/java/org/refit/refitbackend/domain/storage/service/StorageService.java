@@ -19,6 +19,8 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class StorageService {
 
+    private static final long MAX_RESUME_BYTES = 5L * 1024 * 1024;
+
     private final StorageClient storageClient;
     private final ResumeRepository resumeRepository;
     private final ChatRoomRepository chatRoomRepository;
@@ -28,6 +30,7 @@ public class StorageService {
             throw new CustomException(ExceptionType.INVALID_REQUEST);
         }
 
+        validateUploadSize(request);
         String filePath = buildFilePath(userId, request);
         return storageClient.getPresignedUrl(filePath);
     }
@@ -85,6 +88,16 @@ public class StorageService {
                     extension
             );
         };
+    }
+
+    private void validateUploadSize(StorageReq.PresignedUrlRequest request) {
+        Long fileSize = request.fileSize();
+        if (fileSize == null || fileSize < 0) {
+            throw new CustomException(ExceptionType.INVALID_REQUEST);
+        }
+        if (request.targetType() == StorageReq.UploadTarget.RESUME_PDF && fileSize > MAX_RESUME_BYTES) {
+            throw new CustomException(ExceptionType.RESUME_FILE_TOO_LARGE);
+        }
     }
 
     private DownloadTarget resolveDownloadTarget(String fileUrl) {
