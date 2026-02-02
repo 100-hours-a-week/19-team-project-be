@@ -102,6 +102,14 @@ public class UserService {
         return UserRes.Me.from(user);
     }
 
+    @Transactional
+    public UserRes.Me clearProfileImage(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        user.clearProfileImageUrl();
+        return UserRes.Me.from(user);
+    }
+
     /**
      * 닉네임 중복 검사
      */
