@@ -11,6 +11,8 @@ import org.refit.refitbackend.domain.task.entity.enums.TaskType;
 import org.refit.refitbackend.domain.task.repository.TaskRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.refit.refitbackend.global.storage.PresignedUrlResponse;
+import org.refit.refitbackend.global.storage.StorageClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -25,6 +27,7 @@ import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.node.ObjectNode;
 import tools.jackson.databind.node.ArrayNode;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,6 +39,7 @@ public class ResumeTaskService {
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
     private final TaskRepository taskRepository;
+    private final StorageClient storageClient;
 
     @Value("${ai.base-url:https://re-fit.kr/api/ai}")
     private String aiBaseUrl;
@@ -73,7 +77,8 @@ public class ResumeTaskService {
         JsonNode result;
         int resumeId = (int) (System.currentTimeMillis() % 1_000_000_000L);
         try {
-            result = parseResume(resumeId, fileUrl);
+            String aiFileUrl = resolveAiFileUrl(fileUrl);
+            result = parseResume(resumeId, aiFileUrl);
         } catch (CustomException e) {
             task.markFailed(e.getExceptionType().getCode());
             taskRepository.save(task);
@@ -144,6 +149,18 @@ public class ResumeTaskService {
             log.error("[RESUME_PARSE] failed", e);
             throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
         }
+    }
+
+    private String resolveAiFileUrl(String fileUrl) {
+        if (fileUrl == null || fileUrl.isBlank()) {
+            throw new CustomException(ExceptionType.RESUME_FILE_URL_INVALID);
+        }
+        String normalized = fileUrl.toLowerCase(Locale.ROOT);
+        if (normalized.contains("x-amz-signature") || normalized.contains("x-amz-algorithm")) {
+            return fileUrl;
+        }
+        PresignedUrlResponse presigned = storageClient.getPresignedDownloadUrl(fileUrl);
+        return presigned.presignedUrl();
     }
 
     private Map<String, Object> extractDataMap(Map<String, Object> response) {
