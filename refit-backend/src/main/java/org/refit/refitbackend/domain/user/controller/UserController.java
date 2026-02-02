@@ -65,6 +65,17 @@ public class UserController {
     }
 
     /**
+     * 프로필 이미지 삭제
+     */
+    @UserSwaggerSpec.ClearProfileImage
+    @DeleteMapping("/me/profile-image")
+    public ResponseEntity<ApiResponse<UserRes.Me>> clearProfileImage(
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        return ResponseUtil.ok("profile_image_cleared", userService.clearProfileImage(principal.getUserId()));
+    }
+
+    /**
      * 현직자 인증 상태 조회
      */
     @UserSwaggerSpec.GetExpertVerificationStatus

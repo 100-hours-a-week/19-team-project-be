@@ -129,6 +129,10 @@ public class User extends BaseEntity {
         }
     }
 
+    public void clearProfileImageUrl() {
+        this.profileImageUrl = null;
+    }
+
     public void updateCareerLevel(CareerLevel careerLevel) {
         if (careerLevel != null) {
             this.careerLevel = careerLevel;
