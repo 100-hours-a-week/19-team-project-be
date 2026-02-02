@@ -183,6 +183,9 @@ public class EmailVerificationService {
         if (FREE_EMAIL_DOMAINS.contains(domain)) {
             throw new CustomException(ExceptionType.EMAIL_NOT_COMPANY_EMAIL);
         }
+        if (!emailDomainRepository.existsById(domain)) {
+            throw new CustomException(ExceptionType.EMAIL_DOMAIN_NOT_ALLOWED);
+        }
     }
 
     private String generateCode() {
