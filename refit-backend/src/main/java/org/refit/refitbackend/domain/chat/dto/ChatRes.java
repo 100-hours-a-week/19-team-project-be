@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.user.entity.User;
+import tools.jackson.databind.JsonNode;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -79,6 +80,9 @@ public class ChatRes {
             @Schema(description = "이력서 ID", example = "1")
             Long resumeId,
 
+            @Schema(description = "이력서 정보")
+            ResumeInfo resume,
+
             @Schema(description = "공고 URL", example = "https://example.com/job/123")
             String jobPostUrl,
 
@@ -93,12 +97,13 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime closedAt
     ) {
-        public static RoomDetail from(ChatRoom room) {
+        public static RoomDetail from(ChatRoom room, ResumeInfo resume) {
             return new RoomDetail(
                     room.getId(),
                     UserInfo.from(room.getRequester()),
                     UserInfo.from(room.getReceiver()),
                     room.getResumeId(),
+                    resume,
                     room.getJobPostUrl(),
                     room.getStatus().name(),
                     room.getCreatedAt(),
@@ -106,6 +111,33 @@ public class ChatRes {
             );
         }
     }
+
+    @Schema(description = "이력서 정보")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ResumeInfo(
+            @Schema(description = "이력서 ID", example = "1")
+            Long resumeId,
+
+            @Schema(description = "이력서 제목")
+            String title,
+
+            @Schema(description = "신입 여부")
+            Boolean isFresher,
+
+            @Schema(description = "학력")
+            String educationLevel,
+
+            @Schema(description = "이력서 내용")
+            JsonNode contentJson,
+
+            @Schema(description = "생성 시각")
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt,
+
+            @Schema(description = "수정 시각")
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime updatedAt
+    ) {}
 
     @Schema(description = "메시지 정보")
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
