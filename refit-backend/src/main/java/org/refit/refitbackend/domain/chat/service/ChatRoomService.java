@@ -21,6 +21,8 @@ import org.refit.refitbackend.global.storage.PresignedUrlResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -34,6 +36,7 @@ public class ChatRoomService {
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
     private final StorageService storageService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 채팅방 생성
@@ -119,7 +122,33 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
-        return ChatRes.RoomDetail.from(room);
+        ChatRes.ResumeInfo resumeInfo = null;
+        Long resumeId = room.getResumeId();
+        if (resumeId != null) {
+            Resume resume = resumeRepository.findById(resumeId).orElse(null);
+            if (resume != null) {
+                JsonNode contentJson = null;
+                String rawContent = resume.getContentJson();
+                if (rawContent != null && !rawContent.isBlank()) {
+                    try {
+                        contentJson = objectMapper.readTree(rawContent);
+                    } catch (Exception ignored) {
+                        contentJson = null;
+                    }
+                }
+                resumeInfo = new ChatRes.ResumeInfo(
+                        resume.getId(),
+                        resume.getTitle(),
+                        resume.getIsFresher(),
+                        resume.getEducationLevel(),
+                        contentJson,
+                        resume.getCreatedAt(),
+                        resume.getUpdatedAt()
+                );
+            }
+        }
+
+        return ChatRes.RoomDetail.from(room, resumeInfo);
     }
 
     /**
