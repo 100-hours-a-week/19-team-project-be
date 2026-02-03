@@ -11,6 +11,7 @@ import org.refit.refitbackend.domain.auth.entity.RefreshTokenStatus;
 import org.refit.refitbackend.domain.auth.repository.RefreshTokenRepository;
 import org.refit.refitbackend.domain.user.entity.OAuthProvider;
 import org.refit.refitbackend.domain.user.entity.User;
+import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
@@ -49,7 +50,9 @@ public class CustomOAuth2UserService {
 
         return userRepository
                 .findByOauthProviderAndOauthId(OAuthProvider.KAKAO, kakaoUserInfo.getId())
-                .map(this::loginSuccess)
+                .map(user -> user.isDeleted()
+                        ? restoreRequired(kakaoUserInfo)
+                        : loginSuccess(user))
                 .orElseGet(() -> signupRequired(kakaoUserInfo));
     }
 
@@ -61,7 +64,9 @@ public class CustomOAuth2UserService {
 
         return userRepository
                 .findByOauthProviderAndOauthId(OAuthProvider.KAKAO, kakaoUserInfo.getId())
-                .map(this::loginSuccess)
+                .map(user -> user.isDeleted()
+                        ? restoreRequired(kakaoUserInfo)
+                        : loginSuccess(user))
                 .orElseGet(() -> signupRequired(kakaoUserInfo));
     }
 
@@ -72,6 +77,18 @@ public class CustomOAuth2UserService {
     @Transactional
     public AuthRes.LoginSuccess signup(AuthReq.SignUp request) {
         User user = authService.signup(request);
+        AuthRes.TokenDto tokens = issueTokensAndPersist(user);
+        return new AuthRes.LoginSuccess(
+                user.getId(),
+                user.getUserType().name(),
+                tokens.accessToken(),
+                tokens.refreshToken()
+        );
+    }
+
+    @Transactional
+    public AuthRes.LoginSuccess restore(AuthReq.Restore request) {
+        User user = authService.restore(request);
         AuthRes.TokenDto tokens = issueTokensAndPersist(user);
         return new AuthRes.LoginSuccess(
                 user.getId(),
@@ -112,8 +129,30 @@ public class CustomOAuth2UserService {
                                 OAuthProvider.KAKAO.name(),
                                 kakaoUserInfo.getId(),
                                 kakaoUserInfo.getEmail(),
-                                kakaoUserInfo.getNickname(),
-                                kakaoUserInfo.getProfileImageUrl()
+                                kakaoUserInfo.getNickname()
+                        )
+                )
+                .build();
+    }
+
+    private AuthRes.OAuthLoginResponse restoreRequired(OAuth2KakaoUserInfoDto kakaoUserInfo) {
+        String email = kakaoUserInfo.getEmail();
+        String nickname = kakaoUserInfo.getNickname();
+        boolean emailConflict = email == null || email.isBlank()
+                || userRepository.existsByEmailAndStatus(email, UserStatus.ACTIVE);
+        boolean nicknameConflict = nickname == null || nickname.isBlank()
+                || userRepository.existsByNicknameAndStatus(nickname, UserStatus.ACTIVE);
+
+        return AuthRes.OAuthLoginResponse.builder()
+                .status("ACCOUNT_CHOICE_REQUIRED")
+                .restoreRequired(
+                        new AuthRes.RestoreRequired(
+                                OAuthProvider.KAKAO.name(),
+                                kakaoUserInfo.getId(),
+                                email,
+                                nickname,
+                                emailConflict,
+                                nicknameConflict
                         )
                 )
                 .build();
@@ -127,6 +166,10 @@ public class CustomOAuth2UserService {
         validateRefreshToken(refreshToken);
         RefreshToken stored = getActiveRefreshToken(refreshToken);
         validateStoredRefreshToken(stored, refreshToken);
+        if (stored.getUser().isDeleted()) {
+            refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.REVOKED);
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
         return issueTokensAndPersist(stored.getUser());
     }
 
@@ -134,7 +177,25 @@ public class CustomOAuth2UserService {
     public AuthRes.TokenDto issueDevToken(AuthReq.DevTokenRequest request) {
         User user = userRepository.findById(request.userId())
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
         return issueTokensAndPersist(user);
+    }
+
+    @Transactional
+    public void logout(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
+
+        refreshTokenRepository.updateStatusByUserAndStatus(
+                user,
+                RefreshTokenStatus.ACTIVE,
+                RefreshTokenStatus.REVOKED
+        );
     }
 
     private AuthRes.TokenDto issueTokensAndPersist(User user) {

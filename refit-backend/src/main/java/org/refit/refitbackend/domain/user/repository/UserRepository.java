@@ -21,11 +21,16 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     boolean existsByNickname(String nickname);
 
+    boolean existsByEmailAndStatus(String email, org.refit.refitbackend.domain.user.entity.enums.UserStatus status);
+
+    boolean existsByNicknameAndStatus(String nickname, org.refit.refitbackend.domain.user.entity.enums.UserStatus status);
+
     @Query("""
       SELECT DISTINCT u FROM User u
       LEFT JOIN u.userJobs uj
       LEFT JOIN u.userSkills us
-      WHERE (:keyword IS NULL
+      WHERE u.status = org.refit.refitbackend.domain.user.entity.enums.UserStatus.ACTIVE
+      AND (:keyword IS NULL
            OR u.nickname ILIKE CONCAT('%', CAST(:keyword AS text), '%')
            OR uj.job.name ILIKE CONCAT('%', CAST(:keyword AS text), '%')
            OR us.skill.name ILIKE CONCAT('%', CAST(:keyword AS text), '%'))

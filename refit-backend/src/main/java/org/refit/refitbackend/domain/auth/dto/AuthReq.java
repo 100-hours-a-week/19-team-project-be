@@ -87,6 +87,41 @@ public class AuthReq {
     ) {}
 
     /* =======================
+     * 로그아웃 요청
+     * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static record LogoutRequest(
+            @Schema(description = "Refresh Token")
+            String refreshToken
+    ) {}
+
+    /* =======================
+     * 탈퇴 계정 복구 요청
+     * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static record Restore(
+            @NotNull(message = "유효하지 않은 OAuth 제공자입니다.")
+            @Schema(description = "OAuth Provider", example = "KAKAO")
+            OAuthProvider oauthProvider,
+
+            @NotBlank(message = "OAuth ID가 필요합니다.")
+            @Schema(description = "OAuth 고유 ID")
+            String oauthId,
+
+            @Email(message = "이메일 형식이 올바르지 않습니다.")
+            @Schema(description = "이메일")
+            String email,
+
+            @NotBlank(message = "닉네임을 입력해 주세요.")
+            @Size(min = 2, max = 10, message = "닉네임 길이가 올바르지 않습니다.")
+            @Schema(description = "닉네임")
+            String nickname,
+
+            @Schema(description = "프로필 이미지 URL")
+            String profileImageUrl
+    ) {}
+
+    /* =======================
      * 개발용 토큰 발급 요청
      * ======================= */
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

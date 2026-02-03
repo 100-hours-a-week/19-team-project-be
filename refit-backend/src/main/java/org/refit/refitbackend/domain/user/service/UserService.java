@@ -14,6 +14,8 @@ import org.refit.refitbackend.domain.user.dto.UserRes;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.entity.UserJob;
 import org.refit.refitbackend.domain.user.entity.UserSkill;
+import org.refit.refitbackend.domain.auth.entity.RefreshTokenStatus;
+import org.refit.refitbackend.domain.auth.repository.RefreshTokenRepository;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.CustomException;
@@ -37,10 +39,14 @@ public class UserService {
     private final JobRepository jobRepository;
     private final SkillRepository skillRepository;
     private final ExpertProfileRepository expertProfileRepository;
+    private final RefreshTokenRepository refreshTokenRepository;
 
     public UserRes.Detail getUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
 
         return UserRes.Detail.from(user);
     }
@@ -48,11 +54,19 @@ public class UserService {
     public UserRes.Me getMe(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
 
         return UserRes.Me.from(user);
     }
 
     public UserRes.ExpertVerificationStatus getExpertVerificationStatus(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
         ExpertProfile profile = expertProfileRepository.findById(userId).orElse(null);
         if (profile == null) {
             return new UserRes.ExpertVerificationStatus(false, null, null, null);
@@ -69,6 +83,9 @@ public class UserService {
     public UserRes.Me updateMe(Long userId, UserReq.UpdateMe request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
 
         updateNicknameIfPresent(user, request.nickname());
 
@@ -106,8 +123,35 @@ public class UserService {
     public UserRes.Me clearProfileImage(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
         user.clearProfileImageUrl();
         return UserRes.Me.from(user);
+    }
+
+    @Transactional
+    public void withdraw(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (user.isDeleted()) {
+            throw new CustomException(ExceptionType.USER_DELETED);
+        }
+
+        if (user.getExpertProfile() != null) {
+            expertProfileRepository.deleteById(userId);
+            user.clearExpertProfile();
+        }
+
+        String anonymizedEmail = "deleted_" + userId + "@anonymized.local";
+        String anonymizedNickname = "탈퇴회원" + userId;
+        user.markDeleted(anonymizedEmail, anonymizedNickname);
+
+        refreshTokenRepository.updateStatusByUserAndStatus(
+                user,
+                RefreshTokenStatus.ACTIVE,
+                RefreshTokenStatus.REVOKED
+        );
     }
 
     /**

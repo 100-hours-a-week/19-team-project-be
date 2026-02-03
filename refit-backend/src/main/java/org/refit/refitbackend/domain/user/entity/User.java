@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import org.refit.refitbackend.domain.user.entity.enums.Role;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
+import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.global.common.entity.BaseEntity;
 
@@ -70,6 +71,10 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 20)
     private Role role =  Role.USER;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserStatus status = UserStatus.ACTIVE;
+
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<UserJob> userJobs = new ArrayList<>();
 
@@ -104,6 +109,7 @@ public class User extends BaseEntity {
         this.introduction = introduction;
 
         this.role = Role.USER;
+        this.status = UserStatus.ACTIVE;
     }
 
     public void updateProfile(String email, String nickname) {
@@ -137,6 +143,22 @@ public class User extends BaseEntity {
         if (careerLevel != null) {
             this.careerLevel = careerLevel;
         }
+    }
+
+    public boolean isDeleted() {
+        return this.status == UserStatus.DELETED;
+    }
+
+    public void markDeleted(String anonymizedEmail, String anonymizedNickname) {
+        this.status = UserStatus.DELETED;
+        this.email = anonymizedEmail;
+        this.nickname = anonymizedNickname;
+        this.profileImageUrl = null;
+        this.introduction = null;
+    }
+
+    public void restoreActive() {
+        this.status = UserStatus.ACTIVE;
     }
 
     public void replaceUserJobs(List<UserJob> jobs) {

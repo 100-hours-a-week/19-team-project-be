@@ -51,6 +51,7 @@ public enum ExceptionType {
     AUTH_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "AUTH_INVALID_REQUEST", "인증 요청이 올바르지 않습니다."),
     AUTH_CODE_REQUIRED(HttpStatus.BAD_REQUEST, "AUTH_CODE_REQUIRED", "인증 코드가 필요합니다."),
     REFRESH_TOKEN_REQUIRED(HttpStatus.BAD_REQUEST, "REFRESH_TOKEN_REQUIRED", "리프레시 토큰이 필요합니다."),
+    ACCOUNT_RESTORE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "ACCOUNT_RESTORE_NOT_ALLOWED", "복구할 수 없는 계정입니다."),
     AUTH_INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "AUTH_INVALID_CREDENTIALS", "인증 정보가 올바르지 않습니다."),
     AUTH_FORBIDDEN(HttpStatus.FORBIDDEN, "AUTH_FORBIDDEN", "인증 권한이 없습니다."),
 
@@ -61,6 +62,7 @@ public enum ExceptionType {
     USER_ID_REQUIRED(HttpStatus.BAD_REQUEST, "USER_ID_REQUIRED", "사용자 ID가 필요합니다."),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "USER_NOT_FOUND", "사용자를 찾을 수 없습니다."),
     USER_TYPE_INVALID(HttpStatus.BAD_REQUEST, "USER_TYPE_INVALID", "유효하지 않은 사용자 유형입니다."),
+    USER_DELETED(HttpStatus.FORBIDDEN, "USER_DELETED", "탈퇴한 사용자입니다."),
 
     NICKNAME_EMPTY(HttpStatus.BAD_REQUEST, "NICKNAME_EMPTY", "닉네임을 입력해 주세요."),
     NICKNAME_TOO_SHORT(HttpStatus.BAD_REQUEST, "NICKNAME_TOO_SHORT", "닉네임이 너무 짧습니다."),

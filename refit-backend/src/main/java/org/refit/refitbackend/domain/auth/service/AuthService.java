@@ -16,6 +16,7 @@ import org.refit.refitbackend.domain.master.repository.JobRepository;
 import org.refit.refitbackend.domain.master.repository.SkillRepository;
 import org.refit.refitbackend.domain.user.entity.*;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
+import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
 import org.refit.refitbackend.domain.user.repository.*;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
@@ -42,14 +43,58 @@ public class AuthService {
 
     @Transactional
     public User signup(AuthReq.SignUp signUpDto) {
-        validateSignUp(signUpDto);
+        User existing = userRepository.findByOauthProviderAndOauthId(signUpDto.oauthProvider(), signUpDto.oauthId())
+                .orElse(null);
+
+        validateSignUp(signUpDto, existing);
 
         CareerLevel careerLevel = getCareerLevel(signUpDto.careerLevelId());
-        User user = userRepository.save(createUser(signUpDto, careerLevel));
 
+        if (existing != null && existing.isDeleted()) {
+            existing.restoreActive();
+            existing.updateUserType(signUpDto.userType());
+            existing.updateCareerLevel(careerLevel);
+            existing.updateProfile(signUpDto.email(), signUpDto.nickname());
+            existing.updateIntroduction(signUpDto.introduction());
+            existing.clearProfileImageUrl();
+
+            userJobRepository.deleteByUser_Id(existing.getId());
+            userSkillRepository.deleteByUser_Id(existing.getId());
+            mapJobs(existing, signUpDto.jobIds());
+            mapSkills(existing, signUpDto.skills());
+
+            if (existing.getUserType() != UserType.EXPERT) {
+                if (existing.getExpertProfile() != null) {
+                    expertProfileRepository.deleteById(existing.getId());
+                    existing.clearExpertProfile();
+                }
+            } else {
+                createExpertProfileIfNeeded(existing, signUpDto);
+            }
+            return existing;
+        }
+
+        User user = userRepository.save(createUser(signUpDto, careerLevel));
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
         createExpertProfileIfNeeded(user, signUpDto);
+        return user;
+    }
+
+    @Transactional
+    public User restore(AuthReq.Restore request) {
+        User user = userRepository.findByOauthProviderAndOauthId(request.oauthProvider(), request.oauthId())
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (!user.isDeleted()) {
+            throw new CustomException(ExceptionType.ACCOUNT_RESTORE_NOT_ALLOWED);
+        }
+
+        validateRestore(request);
+
+        user.restoreActive();
+        user.updateProfile(request.email(), request.nickname());
+        user.clearProfileImageUrl();
+
         return user;
     }
 
@@ -170,13 +215,25 @@ public class AuthService {
     }
 
 
-    private void validateSignUp(AuthReq.SignUp signUp) {
-        // OAuth 중복
-        if (userRepository.existsByOauthProviderAndOauthId(signUp.oauthProvider(), signUp.oauthId())) throw new CustomException(ExceptionType.OAUTH_DUPLICATE);
-        // Email 중복
-        if (userRepository.existsByEmail(signUp.email())) throw new CustomException(ExceptionType.EMAIL_DUPLICATE);
-        // Nickname 중복
-        if (userRepository.existsByNickname(signUp.nickname())) throw new CustomException(ExceptionType.NICKNAME_DUPLICATE);
+    private void validateSignUp(AuthReq.SignUp signUp, User existing) {
+        if (existing != null && !existing.isDeleted()) {
+            throw new CustomException(ExceptionType.OAUTH_DUPLICATE);
+        }
+        if (userRepository.existsByEmailAndStatus(signUp.email(), UserStatus.ACTIVE)) {
+            throw new CustomException(ExceptionType.EMAIL_DUPLICATE);
+        }
+        if (userRepository.existsByNicknameAndStatus(signUp.nickname(), UserStatus.ACTIVE)) {
+            throw new CustomException(ExceptionType.NICKNAME_DUPLICATE);
+        }
+    }
+
+    private void validateRestore(AuthReq.Restore request) {
+        if (userRepository.existsByEmailAndStatus(request.email(), UserStatus.ACTIVE)) {
+            throw new CustomException(ExceptionType.EMAIL_DUPLICATE);
+        }
+        if (userRepository.existsByNicknameAndStatus(request.nickname(), UserStatus.ACTIVE)) {
+            throw new CustomException(ExceptionType.NICKNAME_DUPLICATE);
+        }
     }
 
 }

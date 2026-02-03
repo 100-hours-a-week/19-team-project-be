@@ -3,11 +3,7 @@ package org.refit.refitbackend.global.swagger.spec.user;
 import org.refit.refitbackend.domain.user.dto.UserReq;
 import org.refit.refitbackend.domain.user.dto.UserRes;
 import org.refit.refitbackend.global.error.ExceptionType;
-import org.refit.refitbackend.global.swagger.annotation.SwaggerApiBadRequestError;
-import org.refit.refitbackend.global.swagger.annotation.SwaggerApiNotFoundError;
-import org.refit.refitbackend.global.swagger.annotation.SwaggerApiRequestBody;
-import org.refit.refitbackend.global.swagger.annotation.SwaggerApiSuccess;
-import org.refit.refitbackend.global.swagger.annotation.SwaggerApiUnauthorizedError;
+import org.refit.refitbackend.global.swagger.annotation.*;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -108,6 +104,19 @@ public final class UserSwaggerSpec {
     )
     @SwaggerApiUnauthorizedError(types = { ExceptionType.AUTH_UNAUTHORIZED })
     public @interface ClearProfileImage {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "회원 탈퇴",
+            operationDescription = "계정을 비활성화하고 개인정보를 익명화합니다.",
+            implementation = Void.class
+    )
+    @SwaggerApiUnauthorizedError(types = { ExceptionType.AUTH_UNAUTHORIZED })
+    @SwaggerApiError(responseCode = "403", description = "user_deleted", types = {
+            ExceptionType.USER_DELETED
+    })
+    public @interface Withdraw {}
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)

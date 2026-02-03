@@ -71,6 +71,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             writeError(response, ExceptionType.USER_NOT_FOUND);
             return;
         }
+        if (user.isDeleted()) {
+            writeError(response, ExceptionType.USER_DELETED);
+            return;
+        }
 
         CustomUserDetails principal = new CustomUserDetails(user);
         UsernamePasswordAuthenticationToken authentication =
