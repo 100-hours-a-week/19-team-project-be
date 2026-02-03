@@ -14,6 +14,7 @@ import org.springframework.security.web.authentication.www.BasicAuthenticationEn
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
@@ -25,27 +26,40 @@ public class SecurityConfig {
 
     @Bean
     public List<String> allowUrls() {
-        return List.of(
-                "/",
-                "/actuator/**",
-                "/api/actuator/**",
-                "/dev/**",
-                "/v1/auth/**",
-                "/api/v1/auth/**",
-                "/api/api/**",
-                "/api/v1/skills",
-                "/api/v1/jobs",
-                "/api/v1/career-levels",
-                "/api/v1/users",
-                "/api/v1/experts",
-                "/api/v1/experts/**",
-                "/api/v1/dev/**",
-                "/api/v1/email-verifications/public",
-                "/api/v1/email-domains",
+        List<String> allow = new ArrayList<>();
+        allow.add("/");
+        allow.add("/actuator/**");
+        allow.add("/api/actuator/**");
+        allow.add("/dev/**");
+        allow.add("/api/api/**");
+        allow.add("/api/ws/**");
+        allow.add("/ws/**");
 
-                "/api/ws/**",
-                "/ws/**"
+        List<String> apiPrefixes = List.of("/v1", "/api/v1");
+        List<String> publicPaths = List.of(
+                "/auth/oauth/**",
+                "/auth/signup",
+                "/auth/tokens",
+                "/auth/restore",
+                "/auth/dev/**",
+                "/dev/**",
+                "/skills",
+                "/jobs",
+                "/career-levels",
+                "/users",
+                "/experts",
+                "/experts/**",
+                "/email-verifications/public",
+                "/email-domains"
         );
+
+        for (String prefix : apiPrefixes) {
+            for (String path : publicPaths) {
+                allow.add(prefix + path);
+            }
+        }
+
+        return allow;
     }
 
     public static final String[] SwaggerPatterns = {

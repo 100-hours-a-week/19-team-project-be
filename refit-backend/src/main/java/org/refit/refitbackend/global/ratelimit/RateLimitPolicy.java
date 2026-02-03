@@ -13,6 +13,7 @@ public class RateLimitPolicy {
             // Public endpoints - IP based only (loose for shared Wi-Fi)
             new RateLimitRule("auth_post", HttpMethod.POST, "/api/v1/auth/**", 100, Duration.ofMinutes(1), RateLimitTarget.IP),
             new RateLimitRule("auth_oauth_post", HttpMethod.POST, "/api/v1/auth/oauth/**", 100, Duration.ofMinutes(1), RateLimitTarget.IP),
+            new RateLimitRule("auth_restore_post", HttpMethod.POST, "/api/v1/auth/restore", 100, Duration.ofMinutes(1), RateLimitTarget.IP),
             new RateLimitRule("email_public_post", HttpMethod.POST, "/api/v1/email-verifications/public", 100, Duration.ofMinutes(1), RateLimitTarget.IP),
             new RateLimitRule("email_public_patch", HttpMethod.PATCH, "/api/v1/email-verifications/public", 100, Duration.ofMinutes(1), RateLimitTarget.IP),
 

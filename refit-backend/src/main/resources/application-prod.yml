@@ -9,7 +9,7 @@ spring:
 
   jwt:
     issuer: re-fit
-    access-exp-ms: 20000 # 20초
+    access-exp-ms: 600000 # 10분
     refresh-exp-ms: 1209600000 # 2주
 
   jackson:
