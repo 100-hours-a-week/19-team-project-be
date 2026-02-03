@@ -20,6 +20,7 @@ import java.util.UUID;
 public class StorageService {
 
     private static final long MAX_RESUME_BYTES = 5L * 1024 * 1024;
+    private static final long MAX_PROFILE_IMAGE_BYTES = 10L * 1024 * 1024;
 
     private final StorageClient storageClient;
     private final ResumeRepository resumeRepository;
@@ -92,11 +93,18 @@ public class StorageService {
 
     private void validateUploadSize(StorageReq.PresignedUrlRequest request) {
         Long fileSize = request.fileSize();
-        if (fileSize == null || fileSize < 0) {
-            throw new CustomException(ExceptionType.INVALID_REQUEST);
+        if (fileSize == null) {
+            throw new CustomException(ExceptionType.FILE_SIZE_REQUIRED);
+        }
+        if (fileSize < 0) {
+            throw new CustomException(ExceptionType.FILE_SIZE_INVALID);
         }
         if (request.targetType() == StorageReq.UploadTarget.RESUME_PDF && fileSize > MAX_RESUME_BYTES) {
             throw new CustomException(ExceptionType.RESUME_FILE_TOO_LARGE);
+        }
+        if (request.targetType() == StorageReq.UploadTarget.PROFILE_IMAGE
+                && fileSize > MAX_PROFILE_IMAGE_BYTES) {
+            throw new CustomException(ExceptionType.PROFILE_IMAGE_TOO_LARGE);
         }
     }
 
