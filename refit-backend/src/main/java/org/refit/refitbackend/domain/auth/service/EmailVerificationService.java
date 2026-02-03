@@ -81,6 +81,9 @@ public class EmailVerificationService {
         LocalDateTime now = LocalDateTime.now();
         int sentCount = 1;
         if (latest != null) {
+            if (latest.getStatus() == EmailVerificationStatus.VERIFIED) {
+                throw new CustomException(ExceptionType.EMAIL_ALREADY_VERIFIED);
+            }
             LocalDateTime lastSentAt = latest.getUpdatedAt() != null ? latest.getUpdatedAt() : latest.getCreatedAt();
             if (lastSentAt != null && Duration.between(lastSentAt, now).compareTo(RATE_LIMIT_WINDOW) < 0) {
                 if (latest.getSentCount() >= MAX_SENDS_PER_WINDOW) {

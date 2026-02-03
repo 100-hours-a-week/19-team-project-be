@@ -154,6 +154,9 @@ public final class AuthSwaggerSpec {
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
     })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
+    })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,
             examples = { "{ \"email\": \"user@navercorp.com\" }" },
@@ -176,6 +179,9 @@ public final class AuthSwaggerSpec {
     })
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
+    })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
     })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,
