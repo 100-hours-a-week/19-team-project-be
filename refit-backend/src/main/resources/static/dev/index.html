@@ -120,13 +120,66 @@
             word-break: break-all;
         }
         .hidden {
-            display: none;
+            display: none !important;
         }
         .user-info p {
             margin: 8px 0;
         }
         .user-info strong {
             color: #333;
+        }
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 999;
+        }
+        .modal-content {
+            background: #fff;
+            padding: 24px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 420px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: relative;
+        }
+        .modal-close {
+            position: absolute;
+            top: 10px;
+            right: 12px;
+            border: none;
+            background: transparent;
+            font-size: 20px;
+            cursor: pointer;
+            color: #666;
+        }
+        .modal-close:hover {
+            color: #000;
+        }
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+            color: #fff;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
         }
     </style>
 </head>
@@ -171,7 +224,7 @@
         <select id="userType">
             <option value="">선택하세요</option>
             <option value="JOB_SEEKER">구직자</option>
-            <option value="RECRUITER">채용담당자</option>
+            <option value="EXPERT">현직자</option>
         </select>
     </div>
 
@@ -192,6 +245,40 @@
     </div>
 
     <button class="btn-submit" onclick="submitSignup()">회원가입 완료</button>
+</div>
+
+<!-- 복구 폼 -->
+<div id="restoreCard" class="card signup-form">
+    <h2>♻️ 탈퇴 계정 복구</h2>
+    <p style="color: #666; margin-bottom: 20px;">충돌 항목을 수정한 뒤 복구를 진행하세요.</p>
+
+    <input type="hidden" id="restoreOauthProvider">
+    <input type="hidden" id="restoreOauthId">
+
+    <div class="form-group">
+        <label>이메일 *</label>
+        <input type="email" id="restoreEmail" placeholder="이메일" maxlength="100">
+    </div>
+
+    <div class="form-group">
+        <label>닉네임 *</label>
+        <input type="text" id="restoreNickname" placeholder="닉네임 (2-10자)" maxlength="10">
+    </div>
+
+    <button class="btn-submit" onclick="submitRestore()">복구 완료</button>
+</div>
+
+<!-- 복구/신규 선택 모달 -->
+<div id="restoreChoiceModal" class="modal hidden" onclick="closeRestoreChoice()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeRestoreChoice()">×</button>
+        <h3>탈퇴 계정 처리</h3>
+        <p>이 계정을 복구할지, 새로 가입할지 선택해주세요.</p>
+        <div class="modal-actions">
+            <button class="btn-submit" onclick="chooseRestore()">복구하기</button>
+            <button class="btn-secondary" onclick="chooseSignup()">새로 가입</button>
+        </div>
+    </div>
 </div>
 
 <!-- API 로그 -->
@@ -257,7 +344,9 @@
             career_level_id: Number(document.getElementById('careerLevelId').value),
             job_ids: [],
             skills: [],
-            introduction: document.getElementById('introduction').value
+            introduction: document.getElementById('introduction').value,
+            profile_image_url: null,
+            terms_agreed: true
         };
 
         // 유효성 검사
@@ -304,6 +393,75 @@
         }
     }
 
+    async function submitRestore() {
+        const restoreData = {
+            oauth_provider: document.getElementById('restoreOauthProvider').value,
+            oauth_id: document.getElementById('restoreOauthId').value,
+            email: document.getElementById('restoreEmail').value,
+            nickname: document.getElementById('restoreNickname').value
+        };
+
+        if (!restoreData.email) {
+            alert('이메일 입력');
+            return;
+        }
+        if (!restoreData.nickname) {
+            alert('닉네임 입력');
+            return;
+        }
+
+        addLog('복구 요청', restoreData);
+
+        try {
+            const response = await fetch('/api/v1/auth/restore', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(restoreData)
+            });
+
+            const data = await response.json();
+            addLog('복구 응답', data);
+
+            if (data.data?.user_id) {
+                document.getElementById('restoreCard').style.display = 'none';
+                showResult('success', `
+                        <h3>✅ 복구 완료!</h3>
+                        <div class="user-info">
+                            <p><strong>사용자 ID:</strong> ${data.data.user_id}</p>
+                            <p><strong>사용자 유형:</strong> ${data.data.user_type}</p>
+                        </div>
+                    `);
+            } else {
+                showResult('error', `<h3>❌ 복구 실패</h3><p>${data.message || JSON.stringify(data)}</p>`);
+            }
+        } catch (error) {
+            addLog('복구 에러', { error: error.message });
+            showResult('error', `<h3>❌ 에러 발생</h3><p>${error.message}</p>`);
+        }
+    }
+
+    function openRestoreChoice() {
+        document.getElementById('restoreChoiceModal').classList.remove('hidden');
+    }
+
+    function closeRestoreChoice() {
+        document.getElementById('restoreChoiceModal').classList.add('hidden');
+    }
+
+    function chooseRestore() {
+        event?.stopPropagation?.();
+        closeRestoreChoice();
+        document.getElementById('signupCard').style.display = 'none';
+        document.getElementById('restoreCard').style.display = 'block';
+    }
+
+    function chooseSignup() {
+        event?.stopPropagation?.();
+        closeRestoreChoice();
+        document.getElementById('restoreCard').style.display = 'none';
+        document.getElementById('signupCard').style.display = 'block';
+    }
+
     // ============================================
     // 응답 처리
     // ============================================
@@ -328,6 +486,23 @@
             document.getElementById('oauthId').value = signupData.oauth_id;
             document.getElementById('email').value = signupData.email || '';
             document.getElementById('nickname').value = signupData.nickname || '';
+        } else if (response.data?.status === 'ACCOUNT_CHOICE_REQUIRED') {
+            document.getElementById('loginCard').classList.add('hidden');
+            showResult('info', '<h3>♻️ 탈퇴 계정</h3><p>복구 또는 새로 가입을 선택하세요.</p>');
+
+            const restoreData = response.data.restore_required;
+            document.getElementById('restoreOauthProvider').value = restoreData.oauth_provider;
+            document.getElementById('restoreOauthId').value = restoreData.oauth_id;
+            document.getElementById('restoreEmail').value = restoreData.email || '';
+            document.getElementById('restoreNickname').value = restoreData.nickname || '';
+            const conflicts = [];
+            if (restoreData.email_conflict) conflicts.push('이메일');
+            if (restoreData.nickname_conflict) conflicts.push('닉네임');
+            if (conflicts.length > 0) {
+                addLog('복구 충돌 항목', { conflicts });
+            }
+
+            openRestoreChoice();
         } else {
             showResult('error', `<h3>❌ 오류 발생</h3><pre>${JSON.stringify(response, null, 2)}</pre>`);
         }
