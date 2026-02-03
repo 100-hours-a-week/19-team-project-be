@@ -9,12 +9,14 @@ import org.refit.refitbackend.domain.auth.config.properties.OAuth2ProviderProper
 import org.refit.refitbackend.domain.auth.config.properties.OAuth2RegistrationProperties;
 import org.refit.refitbackend.domain.auth.dto.AuthReq;
 import org.refit.refitbackend.domain.auth.dto.AuthRes;
+import org.refit.refitbackend.domain.auth.jwt.CustomUserDetails;
 import org.refit.refitbackend.domain.auth.service.CustomOAuth2UserService;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.swagger.spec.auth.AuthSwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.bind.annotation.RequestBody;
 
@@ -33,6 +35,12 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<AuthRes.LoginSuccess>> signup(@Valid @RequestBody AuthReq.SignUp request) {
         return ResponseUtil.created("success", oAuth2UserService.signup(request));
+    }
+
+    @AuthSwaggerSpec.Restore
+    @PostMapping("/restore")
+    public ResponseEntity<ApiResponse<AuthRes.LoginSuccess>> restore(@Valid @RequestBody AuthReq.Restore request) {
+        return ResponseUtil.ok("restore_success", oAuth2UserService.restore(request));
     }
 
     /* =======================
@@ -77,6 +85,15 @@ public class AuthController {
         }
 
         return ResponseUtil.created("token_refreshed", oAuth2UserService.refreshTokens(refreshToken));
+    }
+
+    @AuthSwaggerSpec.Logout
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> logout(
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        oAuth2UserService.logout(principal.getUserId());
+        return ResponseUtil.ok("logout_success", null);
     }
 
     @AuthSwaggerSpec.KakaoAuthorize

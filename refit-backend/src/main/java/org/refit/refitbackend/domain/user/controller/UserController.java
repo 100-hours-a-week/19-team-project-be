@@ -76,6 +76,18 @@ public class UserController {
     }
 
     /**
+     * 회원 탈퇴
+     */
+    @UserSwaggerSpec.Withdraw
+    @DeleteMapping("/me")
+    public ResponseEntity<ApiResponse<Void>> withdraw(
+            @AuthenticationPrincipal CustomUserDetails principal
+    ) {
+        userService.withdraw(principal.getUserId());
+        return ResponseUtil.ok("withdraw_success", null);
+    }
+
+    /**
      * 현직자 인증 상태 조회
      */
     @UserSwaggerSpec.GetExpertVerificationStatus

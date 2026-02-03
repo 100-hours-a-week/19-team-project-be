@@ -65,7 +65,11 @@ public class AuthReq {
             String companyName,
 
             @Schema(description = "회사 이메일 (현직자 선택 시 선택)", example = "user@navercorp.com")
-            String companyEmail
+            String companyEmail,
+
+            @NotNull(message = "필수 약관 동의가 필요합니다.")
+            @Schema(description = "필수 약관 동의", name = "terms_agreed", example = "true")
+            Boolean termsAgreed
     ) {}
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
@@ -84,6 +88,41 @@ public class AuthReq {
             @NotBlank(message = "리프레시 토큰이 필요합니다.")
             @Schema(description = "Refresh Token")
             String refreshToken
+    ) {}
+
+    /* =======================
+     * 로그아웃 요청
+     * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static record LogoutRequest(
+            @Schema(description = "Refresh Token")
+            String refreshToken
+    ) {}
+
+    /* =======================
+     * 탈퇴 계정 복구 요청
+     * ======================= */
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public static record Restore(
+            @NotNull(message = "유효하지 않은 OAuth 제공자입니다.")
+            @Schema(description = "OAuth Provider", example = "KAKAO")
+            OAuthProvider oauthProvider,
+
+            @NotBlank(message = "OAuth ID가 필요합니다.")
+            @Schema(description = "OAuth 고유 ID")
+            String oauthId,
+
+            @Email(message = "이메일 형식이 올바르지 않습니다.")
+            @Schema(description = "이메일")
+            String email,
+
+            @NotBlank(message = "닉네임을 입력해 주세요.")
+            @Size(min = 2, max = 10, message = "닉네임 길이가 올바르지 않습니다.")
+            @Schema(description = "닉네임")
+            String nickname,
+
+            @Schema(description = "프로필 이미지 URL")
+            String profileImageUrl
     ) {}
 
     /* =======================

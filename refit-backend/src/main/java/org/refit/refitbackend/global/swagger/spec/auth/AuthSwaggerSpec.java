@@ -36,6 +36,7 @@ public final class AuthSwaggerSpec {
             ExceptionType.SIGNUP_OAUTH_ID_EMPTY,
             ExceptionType.SIGNUP_EMAIL_INVALID,
             ExceptionType.SIGNUP_USER_TYPE_INVALID,
+            ExceptionType.TERMS_NOT_AGREED,
             ExceptionType.EMAIL_VERIFICATION_REQUIRED,
             ExceptionType.EMAIL_VERIFICATION_NOT_VERIFIED
     })
@@ -47,8 +48,8 @@ public final class AuthSwaggerSpec {
     @SwaggerApiRequestBody(
             implementation = AuthReq.SignUp.class,
             examples = {
-                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"JOB_SEEKER\", \"career_level_id\": 1, \"job_ids\": [1, 2], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\" }",
-                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"EXPERT\", \"career_level_id\": 1, \"job_ids\": [1], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\",  \"company_email\": \"user@navercorp.com\" }"
+                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"JOB_SEEKER\", \"career_level_id\": 1, \"job_ids\": [1, 2], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\", \"terms_agreed\": true }",
+                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"EXPERT\", \"career_level_id\": 1, \"job_ids\": [1], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\",  \"company_email\": \"user@navercorp.com\", \"terms_agreed\": true }"
             },
             exampleNames = { "job_seeker", "expert_unverified" }
     )
@@ -62,6 +63,7 @@ public final class AuthSwaggerSpec {
                 카카오 OAuth 로그인 처리
                 - 기존 회원: 로그인 성공
                 - 신규 회원: 회원가입 필요 데이터 반환
+                - 탈퇴 회원: 계정 처리 선택 필요 데이터 반환
             """,
             implementation = AuthRes.OAuthLoginResponse.class
     )
@@ -83,6 +85,27 @@ public final class AuthSwaggerSpec {
             ExceptionType.AUTH_CODE_REQUIRED
     })
     public @interface KakaoLoginLocal {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "탈퇴 계정 복구",
+            operationDescription = "카카오 계정 기준으로 탈퇴 계정을 복구합니다.",
+            implementation = AuthRes.LoginSuccess.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.ACCOUNT_RESTORE_NOT_ALLOWED
+    })
+    @SwaggerApiConflictError(types = {
+            ExceptionType.EMAIL_DUPLICATE,
+            ExceptionType.NICKNAME_DUPLICATE
+    })
+    @SwaggerApiRequestBody(
+            implementation = AuthReq.Restore.class,
+            examples = { "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\" }" },
+            exampleNames = { "restore_request" }
+    )
+    public @interface Restore {}
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
@@ -129,6 +152,24 @@ public final class AuthSwaggerSpec {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
+            summary = "로그아웃",
+            operationDescription = "액세스 토큰을 기준으로 사용자 RT를 모두 폐기합니다.",
+            implementation = ApiResponse.class,
+            responseDescription = "logout_success"
+    )
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "403", description = "user_deleted", types = {
+            ExceptionType.USER_DELETED
+    })
+    public @interface Logout {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
             summary = "개발용 토큰 발급",
             operationDescription = "사용자 ID로 AT/RT 발급 (개발 환경용)",
             implementation = AuthRes.TokenDto.class
@@ -148,11 +189,17 @@ public final class AuthSwaggerSpec {
             ExceptionType.EMAIL_DOMAIN_NOT_ALLOWED,
             ExceptionType.EMAIL_NOT_COMPANY_EMAIL
     })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
+    })
     @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
             ExceptionType.AUTH_UNAUTHORIZED
     })
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
+    })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
     })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,
@@ -174,8 +221,14 @@ public final class AuthSwaggerSpec {
             ExceptionType.EMAIL_DOMAIN_NOT_ALLOWED,
             ExceptionType.EMAIL_NOT_COMPANY_EMAIL
     })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
+    })
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
+    })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
     })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,

@@ -13,14 +13,17 @@ public record AuthRes() {
     @Schema(description = "OAuth 로그인 응답")
     public record OAuthLoginResponse(
 
-            @Schema(description = "응답 상태", example = "LOGIN_SUCCESS | SIGNUP_REQUIRED")
+            @Schema(description = "응답 상태", example = "LOGIN_SUCCESS | SIGNUP_REQUIRED | ACCOUNT_CHOICE_REQUIRED")
             String status,
 
             @Schema(description = "로그인 성공 시 데이터")
             LoginSuccess loginSuccess,
 
             @Schema(description = "회원가입 필요 시 데이터")
-            SignupRequired signupRequired
+            SignupRequired signupRequired,
+
+            @Schema(description = "복구 필요 시 데이터")
+            RestoreRequired restoreRequired
     ) {}
 
     /* =======================
@@ -53,8 +56,21 @@ public record AuthRes() {
             String oauthProvider,
             String oauthId,
             String email,
+            String nickname
+    ) {}
+
+    /* =======================
+     * 복구 필요 응답 Data
+     * ======================= */
+    @Schema(description = "복구 필요 데이터")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RestoreRequired(
+            String oauthProvider,
+            String oauthId,
+            String email,
             String nickname,
-            String profileImageUrl
+            boolean emailConflict,
+            boolean nicknameConflict
     ) {}
 
     /* =======================
