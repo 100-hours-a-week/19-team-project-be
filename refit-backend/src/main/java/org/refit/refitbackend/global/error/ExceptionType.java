@@ -146,6 +146,7 @@ public enum ExceptionType {
     CHAT_ID_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_ID_REQUIRED", "채팅 ID가 필요합니다."),
     CHAT_STATUS_REQUIRED(HttpStatus.BAD_REQUEST, "CHAT_STATUS_REQUIRED", "채팅 상태가 필요합니다."),
     MESSAGE_ID_REQUIRED(HttpStatus.BAD_REQUEST, "MESSAGE_ID_REQUIRED", "메시지 ID가 필요합니다."),
+    LAST_READ_SEQ_REQUIRED(HttpStatus.BAD_REQUEST, "LAST_READ_SEQ_REQUIRED", "마지막 읽은 메시지 시퀀스가 필요합니다."),
     CHAT_JOB_POST_URL_TOO_LONG(HttpStatus.BAD_REQUEST, "CHAT_JOB_POST_URL_TOO_LONG", "공고 링크가 너무 깁니다."),
 
     CHAT_STATUS_INVALID(HttpStatus.BAD_REQUEST, "CHAT_STATUS_INVALID", "상태는 ACCEPTED 또는 REJECTED여야 합니다."),
