@@ -49,13 +49,9 @@ public class ChatReq {
     @Schema(description = "메시지 읽음 처리 요청")
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReadMessage(
-            @Schema(description = "채팅방 ID", example = "1")
-            @NotNull(message = "채팅 ID가 필요합니다.")
-            Long chatId,
-
-            @Schema(description = "읽은 메시지 ID", example = "100")
+            @Schema(description = "마지막으로 읽은 메시지 ID", example = "100")
             @NotNull(message = "메시지 ID가 필요합니다.")
-            Long messageId
+            Long lastMessageId
     ) {}
 
     @Schema(description = "채팅방 종료 요청")
