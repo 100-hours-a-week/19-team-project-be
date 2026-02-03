@@ -141,13 +141,11 @@ public final class ChatSwaggerSpec {
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
             summary = "메시지 읽음 처리",
-            operationDescription = "메시지를 읽음 처리합니다",
+            operationDescription = "채팅방의 마지막 읽은 메시지를 갱신합니다",
             implementation = ApiResponse.class
     )
     @SwaggerApiError(responseCode = "400", description = "invalid_request", types = {
             ExceptionType.INVALID_REQUEST,
-            ExceptionType.MESSAGE_CONTENT_EMPTY,
-            ExceptionType.MESSAGE_CONTENT_TOO_LONG,
             ExceptionType.MESSAGE_ID_REQUIRED
     })
     @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
@@ -160,7 +158,8 @@ public final class ChatSwaggerSpec {
             ExceptionType.AUTH_FORBIDDEN
     })
     @SwaggerApiError(responseCode = "404", description = "message_not_found", types = {
-            ExceptionType.MESSAGE_NOT_FOUND
+            ExceptionType.MESSAGE_NOT_FOUND,
+            ExceptionType.CHAT_ROOM_NOT_FOUND
     })
     public @interface MarkAsRead {}
 

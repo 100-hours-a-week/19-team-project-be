@@ -62,6 +62,8 @@ public class ChatMessageService {
 
         // 채팅방의 마지막 메시지 업데이트
         chatRoom.updateLastMessage(savedMessage);
+        // 발신자 기준으로 읽음 처리까지 반영
+        chatRoom.updateLastReadMessage(senderId, savedMessage);
 
         ChatRes.MessageInfo payload = ChatRes.MessageInfo.from(savedMessage);
 

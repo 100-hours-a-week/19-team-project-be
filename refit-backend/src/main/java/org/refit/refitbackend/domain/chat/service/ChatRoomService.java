@@ -190,11 +190,11 @@ public class ChatRoomService {
      * 메시지 읽음 처리
      */
     @Transactional
-    public void markAsRead(Long userId, ChatReq.ReadMessage request) {
-        ChatRoom room = chatRoomRepository.findByIdAndUserId(request.chatId(), userId)
+    public void markAsRead(Long userId, Long roomId, ChatReq.ReadMessage request) {
+        ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
-        ChatMessage message = chatMessageRepository.findById(request.messageId())
+        ChatMessage message = chatMessageRepository.findById(request.lastMessageId())
                 .orElseThrow(() -> new CustomException(ExceptionType.MESSAGE_NOT_FOUND));
 
         room.updateLastReadMessage(userId, message);
