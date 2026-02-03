@@ -56,6 +56,7 @@ public class AuthService {
             existing.updateCareerLevel(careerLevel);
             existing.updateProfile(signUpDto.email(), signUpDto.nickname());
             existing.updateIntroduction(signUpDto.introduction());
+            existing.updateTermsAgreed(signUpDto.termsAgreed());
             existing.clearProfileImageUrl();
 
             userJobRepository.deleteByUser_Id(existing.getId());
@@ -75,6 +76,7 @@ public class AuthService {
         }
 
         User user = userRepository.save(createUser(signUpDto, careerLevel));
+        user.updateTermsAgreed(signUpDto.termsAgreed());
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
         createExpertProfileIfNeeded(user, signUpDto);
@@ -216,6 +218,9 @@ public class AuthService {
 
 
     private void validateSignUp(AuthReq.SignUp signUp, User existing) {
+        if (!Boolean.TRUE.equals(signUp.termsAgreed())) {
+            throw new CustomException(ExceptionType.TERMS_NOT_AGREED);
+        }
         if (existing != null && !existing.isDeleted()) {
             throw new CustomException(ExceptionType.OAUTH_DUPLICATE);
         }

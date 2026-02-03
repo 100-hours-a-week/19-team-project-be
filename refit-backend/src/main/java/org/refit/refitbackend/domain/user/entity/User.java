@@ -67,6 +67,9 @@ public class User extends BaseEntity {
     @Column(length = 255)
     private String profileImageUrl;
 
+    @Column(nullable = false)
+    private Boolean termsAgreed = false;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private Role role =  Role.USER;
@@ -110,6 +113,12 @@ public class User extends BaseEntity {
 
         this.role = Role.USER;
         this.status = UserStatus.ACTIVE;
+    }
+
+    public void updateTermsAgreed(Boolean termsAgreed) {
+        if (termsAgreed != null) {
+            this.termsAgreed = termsAgreed;
+        }
     }
 
     public void updateProfile(String email, String nickname) {

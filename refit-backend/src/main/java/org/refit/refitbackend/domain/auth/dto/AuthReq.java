@@ -65,7 +65,11 @@ public class AuthReq {
             String companyName,
 
             @Schema(description = "회사 이메일 (현직자 선택 시 선택)", example = "user@navercorp.com")
-            String companyEmail
+            String companyEmail,
+
+            @NotNull(message = "필수 약관 동의가 필요합니다.")
+            @Schema(description = "필수 약관 동의", name = "terms_agreed", example = "true")
+            Boolean termsAgreed
     ) {}
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)

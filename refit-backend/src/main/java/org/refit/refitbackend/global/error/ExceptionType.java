@@ -47,6 +47,7 @@ public enum ExceptionType {
     SIGNUP_OAUTH_ID_EMPTY(HttpStatus.BAD_REQUEST, "SIGNUP_OAUTH_ID_EMPTY", "OAuth ID가 필요합니다."),
     SIGNUP_EMAIL_INVALID(HttpStatus.BAD_REQUEST, "SIGNUP_EMAIL_INVALID", "회원가입 이메일 형식이 올바르지 않습니다."),
     SIGNUP_USER_TYPE_INVALID(HttpStatus.BAD_REQUEST, "SIGNUP_USER_TYPE_INVALID", "회원가입 사용자 유형이 올바르지 않습니다."),
+    TERMS_NOT_AGREED(HttpStatus.BAD_REQUEST, "TERMS_NOT_AGREED", "필수 약관 동의가 필요합니다."),
 
     AUTH_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "AUTH_INVALID_REQUEST", "인증 요청이 올바르지 않습니다."),
     AUTH_CODE_REQUIRED(HttpStatus.BAD_REQUEST, "AUTH_CODE_REQUIRED", "인증 코드가 필요합니다."),

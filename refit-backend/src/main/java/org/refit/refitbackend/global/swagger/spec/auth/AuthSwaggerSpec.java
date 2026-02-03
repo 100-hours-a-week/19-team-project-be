@@ -36,6 +36,7 @@ public final class AuthSwaggerSpec {
             ExceptionType.SIGNUP_OAUTH_ID_EMPTY,
             ExceptionType.SIGNUP_EMAIL_INVALID,
             ExceptionType.SIGNUP_USER_TYPE_INVALID,
+            ExceptionType.TERMS_NOT_AGREED,
             ExceptionType.EMAIL_VERIFICATION_REQUIRED,
             ExceptionType.EMAIL_VERIFICATION_NOT_VERIFIED
     })
@@ -47,8 +48,8 @@ public final class AuthSwaggerSpec {
     @SwaggerApiRequestBody(
             implementation = AuthReq.SignUp.class,
             examples = {
-                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"JOB_SEEKER\", \"career_level_id\": 1, \"job_ids\": [1, 2], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\" }",
-                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"EXPERT\", \"career_level_id\": 1, \"job_ids\": [1], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\",  \"company_email\": \"user@navercorp.com\" }"
+                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"JOB_SEEKER\", \"career_level_id\": 1, \"job_ids\": [1, 2], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\", \"terms_agreed\": true }",
+                    "{ \"oauth_provider\": \"KAKAO\", \"oauth_id\": \"123456\", \"email\": \"user@kakao.com\", \"nickname\": \"eden\", \"user_type\": \"EXPERT\", \"career_level_id\": 1, \"job_ids\": [1], \"skills\": [{\"skill_id\": 1, \"display_order\": 1}], \"introduction\": \"백엔드 개발자입니다.\",  \"company_email\": \"user@navercorp.com\", \"terms_agreed\": true }"
             },
             exampleNames = { "job_seeker", "expert_unverified" }
     )
