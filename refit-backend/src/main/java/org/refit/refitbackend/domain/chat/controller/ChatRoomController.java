@@ -128,12 +128,14 @@ public class ChatRoomController {
      * 메시지 읽음 처리
      */
     @ChatSwaggerSpec.MarkAsRead
-    @PatchMapping("/messages/read")
+    @PatchMapping("/{chat_id}/last-read-message")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @AuthenticationPrincipal CustomUserDetails principal,
+            @Parameter(description = "채팅방 ID", example = "1", required = true)
+            @PathVariable("chat_id") Long chatId,
             @Valid @RequestBody ChatReq.ReadMessage request
     ) {
-        chatRoomService.markAsRead(principal.getUserId(), request);
+        chatRoomService.markAsRead(principal.getUserId(), chatId, request);
         return ResponseUtil.ok("success", null);
     }
 }

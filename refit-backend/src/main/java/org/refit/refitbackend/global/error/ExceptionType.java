@@ -37,6 +37,8 @@ public enum ExceptionType {
     FILE_TYPE_INVALID(HttpStatus.BAD_REQUEST, "FILE_TYPE_INVALID", "지원하지 않는 파일 형식입니다."),
     CONTENT_TYPE_INVALID(HttpStatus.BAD_REQUEST, "CONTENT_TYPE_INVALID", "지원하지 않는 콘텐츠 타입입니다."),
     FILE_NAME_EMPTY(HttpStatus.BAD_REQUEST, "FILE_NAME_EMPTY", "파일명이 필요합니다."),
+    FILE_SIZE_REQUIRED(HttpStatus.BAD_REQUEST, "FILE_SIZE_REQUIRED", "파일 크기가 필요합니다."),
+    FILE_SIZE_INVALID(HttpStatus.BAD_REQUEST, "FILE_SIZE_INVALID", "파일 크기가 올바르지 않습니다."),
 
     /* =======================
      * Signup / Auth
@@ -69,6 +71,7 @@ public enum ExceptionType {
 
     IMAGE_URL_INVALID(HttpStatus.BAD_REQUEST, "IMAGE_URL_INVALID", "이미지 URL 형식이 올바르지 않습니다."),
     IMAGE_URL_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "IMAGE_URL_NOT_ALLOWED", "허용되지 않은 이미지 URL 도메인입니다."),
+    PROFILE_IMAGE_TOO_LARGE(HttpStatus.BAD_REQUEST, "PROFILE_IMAGE_TOO_LARGE", "프로필 이미지 용량이 너무 큽니다."),
 
     /* =======================
      * Job / Skill / Career
