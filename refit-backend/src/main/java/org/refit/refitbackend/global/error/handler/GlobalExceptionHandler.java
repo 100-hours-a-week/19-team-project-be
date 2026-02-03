@@ -194,6 +194,9 @@ public class GlobalExceptionHandler {
             case "message_id_required" ->
                     ExceptionType.MESSAGE_ID_REQUIRED;
 
+            case "last_read_seq_required" ->
+                    ExceptionType.LAST_READ_SEQ_REQUIRED;
+
             case "chat_job_post_url_too_long" ->
                     ExceptionType.CHAT_JOB_POST_URL_TOO_LONG;
 
