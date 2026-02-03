@@ -102,6 +102,16 @@ public final class UserSwaggerSpec {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
+            summary = "프로필 이미지 삭제",
+            operationDescription = "프로필 이미지를 기본값으로 되돌립니다.",
+            implementation = UserRes.Me.class
+    )
+    @SwaggerApiUnauthorizedError(types = { ExceptionType.AUTH_UNAUTHORIZED })
+    public @interface ClearProfileImage {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
             summary = "현직자 인증 상태 조회",
             operationDescription = "현직자 인증 여부/정보를 조회합니다.",
             implementation = UserRes.ExpertVerificationStatus.class

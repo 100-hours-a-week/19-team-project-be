@@ -25,7 +25,8 @@ public final class StorageSwaggerSpec {
             implementation = PresignedUrlResponse.class
     )
     @SwaggerApiBadRequestError(types = {
-            ExceptionType.INVALID_REQUEST
+            ExceptionType.INVALID_REQUEST,
+            ExceptionType.RESUME_FILE_TOO_LARGE
     })
     @SwaggerApiUnauthorizedError(types = {
             ExceptionType.AUTH_UNAUTHORIZED
@@ -33,8 +34,8 @@ public final class StorageSwaggerSpec {
     @SwaggerApiRequestBody(
             implementation = StorageReq.PresignedUrlRequest.class,
             examples = {
-                    "{ \"target_type\": \"PROFILE_IMAGE\", \"file_name\": \"profile.jpg\" }",
-                    "{ \"target_type\": \"RESUME_PDF\", \"file_name\": \"resume.pdf\" }"
+                    "{ \"target_type\": \"PROFILE_IMAGE\", \"file_name\": \"profile.jpg\", \"file_size\": 123456 }",
+                    "{ \"target_type\": \"RESUME_PDF\", \"file_name\": \"resume.pdf\", \"file_size\": 5242880 }"
             },
             exampleNames = {
                     "profile_image",

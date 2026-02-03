@@ -12,7 +12,9 @@ public class StorageReq {
             @NotNull(message = "업로드 유형이 필요합니다.")
             UploadTarget targetType,
             @NotBlank(message = "파일 이름이 필요합니다.")
-            String fileName
+            String fileName,
+            @NotNull(message = "파일 크기가 필요합니다.")
+            Long fileSize
     ) {}
 
     public record PresignedDownloadRequest(
