@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public class ChatReq {
@@ -49,9 +50,10 @@ public class ChatReq {
     @Schema(description = "메시지 읽음 처리 요청")
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record ReadMessage(
-            @Schema(description = "마지막으로 읽은 메시지 ID", example = "100")
-            @NotNull(message = "메시지 ID가 필요합니다.")
-            Long lastMessageId
+            @Schema(description = "마지막으로 읽은 메시지 시퀀스", example = "100")
+            @NotNull(message = "last_read_seq_required")
+            @Positive(message = "last_read_seq_required")
+            Long lastReadSeq
     ) {}
 
     @Schema(description = "채팅방 종료 요청")
