@@ -189,11 +189,17 @@ public final class AuthSwaggerSpec {
             ExceptionType.EMAIL_DOMAIN_NOT_ALLOWED,
             ExceptionType.EMAIL_NOT_COMPANY_EMAIL
     })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
+    })
     @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
             ExceptionType.AUTH_UNAUTHORIZED
     })
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
+    })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
     })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,
@@ -215,8 +221,14 @@ public final class AuthSwaggerSpec {
             ExceptionType.EMAIL_DOMAIN_NOT_ALLOWED,
             ExceptionType.EMAIL_NOT_COMPANY_EMAIL
     })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
+    })
     @SwaggerApiError(responseCode = "429", description = "rate_limit", types = {
             ExceptionType.EMAIL_VERIFICATION_RATE_LIMIT
+    })
+    @SwaggerApiError(responseCode = "409", description = "already_verified", types = {
+            ExceptionType.EMAIL_ALREADY_VERIFIED
     })
     @SwaggerApiRequestBody(
             implementation = EmailVerificationReq.Send.class,
