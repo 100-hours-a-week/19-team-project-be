@@ -26,7 +26,10 @@ public final class StorageSwaggerSpec {
     )
     @SwaggerApiBadRequestError(types = {
             ExceptionType.INVALID_REQUEST,
-            ExceptionType.RESUME_FILE_TOO_LARGE
+            ExceptionType.FILE_SIZE_REQUIRED,
+            ExceptionType.FILE_SIZE_INVALID,
+            ExceptionType.RESUME_FILE_TOO_LARGE,
+            ExceptionType.PROFILE_IMAGE_TOO_LARGE
     })
     @SwaggerApiUnauthorizedError(types = {
             ExceptionType.AUTH_UNAUTHORIZED
