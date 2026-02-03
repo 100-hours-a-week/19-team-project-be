@@ -148,6 +148,9 @@ public class ChatRes {
             @Schema(description = "채팅방 ID", example = "1")
             Long chatId,
 
+            @Schema(description = "채팅방 내 메시지 시퀀스", example = "100")
+            Long roomSequence,
+
             @Schema(description = "발신자 정보")
             UserInfo sender,
 
@@ -168,6 +171,7 @@ public class ChatRes {
             return new MessageInfo(
                     message.getId(),
                     message.getChatRoom().getId(),
+                    message.getRoomSequence(),
                     UserInfo.from(message.getSender()),
                     message.getMessageType().name(),
                     message.getContent(),

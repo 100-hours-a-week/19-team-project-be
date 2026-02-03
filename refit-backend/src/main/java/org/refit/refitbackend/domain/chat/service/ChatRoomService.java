@@ -194,10 +194,15 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
-        ChatMessage message = chatMessageRepository.findById(request.lastMessageId())
-                .orElseThrow(() -> new CustomException(ExceptionType.MESSAGE_NOT_FOUND));
-
-        room.updateLastReadMessage(userId, message);
+        Long lastReadSeq = request.lastReadSeq();
+        Long lastMessageSeq = room.getLastMessageSeq();
+        if (lastMessageSeq == null) {
+            return;
+        }
+        if (lastReadSeq > lastMessageSeq) {
+            throw new CustomException(ExceptionType.INVALID_REQUEST);
+        }
+        room.updateLastReadSeq(userId, lastReadSeq);
     }
 
     /**

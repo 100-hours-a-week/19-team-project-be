@@ -146,7 +146,7 @@ public final class ChatSwaggerSpec {
     )
     @SwaggerApiError(responseCode = "400", description = "invalid_request", types = {
             ExceptionType.INVALID_REQUEST,
-            ExceptionType.MESSAGE_ID_REQUIRED
+            ExceptionType.LAST_READ_SEQ_REQUIRED
     })
     @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
             ExceptionType.AUTH_UNAUTHORIZED,

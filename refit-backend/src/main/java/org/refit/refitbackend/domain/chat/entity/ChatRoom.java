@@ -78,10 +78,22 @@ public class ChatRoom extends BaseEntity {
 
     // 읽음 처리 (seq 기반)
     public void updateLastReadMessage(Long userId, ChatMessage message) {
+        if (message == null) {
+            return;
+        }
+        updateLastReadSeq(userId, message.getRoomSequence());
+    }
+
+    public void updateLastReadSeq(Long userId, Long lastReadSeq) {
+        if (lastReadSeq == null) {
+            return;
+        }
         if (this.requester.getId().equals(userId)) {
-            this.requesterLastReadSeq = message.getRoomSequence();
+            long current = this.requesterLastReadSeq != null ? this.requesterLastReadSeq : 0L;
+            this.requesterLastReadSeq = Math.max(current, lastReadSeq);
         } else if (this.receiver.getId().equals(userId)) {
-            this.receiverLastReadSeq = message.getRoomSequence();
+            long current = this.receiverLastReadSeq != null ? this.receiverLastReadSeq : 0L;
+            this.receiverLastReadSeq = Math.max(current, lastReadSeq);
         }
     }
 
