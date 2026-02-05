@@ -106,7 +106,7 @@ jobs:
 
             # 시크릿 설정 파일 주입
             echo "$APPLICATION_SECRET_YML" > application-secret.yml
-            chmod 600 application-secret.yml
+            chmod 644 application-secret.yml
             echo "🔐 application-secret.yml 주입 완료"
 
             # 이미지 태그를 환경 변수로 설정하여 compose pull & up
