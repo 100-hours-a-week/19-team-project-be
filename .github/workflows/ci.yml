@@ -19,7 +19,9 @@ on:
         options:
           - lint-and-test
           - integration
-          - release
+          - release-dev
+          - release-prod
+          - all
 
 env:
   JAVA_VERSION: 21
@@ -100,15 +102,6 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Inject Secret Configuration Files
-        run: |
-          mkdir -p src/main/resources
-          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
-            echo "Error: APPLICATION_SECRET_YML secret not found"
-            exit 1
-          fi
-          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
-
       - name: Security Scan
         run: |
           ./gradlew dependencies --no-daemon > dependencies.txt 2>&1 || true
@@ -121,12 +114,89 @@ jobs:
           fi
         continue-on-error: true
 
-  # 릴리즈: develop/main 브랜치 프로덕션 빌드 및 아티팩트 생성
+  # 개발 환경 릴리즈 (develop 브랜치 - Docker 기반)
+  release-dev:
+    needs: [integration]
+    if: |
+      always() &&
+      needs.integration.result != 'failure' &&
+      (
+        (github.event_name == 'push' && github.ref_name == 'develop') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-dev' || github.event.inputs.job_to_run == 'all'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      image_tag: ${{ steps.meta.outputs.image_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Generate Image Metadata
+        id: meta
+        run: |
+          SHA_SHORT="${GITHUB_SHA::7}"
+          IMAGE_TAG="develop-${SHA_SHORT}"
+          FULL_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:${IMAGE_TAG}"
+          LATEST_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:develop-latest"
+
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "full_image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
+          echo "latest_image=${LATEST_IMAGE}" >> $GITHUB_OUTPUT
+          echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "🐳 Docker Image: ${FULL_IMAGE}"
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: refit-backend
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.full_image }}
+            ${{ steps.meta.outputs.latest_image }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/arm64
+
+      - name: Trigger CD-Dev Workflow
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cd-dev.yml',
+              ref: 'develop',
+              inputs: {
+                image_tag: '${{ steps.meta.outputs.image_tag }}',
+                sha: '${{ github.sha }}',
+                run_id: '${{ github.run_id }}'
+              }
+            });
+            console.log('✅ CD-Dev workflow triggered successfully');
+
+  # 릴리즈: main 브랜치 프로덕션 빌드 및 아티팩트 생성
   # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
-  release:
+  release-prod:
     if: |
       (github.event_name == 'push' && github.ref_name == 'main') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'release')
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-prod' || github.event.inputs.job_to_run == 'all'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
@@ -219,3 +289,23 @@ jobs:
           git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
           git push origin "$TAG_NAME"
           echo "Release tag created: $TAG_NAME"
+          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Trigger CD-Prod Workflow
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cd-prod.yml',
+              ref: 'main',
+              inputs: {
+                run_id: '${{ github.run_id }}',
+                sha: '${{ github.sha }}',
+                branch: 'main'
+              }
+            });
+            console.log('✅ CD-Prod workflow triggered successfully');
