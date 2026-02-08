@@ -24,7 +24,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -59,8 +63,6 @@ public class AuthService {
             existing.updateTermsAgreed(signUpDto.termsAgreed());
             existing.clearProfileImageUrl();
 
-            userJobRepository.deleteByUser_Id(existing.getId());
-            userSkillRepository.deleteByUser_Id(existing.getId());
             mapJobs(existing, signUpDto.jobIds());
             mapSkills(existing, signUpDto.skills());
 
@@ -116,13 +118,31 @@ public class AuthService {
 
     private void mapJobs(User user, List<Long> jobIds) {
 
-        if (jobIds == null || jobIds.isEmpty()) return;
+        List<Long> normalizedJobIds = jobIds == null
+                ? List.of()
+                : jobIds.stream()
+                        .distinct()
+                        .toList();
 
-        List<UserJob> userJobs = jobIds.stream()
+        List<UserJob> existingJobs = userJobRepository.findAllByUserIdIn(List.of(user.getId()));
+        Set<Long> existingJobIds = existingJobs.stream()
+                .map(uj -> uj.getJob().getId())
+                .collect(Collectors.toSet());
+
+        Set<Long> incomingJobIds = new HashSet<>(normalizedJobIds);
+
+        List<UserJob> toDelete = existingJobs.stream()
+                .filter(uj -> !incomingJobIds.contains(uj.getJob().getId()))
+                .toList();
+        if (!toDelete.isEmpty()) {
+            userJobRepository.deleteAllInBatch(toDelete);
+        }
+
+        List<UserJob> toInsert = normalizedJobIds.stream()
+                .filter(jobId -> !existingJobIds.contains(jobId))
                 .map(jobId -> {
                     Job job = jobRepository.findById(jobId)
                             .orElseThrow(() -> new CustomException(ExceptionType.JOB_NOT_FOUND));
-
                     return UserJob.builder()
                             .user(user)
                             .job(job)
@@ -130,18 +150,44 @@ public class AuthService {
                 })
                 .toList();
 
-        userJobRepository.saveAll(userJobs);
+        if (!toInsert.isEmpty()) {
+            userJobRepository.saveAll(toInsert);
+        }
     }
 
     private void mapSkills(User user, List<AuthReq.SkillRequest> skills) {
 
-        if (skills == null || skills.isEmpty()) return;
+        List<AuthReq.SkillRequest> normalizedSkills = skills == null
+                ? List.of()
+                : skills.stream()
+                        .collect(Collectors.toMap(
+                                AuthReq.SkillRequest::skillId,
+                                req -> req,
+                                (left, right) -> left.displayOrder() <= right.displayOrder() ? left : right
+                        ))
+                        .values()
+                        .stream()
+                        .toList();
 
-        List<UserSkill> userSkills = skills.stream()
+        List<UserSkill> existingSkills = userSkillRepository.findAllByUserIdIn(List.of(user.getId()));
+        Map<Long, UserSkill> existingSkillMap = existingSkills.stream()
+                .collect(Collectors.toMap(us -> us.getSkill().getId(), us -> us));
+
+        Map<Long, AuthReq.SkillRequest> incomingSkillMap = normalizedSkills.stream()
+                .collect(Collectors.toMap(AuthReq.SkillRequest::skillId, req -> req));
+
+        List<UserSkill> toDelete = existingSkills.stream()
+                .filter(us -> !incomingSkillMap.containsKey(us.getSkill().getId()))
+                .toList();
+        if (!toDelete.isEmpty()) {
+            userSkillRepository.deleteAllInBatch(toDelete);
+        }
+
+        List<UserSkill> toInsert = normalizedSkills.stream()
+                .filter(req -> !existingSkillMap.containsKey(req.skillId()))
                 .map(req -> {
                     Skill skill = skillRepository.findById(req.skillId())
                             .orElseThrow(() -> new CustomException(ExceptionType.SKILL_NOT_FOUND));
-
                     return UserSkill.builder()
                             .user(user)
                             .skill(skill)
@@ -150,7 +196,24 @@ public class AuthService {
                 })
                 .toList();
 
-        userSkillRepository.saveAll(userSkills);
+        if (!toInsert.isEmpty()) {
+            userSkillRepository.saveAll(toInsert);
+        }
+
+        List<UserSkill> toUpdate = normalizedSkills.stream()
+                .filter(req -> existingSkillMap.containsKey(req.skillId()))
+                .map(req -> {
+                    UserSkill existing = existingSkillMap.get(req.skillId());
+                    if (!existing.getDisplayOrder().equals(req.displayOrder())) {
+                        existing.updateDisplayOrder(req.displayOrder());
+                    }
+                    return existing;
+                })
+                .toList();
+
+        if (!toUpdate.isEmpty()) {
+            userSkillRepository.saveAll(toUpdate);
+        }
     }
 
     private void createExpertProfileIfNeeded(User user, AuthReq.SignUp signUp) {
