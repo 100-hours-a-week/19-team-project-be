@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface UserSkillRepository extends JpaRepository<UserSkill, Integer> {
+public interface UserSkillRepository extends JpaRepository<UserSkill, Long> {
     void deleteByUser_Id(Long userId);
 
     @Query("""

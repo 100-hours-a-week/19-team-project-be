@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 
 @Repository
-public interface UserJobRepository extends JpaRepository<UserJob, Integer> {
+ public interface UserJobRepository extends JpaRepository<UserJob, Long> {
     void deleteByUser_Id(Long userId);
 
     @Query("""
