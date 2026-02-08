@@ -144,7 +144,7 @@ public class UserService {
         }
 
         String anonymizedEmail = "deleted_" + userId + "@anonymized.local";
-        String anonymizedNickname = "탈퇴회원" + userId;
+        String anonymizedNickname = buildAnonymizedNickname(userId);
         user.markDeleted(anonymizedEmail, anonymizedNickname);
 
         refreshTokenRepository.updateStatusByUserAndStatus(
@@ -193,6 +193,20 @@ public class UserService {
         String nextCursor = users.isEmpty() ? null : String.valueOf(users.get(users.size() - 1).getId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
+    }
+
+    private String buildAnonymizedNickname(Long userId) {
+        String base = "탈퇴회원";
+        String suffix = String.valueOf(userId);
+        int maxLen = 10;
+        if (base.length() >= maxLen) {
+            return base.substring(0, maxLen);
+        }
+        int remaining = maxLen - base.length();
+        if (suffix.length() > remaining) {
+            suffix = suffix.substring(0, remaining);
+        }
+        return base + suffix;
     }
 
     private void validateNickname(String nickname) {
