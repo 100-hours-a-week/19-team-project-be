@@ -1,4 +1,4 @@
-name: Re-Fit Backend CD
+name: Re-Fit Backend CD (Prod)
 
 on:
   workflow_dispatch:
@@ -8,7 +8,6 @@ on:
         required: false
         type: string
       sha:
-
         description: 'Commit SHA (자동 입력 또는 직접 입력)'
         required: false
         type: string
@@ -24,10 +23,6 @@ on:
         required: true
         type: boolean
         default: true
-  workflow_run:
-    workflows: ["Re-Fit Backend CI"]
-    types: [completed]
-    branches: [main]
 
 permissions:
   contents: read
@@ -40,21 +35,13 @@ jobs:
     timeout-minutes: 30
     # 동일 브랜치의 동시 배포 방지
     concurrency:
-      group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.branch || github.event.workflow_run.head_branch }}
+      group: deploy-${{ inputs.branch }}
       cancel-in-progress: false
-    # CI 성공 후에만 실행
-    if: |
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch') &&
-       github.event.workflow_run.head_branch == 'main') ||
-      github.event_name == 'workflow_dispatch'
-    # main 브랜치는 production, develop 브랜치는 development 환경 사용
     environment: production
 
     steps:
       - name: Find Latest Artifact (if needed)
-        if: github.event_name == 'workflow_dispatch' && inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
+        if: inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
         id: find-artifact
         uses: actions/github-script@v7
         with:
@@ -107,42 +94,25 @@ jobs:
       - name: Set Deployment Variables
         id: deploy-vars
         run: |
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            if [ "${{ inputs.use_latest_artifact }}" == "true" ] && ([ -z "${{ inputs.run_id }}" ] || [ "${{ inputs.run_id }}" == "" ]) && ([ -z "${{ inputs.sha }}" ] || [ "${{ inputs.sha }}" == "" ]); then
-              if [ -n "${{ steps.find-artifact.outputs.run_id }}" ]; then
-                echo "run_id=${{ steps.find-artifact.outputs.run_id }}" >> $GITHUB_OUTPUT
-                echo "sha=${{ steps.find-artifact.outputs.sha }}" >> $GITHUB_OUTPUT
-                echo "Using latest artifact from run #${{ steps.find-artifact.outputs.run_number }}"
-              else
-                echo "Error: Failed to find latest artifact"
-                exit 1
-              fi
+          if [ "${{ inputs.use_latest_artifact }}" == "true" ] && ([ -z "${{ inputs.run_id }}" ] || [ "${{ inputs.run_id }}" == "" ]) && ([ -z "${{ inputs.sha }}" ] || [ "${{ inputs.sha }}" == "" ]); then
+            if [ -n "${{ steps.find-artifact.outputs.run_id }}" ]; then
+              echo "run_id=${{ steps.find-artifact.outputs.run_id }}" >> $GITHUB_OUTPUT
+              echo "sha=${{ steps.find-artifact.outputs.sha }}" >> $GITHUB_OUTPUT
+              echo "Using latest artifact from run #${{ steps.find-artifact.outputs.run_number }}"
             else
-              if [ -z "${{ inputs.run_id }}" ] || [ -z "${{ inputs.sha }}" ]; then
-                echo "Error: run_id and sha must be provided when use_latest_artifact is false"
-                exit 1
-              fi
-              echo "run_id=${{ inputs.run_id }}" >> $GITHUB_OUTPUT
-              echo "sha=${{ inputs.sha }}" >> $GITHUB_OUTPUT
-              echo "Using manually specified artifact"
+              echo "Error: Failed to find latest artifact"
+              exit 1
             fi
-            echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
           else
-            echo "run_id=${{ github.event.workflow_run.id }}" >> $GITHUB_OUTPUT
-            echo "sha=${{ github.event.workflow_run.head_sha }}" >> $GITHUB_OUTPUT
-            echo "branch=${{ github.event.workflow_run.head_branch }}" >> $GITHUB_OUTPUT
+            if [ -z "${{ inputs.run_id }}" ] || [ -z "${{ inputs.sha }}" ]; then
+              echo "Error: run_id and sha must be provided when use_latest_artifact is false"
+              exit 1
+            fi
+            echo "run_id=${{ inputs.run_id }}" >> $GITHUB_OUTPUT
+            echo "sha=${{ inputs.sha }}" >> $GITHUB_OUTPUT
+            echo "Using manually specified artifact"
           fi
-
-      # 배포 전 release job 성공 여부 확인
-      - name: Check release job status
-        if: github.event_name == 'workflow_run'
-        env:
-          GH_TOKEN: ${{ secrets.PAT }}
-        run: |
-          RUN_ID="${{ github.event.workflow_run.id }}"
-          REPO="${{ github.repository }}"
-          JOBS=$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[] | select(.name=="release") | .conclusion' 2>/dev/null || echo "")
-          [ "$JOBS" = "success" ] || exit 1
+          echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
 
       - name: Checkout code
         uses: actions/checkout@v4
