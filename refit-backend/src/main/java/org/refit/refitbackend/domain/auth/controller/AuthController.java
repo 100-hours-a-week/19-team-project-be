@@ -31,6 +31,9 @@ public class AuthController {
     private final OAuth2RegistrationProperties registrationProperties;
     private final OAuth2ProviderProperties providerProperties;
 
+    /* =======================
+     * 회원가입
+     * ======================= */
     @AuthSwaggerSpec.Signup
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<AuthRes.LoginSuccess>> signup(@Valid @RequestBody AuthReq.SignUp request) {
