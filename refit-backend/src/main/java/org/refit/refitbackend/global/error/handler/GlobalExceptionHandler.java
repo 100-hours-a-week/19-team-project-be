@@ -8,9 +8,11 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -85,6 +87,13 @@ public class GlobalExceptionHandler {
             return ResponseUtil.error(ex.getExceptionType(), ex.getData());
         }
         return ResponseUtil.error(ex.getExceptionType());
+    }
+
+    // 잘못된 정적 리소스 요청(예: 존재하지 않는 actuator 엔드포인트)
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        log.debug("No resource found: {}", ex.getResourcePath());
+        return ResponseUtil.error(HttpStatus.NOT_FOUND, "NOT_FOUND", "요청 경로를 찾을 수 없습니다.");
     }
 
     // 그 외
