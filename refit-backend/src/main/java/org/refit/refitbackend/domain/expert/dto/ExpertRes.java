@@ -154,4 +154,11 @@ public class ExpertRes {
             Integer totalCount,
             Object evaluation
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record MentorEmbeddingUpdateResponse(
+            boolean success,
+            Long userId,
+            String message
+    ) {}
 }
