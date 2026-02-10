@@ -1,6 +1,7 @@
 package org.refit.refitbackend.domain.expert.repository;
 
 import org.refit.refitbackend.domain.user.entity.User;
+import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -35,6 +36,34 @@ public interface ExpertRepository extends JpaRepository<User, Long> {
             @Param("skillId") Long skillId,
             @Param("careerLevelId") Long careerLevelId,
             @Param("cursorId") Long cursorId,
+            Pageable pageable
+    );
+
+    @Query("""
+      SELECT u FROM User u
+      JOIN FETCH u.expertProfile ep
+      JOIN FETCH u.careerLevel cl
+      WHERE u.userType = 'EXPERT'
+        AND u.status = UserStatus.ACTIVE
+        AND u.id <> :userId
+        AND (:verified = false OR ep.verified = true)
+      ORDER BY u.id DESC
+  """)
+    List<User> findRecommendationCandidates(
+            @Param("userId") Long userId,
+            @Param("verified") boolean verified
+    );
+
+    @Query("""
+      SELECT u FROM User u
+      JOIN FETCH u.expertProfile ep
+      WHERE u.userType = 'EXPERT'
+        AND u.status = UserStatus.ACTIVE
+        AND (:verified = false OR ep.verified = true)
+      ORDER BY ep.ratingCount DESC, ep.ratingAvg DESC, ep.lastActiveAt DESC, u.id DESC
+  """)
+    List<User> findTopPopularExperts(
+            @Param("verified") boolean verified,
             Pageable pageable
     );
 
