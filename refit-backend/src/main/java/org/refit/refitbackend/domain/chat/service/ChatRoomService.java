@@ -208,6 +208,7 @@ public class ChatRoomService {
     /**
      * 채팅방 메시지 목록 조회 (커서)
      */
+    @Transactional
     public CursorPage<ChatRes.MessageInfo> getMessages(
             Long userId,
             Long roomId,
@@ -224,9 +225,9 @@ public class ChatRoomService {
                 PageRequest.of(0, size + 1)
         );
 
-        if (!messages.isEmpty()) {
-            ChatMessage latest = messages.get(0); // id DESC 기준
-            room.updateLastReadMessage(userId, latest);
+        if (room.getLastMessageSeq() != null) {
+            // 메시지 페이지 커서와 무관하게, 방에 존재하는 최신 메시지까지 읽음 처리
+            room.updateLastReadSeq(userId, room.getLastMessageSeq());
         }
 
         boolean hasMore = messages.size() > size;
