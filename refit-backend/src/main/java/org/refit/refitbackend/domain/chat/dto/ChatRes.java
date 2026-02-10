@@ -212,6 +212,9 @@ public class ChatRes {
             @Schema(description = "메시지 ID", example = "1")
             Long messageId,
 
+            @Schema(description = "채팅방 내 메시지 시퀀스(읽음 처리 기준)", example = "100")
+            Long roomSequence,
+
             @Schema(description = "메시지 내용", example = "안녕하세요!")
             String content,
 
@@ -222,6 +225,7 @@ public class ChatRes {
         public static LastMessageInfo from(ChatMessage message) {
             return new LastMessageInfo(
                     message.getId(),
+                    message.getRoomSequence(),
                     message.getContent(),
                     message.getCreatedAt()
             );
