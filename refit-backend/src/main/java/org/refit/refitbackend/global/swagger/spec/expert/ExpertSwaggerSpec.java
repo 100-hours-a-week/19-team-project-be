@@ -4,6 +4,7 @@ import org.refit.refitbackend.domain.expert.dto.ExpertRes;
 import org.refit.refitbackend.domain.expert.dto.ExpertReq;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiBadRequestError;
+import org.refit.refitbackend.global.swagger.annotation.SwaggerApiError;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiNotFoundError;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiRequestBody;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiSuccess;
@@ -62,6 +63,24 @@ public final class ExpertSwaggerSpec {
             exampleNames = { "update_embedding" }
     )
     public @interface UpdateEmbedding {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "멘토 임베딩 갱신 요청",
+            operationDescription = "AI 서버에 특정 멘토 임베딩 계산/전송을 요청합니다.",
+            implementation = ExpertRes.MentorEmbeddingUpdateResponse.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.EXPERT_USER_ID_INVALID
+    })
+    @SwaggerApiNotFoundError(description = "expert_not_found", types = {
+            ExceptionType.EXPERT_NOT_FOUND
+    })
+    @SwaggerApiError(responseCode = "500", description = "ai_server_error", types = {
+            ExceptionType.AI_SERVER_ERROR
+    })
+    public @interface RefreshMentorEmbedding {}
 
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)

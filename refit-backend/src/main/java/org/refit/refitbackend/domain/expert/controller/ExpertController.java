@@ -19,6 +19,7 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -95,6 +96,14 @@ public class ExpertController {
     ) {
         expertService.updateEmbedding(request);
         return ResponseUtil.ok("success");
+    }
+
+    @ExpertSwaggerSpec.RefreshMentorEmbedding
+    @PutMapping("/embeddings/{user_id}")
+    public ResponseEntity<ApiResponse<ExpertRes.MentorEmbeddingUpdateResponse>> refreshMentorEmbedding(
+            @PathVariable("user_id") @Positive(message = "expert_user_id_invalid") Long userId
+    ) {
+        return ResponseUtil.ok("success", expertService.refreshMentorEmbedding(userId));
     }
 
     private Long resolveUserId(Long userIdQueryParam, String authorization) {

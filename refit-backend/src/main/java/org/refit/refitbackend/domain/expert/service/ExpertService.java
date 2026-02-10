@@ -191,6 +191,63 @@ public class ExpertService {
         return getPopularRecommendations(topK, verified);
     }
 
+    public ExpertRes.MentorEmbeddingUpdateResponse refreshMentorEmbedding(Long userId) {
+        if (!expertProfileRepository.existsById(userId)) {
+            throw new CustomException(ExceptionType.EXPERT_NOT_FOUND);
+        }
+
+        String url = UriComponentsBuilder.fromUriString(aiBaseUrl)
+                .path("/mentors/embeddings/{userId}")
+                .buildAndExpand(userId)
+                .toUriString();
+
+        try {
+            ResponseEntity<ApiResponse<ExpertRes.MentorEmbeddingUpdateResponse>> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.PUT,
+                    HttpEntity.EMPTY,
+                    new ParameterizedTypeReference<>() {}
+            );
+
+            ApiResponse<ExpertRes.MentorEmbeddingUpdateResponse> body = response.getBody();
+            if (body == null) {
+                log.error("AI embedding refresh response body is null. url={}", url);
+                throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+            }
+            if ("USER_NOT_FOUND".equals(body.code())) {
+                throw new CustomException(ExceptionType.EXPERT_NOT_FOUND);
+            }
+            if (!"OK".equals(body.code()) || body.data() == null) {
+                log.error("AI embedding refresh response invalid. url={}, code={}, hasData={}",
+                        url, body.code(), body.data() != null);
+                throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+            }
+
+            return body.data();
+        } catch (HttpStatusCodeException e) {
+            String code = extractAiErrorCode(e.getResponseBodyAsString());
+            if (e.getStatusCode() == HttpStatus.NOT_FOUND && "USER_NOT_FOUND".equals(code)) {
+                throw new CustomException(ExceptionType.EXPERT_NOT_FOUND);
+            }
+            log.error("AI embedding refresh call failed. url={}, status={}, body={}",
+                    url, e.getStatusCode(), e.getResponseBodyAsString(), e);
+            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("AI embedding refresh unexpected error. url={}", url, e);
+            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        }
+    }
+
+    public void refreshMentorEmbeddingBestEffort(Long userId) {
+        try {
+            refreshMentorEmbedding(userId);
+        } catch (Exception e) {
+            log.warn("Embedding refresh skipped due to AI/server issue. userId={}", userId, e);
+        }
+    }
+
     @Transactional
     public void updateEmbedding(ExpertReq.UpdateEmbedding request) {
         if (!expertProfileRepository.existsById(request.userId())) {
@@ -212,6 +269,18 @@ public class ExpertService {
         }
         sb.append(']');
         return sb.toString();
+    }
+
+    private String extractAiErrorCode(String bodyText) {
+        if (bodyText == null || bodyText.isBlank()) {
+            return "";
+        }
+        try {
+            JsonNode root = objectMapper.readTree(bodyText);
+            return root.path("code").asText("");
+        } catch (Exception ignored) {
+            return "";
+        }
     }
 
     private Map<Long, List<ExpertRes.JobDto>> getJobsByUserIds(List<User> users) {
