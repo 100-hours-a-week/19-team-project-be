@@ -127,4 +127,31 @@ public class ExpertRes {
             String nextCursor,
             boolean hasMore
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RecommendationItem(
+            Long userId,
+            String nickname,
+            String companyName,
+            boolean verified,
+            Double ratingAvg,
+            Integer ratingCount,
+            Double responseRate,
+            List<String> skills,
+            List<String> jobs,
+            String introduction,
+            Double similarityScore,
+            String filterType,
+            String groundTruth,
+            @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+            LocalDateTime lastActiveAt
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RecommendationResponse(
+            Long userId,
+            List<RecommendationItem> recommendations,
+            Integer totalCount,
+            Object evaluation
+    ) {}
 }

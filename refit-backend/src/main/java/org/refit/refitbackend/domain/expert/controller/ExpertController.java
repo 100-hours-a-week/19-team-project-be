@@ -1,6 +1,8 @@
 package org.refit.refitbackend.domain.expert.controller;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.expert.dto.ExpertRes;
@@ -9,6 +11,7 @@ import org.refit.refitbackend.domain.expert.service.ExpertService;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.swagger.spec.expert.ExpertSwaggerSpec;
+import org.refit.refitbackend.global.util.JwtUtil;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
@@ -20,6 +23,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+
+import static org.refit.refitbackend.global.util.JwtUtil.extractBearer;
 
 @RestController
 @RequiredArgsConstructor
@@ -28,6 +34,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 public class ExpertController {
 
     private final ExpertService expertService;
+    private final JwtUtil jwtUtil;
 
     @ExpertSwaggerSpec.SearchExperts
     @GetMapping
@@ -65,6 +72,22 @@ public class ExpertController {
         return ResponseUtil.ok("success", expertService.getExpertDetail(userId));
     }
 
+    @ExpertSwaggerSpec.RecommendExperts
+    @GetMapping("/recommendations")
+    public ResponseEntity<ApiResponse<ExpertRes.RecommendationResponse>> getRecommendations(
+            @RequestParam(name = "top_k", defaultValue = "5") @Min(1) @Max(20) int topK,
+            @RequestParam(name = "verified", defaultValue = "false") boolean verified,
+            @RequestParam(name = "include_eval", defaultValue = "false") boolean includeEval,
+            @RequestParam(name = "user_id", required = false) Long userId,
+            @RequestHeader(name = "Authorization", required = false) String authorization
+    ) {
+        Long resolvedUserId = resolveUserId(userId, authorization);
+        ExpertRes.RecommendationResponse response = expertService.getRecommendationsAuto(
+                resolvedUserId, topK, verified, includeEval
+        );
+        return ResponseUtil.ok("success", response);
+    }
+
     @ExpertSwaggerSpec.UpdateEmbedding
     @PostMapping("/embeddings")
     public ResponseEntity<ApiResponse<Void>> updateEmbedding(
@@ -73,4 +96,25 @@ public class ExpertController {
         expertService.updateEmbedding(request);
         return ResponseUtil.ok("success");
     }
+
+    private Long resolveUserId(Long userIdQueryParam, String authorization) {
+        if (userIdQueryParam != null) {
+            return userIdQueryParam;
+        }
+
+        String token = extractBearer(authorization);
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+
+        try {
+            if (!jwtUtil.validateToken(token)) {
+                return null;
+            }
+            return jwtUtil.getUserId(token);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
 }

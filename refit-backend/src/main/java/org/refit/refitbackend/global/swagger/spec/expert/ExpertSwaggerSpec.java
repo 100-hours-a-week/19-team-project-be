@@ -62,4 +62,19 @@ public final class ExpertSwaggerSpec {
             exampleNames = { "update_embedding" }
     )
     public @interface UpdateEmbedding {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "현직자 추천 조회",
+            operationDescription = "사용자 프로필 기반으로 유사한 현직자를 추천합니다.",
+            implementation = ExpertRes.RecommendationResponse.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.INVALID_REQUEST
+    })
+    @SwaggerApiNotFoundError(description = "user_not_found", types = {
+            ExceptionType.USER_NOT_FOUND
+    })
+    public @interface RecommendExperts {}
 }
