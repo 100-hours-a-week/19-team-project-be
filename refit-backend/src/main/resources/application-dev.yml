@@ -1,15 +1,19 @@
+# ============================================
+# Development Environment Configuration
+# ============================================
 spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: false
+    show-sql: true  # SQL 쿼리 출력 (개발용)
     properties:
       hibernate:
         format_sql: true
+        highlight_sql: true
 
   jwt:
     issuer: re-fit
-    access-exp-ms: 600000 # 10분
+    access-exp-ms: 10000
     refresh-exp-ms: 1209600000 # 2주
 
   jackson:
@@ -35,8 +39,8 @@ spring:
       region:
         static: ${AWS_S3_REGION:ap-northeast-2}
       s3:
-        bucket: ${AWS_S3_BUCKET:refit-storage-prod}
-        domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
+        bucket: ${AWS_S3_BUCKET:refit-storage-dev}
+        domain: ${AWS_S3_DOMAIN:https://refit-storage-dev.s3.ap-northeast-2.amazonaws.com/}
 
 springdoc:
   swagger-ui:
@@ -47,7 +51,7 @@ springdoc:
     enabled: true
 
 # ============================================
-# Actuator & Prometheus (운영 환경)
+# Actuator & Prometheus (개발 환경)
 # ============================================
 management:
   endpoints:
@@ -67,13 +71,13 @@ management:
       system: true
     tags:
       application: ${spring.application.name:refit-backend}
-      environment: prod
+      environment: dev
     export:
       prometheus:
         enabled: true
 
 # ============================================
-# Structured JSON Logging (운영 환경)
+# Structured JSON Logging (개발 환경)
 # ============================================
 logging:
   structured:
@@ -82,13 +86,13 @@ logging:
     ecs:
       service:
         name: ${spring.application.name:refit-backend}
-        environment: prod
+        environment: dev
 
   level:
     root: info
-    org.springframework: warn
-    org.hibernate: warn
-    org.refit.backend: info  # 운영 환경은 info 레벨
+    org.springframework: info
+    org.hibernate: info
+    org.refit.backend: debug  # 개발 환경은 debug 레벨
 
 server:
   forward-headers-strategy: framework
