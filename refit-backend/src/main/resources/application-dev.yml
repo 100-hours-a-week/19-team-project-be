@@ -1,0 +1,98 @@
+# ============================================
+# Development Environment Configuration
+# ============================================
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true  # SQL 쿼리 출력 (개발용)
+    properties:
+      hibernate:
+        format_sql: true
+        highlight_sql: true
+
+  jwt:
+    issuer: re-fit
+    access-exp-ms: 10000
+    refresh-exp-ms: 1209600000 # 2주
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  cloud:
+    aws:
+      credentials:
+        access-key: ${AWS_ACCESS_KEY}
+        secret-key: ${AWS_SECRET_KEY}
+      region:
+        static: ${AWS_S3_REGION:ap-northeast-2}
+      s3:
+        bucket: ${AWS_S3_BUCKET:refit-storage-dev}
+        domain: ${AWS_S3_DOMAIN:https://refit-storage-dev.s3.ap-northeast-2.amazonaws.com/}
+
+springdoc:
+  swagger-ui:
+    url: /v3/api-docs
+    config-url: /v3/api-docs/swagger-config
+    disable-swagger-default-url: true
+  api-docs:
+    enabled: true
+
+# ============================================
+# Actuator & Prometheus (개발 환경)
+# ============================================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+  metrics:
+    enable:
+      hikari: true
+      jvm: true
+      logback: true
+      system: true
+    tags:
+      application: ${spring.application.name:refit-backend}
+      environment: dev
+    export:
+      prometheus:
+        enabled: true
+
+# ============================================
+# Structured JSON Logging (개발 환경)
+# ============================================
+logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name:refit-backend}
+        environment: dev
+
+  level:
+    root: info
+    org.springframework: info
+    org.hibernate: info
+    org.refit.backend: debug  # 개발 환경은 debug 레벨
+
+server:
+  forward-headers-strategy: framework

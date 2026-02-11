@@ -46,5 +46,4 @@ out/
 
 # === yml Config ===
 application-local.yml
-application-dev.yml
 application-secret.yml
