@@ -5,11 +5,10 @@ spring:
   jpa:
     hibernate:
       ddl-auto: update
-    show-sql: true  # SQL 쿼리 출력 (개발용)
+    show-sql: false
     properties:
       hibernate:
         format_sql: true
-        highlight_sql: true
 
   jwt:
     issuer: re-fit
