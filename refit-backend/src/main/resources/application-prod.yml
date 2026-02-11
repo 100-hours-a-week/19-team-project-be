@@ -46,20 +46,49 @@ springdoc:
   api-docs:
     enabled: true
 
+# ============================================
+# Actuator & Prometheus (운영 환경)
+# ============================================
 management:
   endpoints:
     web:
       exposure:
         include: health,metrics,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
   metrics:
     enable:
       hikari: true
+      jvm: true
+      logback: true
+      system: true
+    tags:
+      application: ${spring.application.name:refit-backend}
+      environment: prod
+    export:
+      prometheus:
+        enabled: true
 
+# ============================================
+# Structured JSON Logging (운영 환경)
+# ============================================
 logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name:refit-backend}
+        environment: prod
+
   level:
     root: info
     org.springframework: warn
     org.hibernate: warn
+    org.refit.backend: info  # 운영 환경은 info 레벨
 
 server:
   forward-headers-strategy: framework
