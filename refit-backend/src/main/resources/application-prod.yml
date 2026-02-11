@@ -50,7 +50,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,metrics,info,prometheus
   metrics:
     enable:
       hikari: true
