@@ -58,7 +58,7 @@ management:
     enabled-by-default: true
     web:
       exposure:
-        include: "*"
+        include: health,info,metrics,prometheus
   endpoint:
     prometheus:
       enabled: true
