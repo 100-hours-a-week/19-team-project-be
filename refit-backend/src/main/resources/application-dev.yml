@@ -55,13 +55,18 @@ springdoc:
 # ============================================
 management:
   endpoints:
+    enabled-by-default: true
     web:
       exposure:
-        include: health,metrics,info,prometheus
+        include: "*"
   endpoint:
     prometheus:
       enabled: true
     metrics:
+      enabled: true
+    health:
+      enabled: true
+    info:
       enabled: true
   metrics:
     enable:
