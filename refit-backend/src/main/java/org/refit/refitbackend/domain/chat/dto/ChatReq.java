@@ -3,10 +3,14 @@ package org.refit.refitbackend.domain.chat.dto;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotBlank;
+
+import java.util.List;
 
 public class ChatReq {
 
@@ -106,5 +110,43 @@ public class ChatReq {
 
             @Schema(description = "클라이언트 메시지 ID (중복 방지용)", example = "cmsg_1700000000000")
             String clientMessageId
+    ) {}
+
+    @Schema(description = "V2 피드백 작성")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record CreateFeedbackV2(
+            @Schema(
+                    description = """
+                            질문별 답변 목록
+                            - question_id: chat_feedback_questions.id
+                            - answer_value: answer_type(MULTI3/MULTI2/RADIO/TEXT) 규칙에 맞는 값
+                            """,
+                    requiredMode = Schema.RequiredMode.REQUIRED
+            )
+            @NotEmpty(message = "피드백 응답이 필요합니다.")
+            List<@Valid FeedbackAnswerV2> answers
+    ) {}
+
+    @Schema(description = "V2 피드백 답변 항목")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record FeedbackAnswerV2(
+            @Schema(description = "질문 ID (chat_feedback_questions.id)", example = "1")
+            @NotNull(message = "질문 ID가 필요합니다.")
+            @Positive(message = "질문 ID가 필요합니다.")
+            Long questionId,
+
+            @Schema(
+                    description = """
+                            답변 값
+                            - MULTI3: 콤마 구분 3개 (예: A,B,C)
+                            - MULTI2: 콤마 구분 2개 (예: A,B)
+                            - RADIO: 단일 값 1개 (예: 중)
+                            - TEXT: 자유 텍스트
+                            """,
+                    example = "도메인 지식,문제 해결력/트러블슈팅 경험,경력 연차"
+            )
+            @NotBlank(message = "답변 값이 필요합니다.")
+            @Size(max = 500, message = "답변 값이 너무 깁니다.")
+            String answerValue
     ) {}
 }
