@@ -43,9 +43,13 @@ spring:
 
 springdoc:
   swagger-ui:
-    url: /v3/api-docs
-    config-url: /v3/api-docs/swagger-config
     disable-swagger-default-url: true
+    persist-authorization: true
+    urls:
+      - name: v1
+        url: /v3/api-docs/v1
+      - name: v2
+        url: /v3/api-docs/v2
   api-docs:
     enabled: true
 
