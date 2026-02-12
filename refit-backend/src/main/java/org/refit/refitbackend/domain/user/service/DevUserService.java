@@ -17,7 +17,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Profile("dev")
+@Profile({"dev", "local"})
 @RequiredArgsConstructor
 public class DevUserService {
 
