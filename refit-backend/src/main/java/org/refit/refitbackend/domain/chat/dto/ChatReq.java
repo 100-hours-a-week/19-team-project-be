@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.NotBlank;
 
 public class ChatReq {
 
@@ -23,7 +24,7 @@ public class ChatReq {
             @Size(max = 500, message = "공고 링크가 너무 깁니다.")
             String jobPostUrl,
 
-            @Schema(description = "채팅 요청 유형", example = "FEEDBACK / COFFEE_CHAT")
+            @Schema(description = "채팅 요청 유형 (FEEDBACK, COFFEE_CHAT)", example = "FEEDBACK")
             @NotNull(message = "요청 타입이 필요합니다.")
             String requestType
     ) {}
@@ -62,5 +63,48 @@ public class ChatReq {
             @Schema(description = "채팅방 상태", example = "CLOSED")
             @NotNull(message = "채팅 상태가 필요합니다.")
             String status
+    ) {}
+
+    @Schema(description = "V2 채팅 요청 생성")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record CreateRequestV2(
+            @Schema(description = "수신자(현직자) ID", example = "10")
+            @NotNull(message = "수신자 ID가 필요합니다.")
+            @Positive(message = "수신자 ID가 필요합니다.")
+            Long receiverId,
+
+            @Schema(description = "이력서 ID (선택)", example = "1")
+            Long resumeId,
+
+            @Schema(description = "채팅 요청 유형", example = "FEEDBACK")
+            @NotBlank(message = "요청 타입이 필요합니다.")
+            String requestType,
+
+            @Schema(description = "공고 URL (선택)", example = "https://careers.naver.com/job/12345")
+            @Size(max = 500, message = "공고 링크가 너무 깁니다.")
+            String jobPostUrl
+    ) {}
+
+    @Schema(description = "V2 채팅 요청 응답(수락/거절)")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RespondRequestV2(
+            @Schema(description = "요청 상태", example = "ACCEPTED", allowableValues = {"ACCEPTED", "REJECTED"})
+            @NotBlank(message = "채팅 상태가 필요합니다.")
+            String status
+    ) {}
+
+    @Schema(description = "V3 채팅방 메시지 전송")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record SendMessageV3(
+            @Schema(description = "메시지 타입", example = "TEXT")
+            String messageType,
+
+            @Schema(description = "메시지 내용", example = "안녕하세요")
+            @NotNull(message = "메시지 내용을 입력해 주세요.")
+            @Size(min = 1, max = 500, message = "메시지 내용이 너무 깁니다.")
+            String content,
+
+            @Schema(description = "클라이언트 메시지 ID (중복 방지용)", example = "cmsg_1700000000000")
+            String clientMessageId
     ) {}
 }

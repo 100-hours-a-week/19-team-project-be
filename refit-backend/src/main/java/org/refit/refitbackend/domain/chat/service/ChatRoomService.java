@@ -43,6 +43,8 @@ public class ChatRoomService {
      */
     @Transactional
     public ChatRes.CreateChat createRoom(Long requesterId, ChatReq.CreateRoom request) {
+        validateResumeOwnership(requesterId, request.resumeId());
+
         // 요청자 조회
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
@@ -73,6 +75,14 @@ public class ChatRoomService {
         ChatRoom savedRoom = chatRoomRepository.save(chatRoom);
 
         return ChatRes.CreateChat.from(savedRoom);
+    }
+
+    private void validateResumeOwnership(Long requesterId, Long resumeId) {
+        if (resumeId == null) {
+            return;
+        }
+        resumeRepository.findByIdAndUserId(resumeId, requesterId)
+                .orElseThrow(() -> new CustomException(ExceptionType.RESUME_NOT_FOUND));
     }
 
     /**

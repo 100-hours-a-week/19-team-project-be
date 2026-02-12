@@ -40,11 +40,9 @@ spring:
 
 springdoc:
   swagger-ui:
-    url: /v3/api-docs
-    config-url: /v3/api-docs/swagger-config
-    disable-swagger-default-url: true
+    enabled: false
   api-docs:
-    enabled: true
+    enabled: false
 
 # ============================================
 # Actuator & Prometheus (운영 환경)

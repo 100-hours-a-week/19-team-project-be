@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
+import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.user.entity.User;
 import tools.jackson.databind.JsonNode;
@@ -256,5 +257,57 @@ public class ChatRes {
             List<ChatRes.MessageInfo> messages,
             String nextCursor,
             boolean hasMore
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestId(
+            Long chatRequestId
+    ) {
+        public static ChatRequestId from(ChatRequest request) {
+            return new ChatRequestId(request.getId());
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestItem(
+            Long chatRequestId,
+            UserInfo requester,
+            UserInfo receiver,
+            Long resumeId,
+            String requestType,
+            String status,
+            String jobPostUrl,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime respondedAt
+    ) {
+        public static ChatRequestItem from(ChatRequest request) {
+            return new ChatRequestItem(
+                    request.getId(),
+                    UserInfo.from(request.getRequester()),
+                    UserInfo.from(request.getReceiver()),
+                    request.getResumeId(),
+                    request.getRequestType().name(),
+                    request.getStatus().name(),
+                    request.getJobPostUrl(),
+                    request.getCreatedAt(),
+                    request.getRespondedAt()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestCursorResponse(
+            List<ChatRequestItem> requests,
+            String nextCursor,
+            boolean hasMore
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RespondRequestResult(
+            Long chatRequestId,
+            String status,
+            Long chatId
     ) {}
 }
