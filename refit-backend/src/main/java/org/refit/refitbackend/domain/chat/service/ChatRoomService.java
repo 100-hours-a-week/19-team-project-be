@@ -6,6 +6,7 @@ import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
+import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
@@ -193,7 +194,20 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
+        if (room.getStatus() == ChatRoomStatus.CLOSED) {
+            throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
+        }
+
         room.close();
+
+        ChatMessage systemMessage = chatMessageRepository.save(ChatMessage.builder()
+                .chatRoom(room)
+                .sender(room.getReceiver())
+                .messageType(MessageType.SYSTEM)
+                .content("채팅이 종료되었습니다.")
+                .roomSequence(room.nextMessageSequence())
+                .build());
+        room.updateLastMessage(systemMessage);
     }
 
     /**

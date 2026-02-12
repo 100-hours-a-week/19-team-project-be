@@ -11,7 +11,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 
 @Component
-@Profile("!dev")
+@Profile("!dev & !local")
 public class DevOnlyResourceFilter extends OncePerRequestFilter {
 
     @Override

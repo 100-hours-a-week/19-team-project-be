@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.refit.refitbackend.domain.chat.entity.ChatFeedback;
+import org.refit.refitbackend.domain.chat.entity.ChatFeedbackAnswer;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
@@ -310,4 +312,53 @@ public class ChatRes {
             String status,
             Long chatId
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackId(
+            Long chatFeedbackId,
+            Long chatId
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackAnswerItem(
+            Long questionId,
+            String questionKey,
+            String questionText,
+            String answerType,
+            Integer displayOrder,
+            String answerValue
+    ) {
+        public static ChatFeedbackAnswerItem from(ChatFeedbackAnswer answer) {
+            return new ChatFeedbackAnswerItem(
+                    answer.getQuestion().getId(),
+                    answer.getQuestion().getQuestionKey(),
+                    answer.getQuestion().getQuestionText(),
+                    answer.getQuestion().getAnswerType(),
+                    answer.getQuestion().getDisplayOrder(),
+                    answer.getAnswerValue()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackDetail(
+            Long chatFeedbackId,
+            Long chatId,
+            UserInfo expert,
+            UserInfo user,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt,
+            List<ChatFeedbackAnswerItem> answers
+    ) {
+        public static ChatFeedbackDetail from(ChatFeedback feedback, List<ChatFeedbackAnswer> answers) {
+            return new ChatFeedbackDetail(
+                    feedback.getId(),
+                    feedback.getChatRoom().getId(),
+                    UserInfo.from(feedback.getExpert()),
+                    UserInfo.from(feedback.getUser()),
+                    feedback.getCreatedAt(),
+                    answers.stream().map(ChatFeedbackAnswerItem::from).toList()
+            );
+        }
+    }
 }

@@ -6,6 +6,7 @@ import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
+import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
 import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
@@ -40,6 +41,10 @@ public class ChatMessageService {
         // 채팅방 조회 및 권한 체크
         ChatRoom chatRoom = chatRoomRepository.findByIdAndUserId(request.chatId(), senderId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
+
+        if (chatRoom.getStatus() == ChatRoomStatus.CLOSED) {
+            throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
+        }
 
         long roomSequence = chatRoom.nextMessageSequence();
 

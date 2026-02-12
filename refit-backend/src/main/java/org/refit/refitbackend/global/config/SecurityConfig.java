@@ -31,6 +31,7 @@ public class SecurityConfig {
         allow.add("/actuator/**");
         allow.add("/api/actuator/**");
         allow.add("/dev/**");
+        allow.add("/api/dev/**");
         allow.add("/api/api/**");
         allow.add("/api/ws/**");
         allow.add("/ws/**");
