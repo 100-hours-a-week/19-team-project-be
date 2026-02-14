@@ -1,6 +1,7 @@
 package org.refit.refitbackend.domain.chat.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatFeedback;
@@ -15,9 +16,12 @@ import org.refit.refitbackend.domain.chat.repository.ChatFeedbackQuestionReposit
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.report.service.ReportService;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
@@ -28,6 +32,7 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ChatFeedbackService {
@@ -39,6 +44,7 @@ public class ChatFeedbackService {
     private final ChatFeedbackRepository chatFeedbackRepository;
     private final ChatFeedbackAnswerRepository chatFeedbackAnswerRepository;
     private final ChatFeedbackQuestionRepository chatFeedbackQuestionRepository;
+    private final ReportService reportService;
 
     @Transactional
     public ChatRes.ChatFeedbackId createFeedback(Long userId, Long chatId, ChatReq.CreateFeedbackV2 request) {
@@ -95,6 +101,27 @@ public class ChatFeedbackService {
                         .build())
                 .toList();
         chatFeedbackAnswerRepository.saveAll(rows);
+
+        Long requesterId = room.getRequester().getId();
+        Long roomId = room.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    try {
+                        reportService.autoGenerateFromFeedback(requesterId, roomId);
+                    } catch (Exception e) {
+                        log.warn("Auto report generation failed after feedback commit. chatRoomId={}", roomId, e);
+                    }
+                }
+            });
+        } else {
+            try {
+                reportService.autoGenerateFromFeedback(requesterId, roomId);
+            } catch (Exception e) {
+                log.warn("Auto report generation failed after feedback save. chatRoomId={}", roomId, e);
+            }
+        }
 
         return new ChatRes.ChatFeedbackId(feedback.getId(), room.getId());
     }

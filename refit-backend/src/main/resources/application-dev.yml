@@ -110,3 +110,6 @@ logging:
 
 server:
   forward-headers-strategy: framework
+
+ai:
+  base-url: https://dev.re-fit.kr/api/ai

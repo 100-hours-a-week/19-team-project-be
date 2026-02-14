@@ -1,7 +1,6 @@
 package org.refit.refitbackend.domain.chat.repository;
 
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -21,5 +20,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
             @Param("cursorId") Long cursorId,
             Pageable pageable
     );
+
+    @Query("""
+          SELECT cm FROM ChatMessage cm
+          WHERE cm.chatRoom.id = :chatId
+          ORDER BY cm.roomSequence ASC
+      """)
+    java.util.List<ChatMessage> findAllByChatIdOrderBySequence(@Param("chatId") Long chatId);
 
 }

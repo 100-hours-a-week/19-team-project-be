@@ -96,4 +96,9 @@ public class Task extends BaseEntity {
         this.status = TaskStatus.FAILED;
         this.failReason = reason;
     }
+
+    public void linkTarget(TaskTargetType targetType, Long targetId) {
+        this.targetType = targetType;
+        this.targetId = targetId;
+    }
 }
