@@ -109,8 +109,14 @@ jobs:
             chmod 644 application-secret.yml
             echo "🔐 application-secret.yml 주입 완료"
 
-            # 이미지 태그를 환경 변수로 설정하여 compose pull & up
-            export BACKEND_TAG="${IMAGE_TAG}"
+            # 이미지 태그를 .env 파일에 영구 저장
+            ENV_FILE="${COMPOSE_DIR}/.env"
+            if grep -q '^BACKEND_TAG=' "${ENV_FILE}" 2>/dev/null; then
+              sed -i "s|^BACKEND_TAG=.*|BACKEND_TAG=${IMAGE_TAG}|" "${ENV_FILE}"
+            else
+              echo "BACKEND_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
+            fi
+            echo "📌 .env 파일에 BACKEND_TAG=${IMAGE_TAG} 저장 완료"
 
             echo "📥 Pulling new image..."
             docker compose pull backend
