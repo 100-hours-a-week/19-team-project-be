@@ -241,6 +241,10 @@ jobs:
         working-directory: refit-backend
         run: ./gradlew clean bootJar -x test --no-daemon
 
+      - name: 이미지 태그 생성
+        id: image-tag
+        run: echo "tag=production-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       - name: Docker Buildx 설정
         uses: docker/setup-buildx-action@v3
 
@@ -250,7 +254,7 @@ jobs:
           context: refit-backend
           push: true
           tags: |
-            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:production-${{ github.sha | truncate(7) }}
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:${{ steps.image-tag.outputs.tag }}
             ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:production-latest
           platforms: linux/arm64
           cache-from: type=gha
@@ -263,7 +267,7 @@ jobs:
           APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
           DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
           COMPOSE_ENV_BASE: ${{ secrets.COMPOSE_ENV_FILE }}
-          IMAGE_TAG: production-${{ github.sha | truncate(7) }}
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
           ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_BACKEND }}
           AWS_REGION: ${{ secrets.AWS_REGION }}
