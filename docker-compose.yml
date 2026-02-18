@@ -49,7 +49,7 @@ services:
     container_name: refit-backend-otel-agent
     hostname: otel-agent
     restart: unless-stopped
-    command: ["--config=/etc/otel-agent-config.yaml"]
+    command: ["--config=/etc/refit/otel-agent-config.yaml"]
     
     env_file:
       - /etc/refit/.env
@@ -59,7 +59,7 @@ services:
       - "4318:4318"
     
     volumes:
-      - /etc/refit/otel-agent-config.yaml:/etc/otel-agent-config.yaml:ro
+      - /etc/refit/otel-agent-config.yaml:/etc/refit/otel-agent-config.yaml:ro
     
     logging:
       driver: "json-file"

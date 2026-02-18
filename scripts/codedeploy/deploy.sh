@@ -7,6 +7,8 @@ RUNTIME_ENV_DST="/etc/refit/.env"
 RUNTIME_ENV_SRC="$DEPLOY_DIR/refit.env"
 OTEL_CFG_DST="/etc/refit/otel-agent-config.yaml"
 OTEL_CFG_SRC="$DEPLOY_DIR/otel-agent-config.yaml"
+SECRET_CFG_DST="/etc/refit/application-secret.yml"
+SECRET_CFG_SRC="$DEPLOY_DIR/application-secret.yml"
 
 log_info() { echo "[INFO] $*"; }
 log_ok()   { echo "[OK] $*"; }
@@ -28,23 +30,34 @@ run_before_install() {
 run_after_install() {
   log_info "AfterInstall 시작"
 
+  # /etc/refit 디렉토리 권한 설정 (docker 그룹 접근 가능)
+  local dst_dir="/etc/refit"
+  mkdir -p "$dst_dir"
+  chown root:docker "$dst_dir"
+  chmod 750 "$dst_dir"
+
+  # .env 파일 설정
   if [ -f "$RUNTIME_ENV_SRC" ]; then
-    local dst_dir
-    dst_dir="$(dirname "$RUNTIME_ENV_DST")"
-    mkdir -p "$dst_dir"
-    chown root:docker "$dst_dir"
-    chmod 710 "$dst_dir"
     cp "$RUNTIME_ENV_SRC" "$RUNTIME_ENV_DST"
     chown root:docker "$RUNTIME_ENV_DST"
     chmod 640 "$RUNTIME_ENV_DST"
     rm -f "$RUNTIME_ENV_SRC"
   fi
 
+  # otel-agent-config.yaml 파일 설정
   if [ -f "$OTEL_CFG_SRC" ]; then
     cp "$OTEL_CFG_SRC" "$OTEL_CFG_DST"
-    chown root:root "$OTEL_CFG_DST"
-    chmod 644 "$OTEL_CFG_DST"
+    chown root:docker "$OTEL_CFG_DST"
+    chmod 640 "$OTEL_CFG_DST"
     rm -f "$OTEL_CFG_SRC"
+  fi
+
+  # application-secret.yml 파일 설정
+  if [ -f "$SECRET_CFG_SRC" ]; then
+    cp "$SECRET_CFG_SRC" "$SECRET_CFG_DST"
+    chown root:docker "$SECRET_CFG_DST"
+    chmod 640 "$SECRET_CFG_DST"
+    rm -f "$SECRET_CFG_SRC"
   fi
 
   [ -f "$DEPLOY_ENV" ] && chmod 600 "$DEPLOY_ENV"
