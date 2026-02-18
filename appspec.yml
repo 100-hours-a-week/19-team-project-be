@@ -1,12 +1,12 @@
 version: 0.0
 os: linux
 
-Files:
+files:
   - source: /
     destination: /home/ubuntu
     overwrite: true
 
-Hooks:
+hooks:
   BeforeInstall:
     - location: scripts/codedeploy/deploy.sh
       timeout: 300
