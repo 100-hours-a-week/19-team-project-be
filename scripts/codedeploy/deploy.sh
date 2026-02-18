@@ -69,9 +69,9 @@ run_application_start() {
 
 run_validate_service() {
   log_info "ValidateService 시작"
-  local retries=5 delay=5
+  local retries=10 delay=10
   for i in $(seq 1 "$retries"); do
-    status=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "http://localhost:8080/actuator/health" 2>/dev/null || echo "000")
+    status=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "http://localhost:8080/actuator/health" 2>/dev/null)
     [ "$status" = "200" ] && { log_ok "서비스 정상"; return 0; }
     log_info "헬스체크 $i/$retries (HTTP $status)"
     [ "$i" -lt "$retries" ] && sleep "$delay"
