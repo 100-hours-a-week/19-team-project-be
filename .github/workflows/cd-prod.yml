@@ -65,10 +65,13 @@ jobs:
       - name: Create CodeDeploy revision and deploy
         env:
           IMAGE_TAG: ${{ steps.deploy-vars.outputs.image_tag }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_BACKEND }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
           S3_BUCKET: ${{ secrets.CODEDEPLOY_REVISION_BUCKET }}
           APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
           DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
-          COMPOSE_ENV_BASE: ${{ secrets.COMPOSE_ENV_FILE }}
+          RUNTIME_ENV: ${{ secrets.RUNTIME_ENV_FILE }}
         run: |
           set -e
           REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
@@ -76,18 +79,15 @@ jobs:
           cp appspec.yml "$REVISION_DIR/"
           mkdir -p "$REVISION_DIR/scripts/codedeploy"
           cp scripts/codedeploy/deploy.sh "$REVISION_DIR/scripts/codedeploy/"
-          cp docker-compose.yml "$REVISION_DIR/"
-          # .env 파일 생성: 기본 내용 + 동적 값들
-          if [ -n "$COMPOSE_ENV_BASE" ]; then
-            echo "$COMPOSE_ENV_BASE" > "$REVISION_DIR/.env"
-          else
-            touch "$REVISION_DIR/.env"
-          fi
-          # 동적 값들 추가/덮어쓰기
-          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$REVISION_DIR/.env"
-          echo "ECR_REGISTRY=${{ steps.ecr.outputs.registry }}" >> "$REVISION_DIR/.env"
-          echo "ECR_REPOSITORY=${{ secrets.ECR_REPOSITORY_BACKEND }}" >> "$REVISION_DIR/.env"
-          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> "$REVISION_DIR/.env"
+
+          envsubst '${ECR_REGISTRY} ${ECR_REPOSITORY} ${IMAGE_TAG}' \
+            < docker-compose.yml > "$REVISION_DIR/docker-compose.yml"
+
+          printf 'ECR_REGISTRY=%s\nAWS_REGION=%s\n' "${ECR_REGISTRY}" "${AWS_REGION}" \
+            > "$REVISION_DIR/.env"
+
+          printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
+
           ZIP_KEY="backend/manual-$(date +%Y%m%d%H%M%S).zip"
           (cd "$REVISION_DIR" && zip -r -q "../revision.zip" .)
           aws s3 cp "${GITHUB_WORKSPACE}/revision.zip" "s3://${S3_BUCKET}/${ZIP_KEY}"
