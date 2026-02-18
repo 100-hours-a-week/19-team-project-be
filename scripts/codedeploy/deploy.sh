@@ -48,7 +48,7 @@ run_after_install() {
   if [ -f "$OTEL_CFG_SRC" ]; then
     cp "$OTEL_CFG_SRC" "$OTEL_CFG_DST"
     chown root:docker "$OTEL_CFG_DST"
-    chmod 640 "$OTEL_CFG_DST"
+    chmod 644 "$OTEL_CFG_DST"
     rm -f "$OTEL_CFG_SRC"
   fi
 

@@ -18,6 +18,8 @@ processors:
 exporters:
   otlp:
     endpoint: ${PLG_OTLP_ENDPOINT}
+    tls:
+      insecure: true
     # 헤더 설정 (인증이 필요한 경우)
     # 형식: key: value (YAML map 형식)
     # 예시:
