@@ -14,11 +14,11 @@ run_before_install() {
   log_info "BeforeInstall 시작"
   if ! command -v aws &>/dev/null; then
     curl -sSfL "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o /tmp/awscliv2.zip
-    unzip -q -o /tmp/awscliv2.zip -d /tmp && sudo /tmp/aws/install
+    unzip -q -o /tmp/awscliv2.zip -d /tmp && /tmp/aws/install
     rm -rf /tmp/awscliv2.zip /tmp/aws
   fi
   if ! command -v jq &>/dev/null; then
-    sudo apt-get update -qq && sudo apt-get install -y -qq jq
+    apt-get update -qq && apt-get install -y -qq jq
   fi
   log_ok "BeforeInstall 완료"
 }
@@ -29,16 +29,16 @@ run_after_install() {
   if [ -f "$RUNTIME_ENV_SRC" ]; then
     local dst_dir
     dst_dir="$(dirname "$RUNTIME_ENV_DST")"
-    sudo mkdir -p "$dst_dir"
-    sudo chown root:docker "$dst_dir"
-    sudo chmod 710 "$dst_dir"
-    sudo cp "$RUNTIME_ENV_SRC" "$RUNTIME_ENV_DST"
-    sudo chown root:docker "$RUNTIME_ENV_DST"
-    sudo chmod 640 "$RUNTIME_ENV_DST"
-    sudo rm -f "$RUNTIME_ENV_SRC"
+    mkdir -p "$dst_dir"
+    chown root:docker "$dst_dir"
+    chmod 710 "$dst_dir"
+    cp "$RUNTIME_ENV_SRC" "$RUNTIME_ENV_DST"
+    chown root:docker "$RUNTIME_ENV_DST"
+    chmod 640 "$RUNTIME_ENV_DST"
+    rm -f "$RUNTIME_ENV_SRC"
   fi
 
-  [ -f "$DEPLOY_ENV" ] && sudo chmod 600 "$DEPLOY_ENV"
+  [ -f "$DEPLOY_ENV" ] && chmod 600 "$DEPLOY_ENV"
 
   log_ok "AfterInstall 완료"
 }
@@ -85,5 +85,5 @@ case "${LIFECYCLE_EVENT:-}" in
   AfterInstall)     run_after_install ;;
   ApplicationStart) run_application_start ;;
   ValidateService)  run_validate_service ;;
-  *) log_err "알 수 없는 이벤트"; exit 1 ;;
+  *) log_err "알 수 없는 이벤트: ${LIFECYCLE_EVENT}"; exit 1 ;;
 esac

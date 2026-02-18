@@ -1,28 +1,25 @@
 version: 0.0
 os: linux
 
-# 배포 전 파일 복사
 Files:
   - source: /
     destination: /home/ubuntu
-    type: directory
+    overwrite: true
 
-# CodeDeploy 생명주기 훅
-# 각 단계마다 scripts/codedeploy/deploy.sh가 LIFECYCLE_EVENT 환경변수로 호출됨
 Hooks:
-  - BeforeInstall:
-      - location: scripts/codedeploy/deploy.sh
-        timeout: 300
-        runas: root
-  - AfterInstall:
-      - location: scripts/codedeploy/deploy.sh
-        timeout: 300
-        runas: root
-  - ApplicationStart:
-      - location: scripts/codedeploy/deploy.sh
-        timeout: 600
-        runas: root
-  - ValidateService:
-      - location: scripts/codedeploy/deploy.sh
-        timeout: 300
-        runas: root
+  BeforeInstall:
+    - location: scripts/codedeploy/deploy.sh
+      timeout: 300
+      runas: root
+  AfterInstall:
+    - location: scripts/codedeploy/deploy.sh
+      timeout: 300
+      runas: root
+  ApplicationStart:
+    - location: scripts/codedeploy/deploy.sh
+      timeout: 600
+      runas: root
+  ValidateService:
+    - location: scripts/codedeploy/deploy.sh
+      timeout: 300
+      runas: root
