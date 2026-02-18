@@ -98,6 +98,7 @@ jobs:
             > "$REVISION_DIR/.env"
 
           printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
+          cp otel-agent-config.yaml "$REVISION_DIR/otel-agent-config.yaml"
 
           ZIP_KEY="backend/rollback-$(date +%Y%m%d%H%M%S).zip"
           (cd "$REVISION_DIR" && zip -r -q "../rollback.zip" .)

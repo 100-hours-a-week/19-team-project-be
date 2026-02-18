@@ -5,6 +5,8 @@ DEPLOY_DIR="/home/ubuntu"
 DEPLOY_ENV="$DEPLOY_DIR/.env"
 RUNTIME_ENV_DST="/etc/refit/.env"
 RUNTIME_ENV_SRC="$DEPLOY_DIR/refit.env"
+OTEL_CFG_DST="/etc/refit/otel-agent-config.yaml"
+OTEL_CFG_SRC="$DEPLOY_DIR/otel-agent-config.yaml"
 
 log_info() { echo "[INFO] $*"; }
 log_ok()   { echo "[OK] $*"; }
@@ -36,6 +38,13 @@ run_after_install() {
     chown root:docker "$RUNTIME_ENV_DST"
     chmod 640 "$RUNTIME_ENV_DST"
     rm -f "$RUNTIME_ENV_SRC"
+  fi
+
+  if [ -f "$OTEL_CFG_SRC" ]; then
+    cp "$OTEL_CFG_SRC" "$OTEL_CFG_DST"
+    chown root:root "$OTEL_CFG_DST"
+    chmod 644 "$OTEL_CFG_DST"
+    rm -f "$OTEL_CFG_SRC"
   fi
 
   [ -f "$DEPLOY_ENV" ] && chmod 600 "$DEPLOY_ENV"
