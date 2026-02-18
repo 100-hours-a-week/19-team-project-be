@@ -99,12 +99,13 @@ jobs:
           echo "Deployment ID: $DEPLOY_ID"
 
       - name: Discord notification
-        if: always() && secrets.DISCORD_WEBHOOK != ''
+        if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
           IMAGE_TAG: ${{ steps.deploy-vars.outputs.image_tag }}
         run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
           COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
           payload=$(cat <<EOF
           {"embeds":[{"title":"BE 배포(수동): $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"워크플로우","value":"[상세](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}

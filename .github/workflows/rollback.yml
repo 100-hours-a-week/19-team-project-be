@@ -108,13 +108,14 @@ jobs:
           echo "deployment_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
 
       - name: Discord notification
-        if: always() && inputs.mode == 'rollback' && secrets.DISCORD_WEBHOOK != ''
+        if: always() && inputs.mode == 'rollback'
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
           IMAGE_TAG: ${{ inputs.image_tag }}
           DEPLOY_ID: ${{ steps.verify-image.outputs.deployment_id }}
         run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
           COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
           payload=$(cat <<EOF
           {"embeds":[{"title":"BE Rollback: $STATUS","color":$COLOR,"fields":[{"name":"Image Tag","value":"\`$IMAGE_TAG\`","inline":true},{"name":"Workflow","value":"[Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
