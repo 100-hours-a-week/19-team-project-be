@@ -235,7 +235,7 @@ jobs:
         working-directory: refit-backend
         run: |
           mkdir -p src/main/resources
-          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+          echo "${{ secrets.APPLICATION_SECRET_YML_PROD }}" > src/main/resources/application-secret.yml
 
       - name: JAR 빌드
         working-directory: refit-backend
