@@ -4,12 +4,8 @@ on:
   pull_request:
     branches: [refactor/v2-ci-cd]
     types: [opened, synchronize, reopened]
-    paths:
-      - 'refit-backend/**'
   push:
     branches: [refactor/v2-ci-cd]
-    paths:
-      - 'refit-backend/**'
   workflow_dispatch:
     inputs:
       job_to_run:
@@ -244,7 +240,6 @@ jobs:
         working-directory: refit-backend
         run: |
           mkdir -p src/main/resources
-          # 주의: 이 시크릿은 로컬 빌드 시에만 사용되며 GitHub에 노출되지 않음
           echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
 
       - name: JAR 빌드
