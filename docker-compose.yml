@@ -1,0 +1,78 @@
+services:
+  backend:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+    container_name: refit-backend
+    hostname: refit-backend
+    restart: unless-stopped
+    
+    env_file:
+      - ./.env
+    
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.8'
+          memory: 3G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    volumes:
+      - app_logs:/app/logs
+      - /etc/refit/application-secret.yml:/app/application-secret.yml:ro
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    depends_on:
+      - otel-agent
+    
+    networks:
+      - refit-network
+
+  otel-agent:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: refit-backend-otel-agent
+    hostname: otel-agent
+    restart: unless-stopped
+    command: ["--config=/etc/otel-agent-config.yaml"]
+    
+    env_file:
+      - ./.env
+    
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    
+    volumes:
+      - /etc/refit/otel-agent-config.yaml:/etc/otel-agent-config.yaml:ro
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    networks:
+      - refit-network
+
+volumes:
+  app_logs:
+
+networks:
+  refit-network:
+    driver: bridge

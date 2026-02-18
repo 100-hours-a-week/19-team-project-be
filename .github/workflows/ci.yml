@@ -2,12 +2,12 @@ name: Re-Fit Backend CI
 
 on:
   pull_request:
-    branches: [develop, main]
+    branches: [refactor/v2-ci-cd]
     types: [opened, synchronize, reopened]
     paths:
       - 'refit-backend/**'
   push:
-    branches: [develop, main]
+    branches: [refactor/v2-ci-cd]
     paths:
       - 'refit-backend/**'
   workflow_dispatch:
@@ -72,11 +72,10 @@ jobs:
           fi
           ls -lh build/libs/*.jar | head -1
 
-  # 통합 검증: develop 브랜치 빌드 검증 및 보안 스캔
-  # 목적: develop 브랜치 병합 전 빌드 검증 및 보안 취약점 확인
+  # 통합 검증: 브랜치 빌드 검증 및 보안 스캔
   integration:
     if: |
-      (github.event_name == 'push' && github.ref_name == 'develop') ||
+      (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -114,14 +113,14 @@ jobs:
           fi
         continue-on-error: true
 
-  # 개발 환경 릴리즈 (develop 브랜치 - Docker 기반)
+  # 개발 환경 릴리즈 (refactor/v2-ci-cd 브랜치 - Docker 기반)
   release-dev:
     needs: [integration]
     if: |
       always() &&
       needs.integration.result != 'failure' &&
       (
-        (github.event_name == 'push' && github.ref_name == 'develop') ||
+        (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
         (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-dev' || github.event.inputs.job_to_run == 'all'))
       )
     runs-on: ubuntu-latest
@@ -137,7 +136,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -173,7 +172,7 @@ jobs:
           echo "full_image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           echo "latest_image=${LATEST_IMAGE}" >> $GITHUB_OUTPUT
           echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
-          echo "🐳 Docker Image: ${FULL_IMAGE}"
+          echo "Docker Image: ${FULL_IMAGE}"
 
       - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
@@ -197,130 +196,110 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'cd-dev.yml',
-              ref: 'develop',
+              ref: 'refactor/v2-ci-cd',
               inputs: {
                 image_tag: '${{ steps.meta.outputs.image_tag }}',
                 sha: '${{ github.sha }}',
                 run_id: '${{ github.run_id }}'
               }
             });
-            console.log('✅ CD-Dev workflow triggered successfully');
+            console.log('CD-Dev workflow triggered successfully');
 
-  # 릴리즈: main 브랜치 프로덕션 빌드 및 아티팩트 생성
-  # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
+  # 프로덕션: refactor/v2-ci-cd 브랜치 → ECR 푸시 후 CodeDeploy로 배포 (docker-compose)
   release-prod:
     if: |
-      (github.event_name == 'push' && github.ref_name == 'main') ||
+      (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-prod' || github.event.inputs.job_to_run == 'all'))
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     environment: production
-
-    defaults:
-      run:
-        working-directory: refit-backend
-        shell: bash
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: ${{ github.event_name == 'push' && 0 || 1 }}
+          fetch-depth: 0
           token: ${{ secrets.PAT }}
 
-      - name: Set up JDK
+      - name: AWS 자격증명
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-2
+
+      - name: ECR 로그인
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: JDK 설정
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Inject Secret Configuration Files
+      - name: 프로덕션 시크릿 주입
+        working-directory: refit-backend
         run: |
           mkdir -p src/main/resources
-          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
-            echo "Error: APPLICATION_SECRET_YML secret not found"
-            exit 1
-          fi
+          # 주의: 이 시크릿은 로컬 빌드 시에만 사용되며 GitHub에 노출되지 않음
           echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
 
-      - name: Production Build
-        run: ./gradlew clean bootJar --no-daemon
+      - name: JAR 빌드
+        working-directory: refit-backend
+        run: ./gradlew clean bootJar -x test --no-daemon
 
-      - name: Verify JAR
-        run: |
-          set -e
-          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "Error: JAR file not found"
-            exit 1
-          fi
-          # JAR 파일 무결성 확인
-          if ! jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar > /dev/null 2>&1; then
-            echo "Error: Invalid JAR file"
-            exit 1
-          fi
-          ls -lh build/libs/*.jar
+      - name: Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Archive JAR Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-jar-${{ github.sha }}-${{ github.run_id }}
-          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
-          retention-days: 7
-          if-no-files-found: error
-          compression-level: 6
-      
-      - name: Verify Artifact Upload
-        if: success()
-        run: |
-          set -e
-          echo "아티팩트 업로드 검증 중..."
-          JAR_FILE="build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
-          if [ ! -f "$JAR_FILE" ]; then
-            echo "Error: JAR 파일이 존재하지 않습니다"
-            exit 1
-          fi
-          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
-          echo "업로드된 JAR 파일 크기: ${FILE_SIZE} bytes"
-          if [ "$FILE_SIZE" -lt 1000000 ]; then
-            echo "Error: JAR 파일 크기가 비정상적으로 작습니다"
-            exit 1
-          fi
-          echo "아티팩트 업로드 검증 완료"
-
-      - name: Create Release Tag
-        if: github.event_name == 'push'
+      - name: 이미지 빌드 및 ECR 푸시
+        working-directory: refit-backend
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          REPO: ${{ secrets.ECR_REPOSITORY_BACKEND }}
         run: |
-          TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')-${GITHUB_SHA::7}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-          git push origin "$TAG_NAME"
-          echo "Release tag created: $TAG_NAME"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="production-${SHORT_SHA}"
+          docker build --platform linux/arm64 -t "$REGISTRY/$REPO:$TAG" -t "$REGISTRY/$REPO:production-latest" .
+          docker push "$REGISTRY/$REPO:$TAG"
+          docker push "$REGISTRY/$REPO:production-latest"
+          echo "IMAGE_TAG=${TAG}" >> $GITHUB_ENV
 
-      - name: Trigger CD-Prod Workflow
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.PAT }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'cd-prod.yml',
-              ref: 'main',
-              inputs: {
-                run_id: '${{ github.run_id }}',
-                sha: '${{ github.sha }}',
-                branch: 'main'
-              }
-            });
-            console.log('✅ CD-Prod workflow triggered successfully');
+      - name: CodeDeploy 리비전 번들 생성 및 배포
+        working-directory: ${{ github.workspace }}
+        env:
+          S3_BUCKET: ${{ secrets.CODEDEPLOY_REVISION_BUCKET }}
+          APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
+          DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
+          COMPOSE_ENV_BASE: ${{ secrets.COMPOSE_ENV_FILE }}
+        run: |
+          set -e
+          # 리비전 zip: appspec, deploy.sh, docker-compose, .env
+          REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
+          rm -rf "$REVISION_DIR" && mkdir -p "$REVISION_DIR"
+          cp appspec.yml "$REVISION_DIR/"
+          mkdir -p "$REVISION_DIR/scripts/codedeploy"
+          cp scripts/codedeploy/deploy.sh "$REVISION_DIR/scripts/codedeploy/"
+          cp docker-compose.yml "$REVISION_DIR/"
+          # .env 파일 생성: 기본 내용 + 동적 값들
+          if [ -n "$COMPOSE_ENV_BASE" ]; then
+            echo "$COMPOSE_ENV_BASE" > "$REVISION_DIR/.env"
+          else
+            touch "$REVISION_DIR/.env"
+          fi
+          # 동적 값들 추가/덮어쓰기
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$REVISION_DIR/.env"
+          echo "ECR_REGISTRY=${{ steps.ecr.outputs.registry }}" >> "$REVISION_DIR/.env"
+          echo "ECR_REPOSITORY=${{ secrets.ECR_REPOSITORY_BACKEND }}" >> "$REVISION_DIR/.env"
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> "$REVISION_DIR/.env"
+          ZIP_KEY="backend/${GITHUB_SHA}.zip"
+          (cd "$REVISION_DIR" && zip -r -q "../${GITHUB_SHA}.zip" .)
+          aws s3 cp "${GITHUB_WORKSPACE}/${GITHUB_SHA}.zip" "s3://${S3_BUCKET}/${ZIP_KEY}"
+          DEPLOY_ID=$(aws deploy create-deployment \
+            --application-name "$APP_NAME" \
+            --deployment-group-name "$DG_NAME" \
+            --s3-location bucket="${S3_BUCKET}",key="${ZIP_KEY}",bundleType=zip \
+            --query 'deploymentId' --output text)
+          echo "CodeDeploy 배포 시작: $DEPLOY_ID"

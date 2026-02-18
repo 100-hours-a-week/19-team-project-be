@@ -4,244 +4,120 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Operation Mode'
+        description: 'Operation mode'
         required: true
         type: choice
         options:
           - list
-          - restore
+          - rollback
         default: 'list'
-      backup_id:
-        description: 'Backup file name to restore (e.g., backend-20240127120000.jar)'
+      image_tag:
+        description: 'Image tag to rollback to (required if mode=rollback)'
         required: false
         type: string
+
+permissions:
+  contents: read
 
 jobs:
   rollback:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Execute Backend Rollback
-        env:
-          SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
-          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
-          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
-          MODE: ${{ inputs.mode }}
-          BACKUP_ID: ${{ inputs.backup_id }}
+      - name: List available image tags
+        if: inputs.mode == 'list'
+        id: list-images
         run: |
-          set -euo pipefail
+          REPO="${{ secrets.ECR_REPOSITORY_BACKEND }}"
+          echo "Available backend images (latest 20):"
+          aws ecr describe-images \
+            --repository-name "$REPO" \
+            --query 'sort_by(imageDetails,&imagePushedAt)[-20:].[imageTags[0],imagePushedAt]' \
+            --output table \
+            --region ${{ secrets.AWS_REGION }} || echo "No images found"
 
-          BASE_PATH="$SERVER_BASE_PATH"
-          APP_DIR="${BASE_PATH}/app/backend/refit-backend"
-          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
-          JAR_PATH="${APP_DIR}/build/libs/${JAR_NAME}"
-          BACKUP_DIR="${BASE_PATH}/backups/backend"
-
-          SCRIPT=$(cat <<'SCRIPT_END'
-          set -euo pipefail
-          BASE_PATH="$1"
-          APP_DIR="$2"
-          JAR_PATH="$3"
-          BACKUP_DIR="$4"
-          MODE="$5"
-          BACKUP_ID="$6"
-          HEALTH_CHECK_URL="$7"
-
-          APP_NAME="backend"
-
-          echo "============================================"
-          echo "Re-Fit Backend Rollback Operation: ${MODE}"
-          echo "============================================"
-
-          if [ "${MODE}" = "list" ]; then
-            echo "Available Backend JAR Backups (Latest 10):"
-            if [ -d "${BACKUP_DIR}" ]; then
-              ls -lt "${BACKUP_DIR}"/backend-*.jar 2>/dev/null | head -n 10 | awk '{print $9, $6, $7, $8}' || echo "No backend-*.jar backups found."
-            else
-              echo "No backups directory found: ${BACKUP_DIR}"
-            fi
-            exit 0
+      - name: Verify image exists
+        if: inputs.mode == 'rollback'
+        id: verify-image
+        run: |
+          REPO="${{ secrets.ECR_REPOSITORY_BACKEND }}"
+          TAG="${{ inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            echo "Error: image_tag is required for rollback"
+            exit 1
           fi
+          aws ecr describe-images \
+            --repository-name "$REPO" \
+            --image-ids imageTag="$TAG" \
+            --region ${{ secrets.AWS_REGION }} > /dev/null 2>&1 || {
+            echo "Error: Image tag not found: $REPO:$TAG"
+            exit 1
+          }
+          echo "Image verified: $REPO:$TAG"
 
-          if [ "${MODE}" = "restore" ]; then
-            TARGET_BACKUP=""
-
-            if [ -z "${BACKUP_ID}" ]; then
-              # 가장 최신 백엔드 JAR 백업 찾기
-              TARGET_BACKUP=$(ls -t "${BACKUP_DIR}"/backend-*.jar 2>/dev/null | head -n 1 || echo "")
-              if [ -z "${TARGET_BACKUP}" ]; then
-                echo "Error: No backend-*.jar backups found in ${BACKUP_DIR}"
-                exit 1
-              fi
-              echo "Backup ID not specified. Using latest: $(basename "${TARGET_BACKUP}")"
-            else
-              TARGET_BACKUP="${BACKUP_DIR}/${BACKUP_ID}"
-            fi
-
-            if [ ! -f "${TARGET_BACKUP}" ]; then
-              echo "Error: Backup file not found: ${TARGET_BACKUP}"
-              exit 1
-            fi
-
-            echo "Restoring from: ${TARGET_BACKUP}"
-
-            # 현재 상태 Safety Backup
-            SAFETY_BACKUP="${BACKUP_DIR}/safety_before_rollback_$(date +%Y%m%d%H%M%S).jar"
-            if [ -f "${JAR_PATH}" ]; then
-              cp "${JAR_PATH}" "${SAFETY_BACKUP}"
-              echo "Safety backup created: ${SAFETY_BACKUP}"
-            fi
-
-            # JAR 복구
-            echo "Restore JAR file..."
-            cp "${TARGET_BACKUP}" "${JAR_PATH}"
-
-            # 권한 복구
-            sudo chown -R ubuntu:ubuntu "${APP_DIR}" 2>/dev/null || true
-            chmod 644 "${JAR_PATH}" 2>/dev/null || true
-
-            # 애플리케이션 재시작
-            echo "Restarting backend via PM2..."
-            if sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
-              sudo -u ubuntu pm2 restart ${APP_NAME} || sudo -u ubuntu pm2 delete ${APP_NAME}
-            fi
-
-            if ! sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
-              sudo -u ubuntu pm2 start /usr/bin/java --name "${APP_NAME}" -- \
-                -Xms1024m -Xmx2560m -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
-                -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof \
-                -jar "${JAR_PATH}"
-            fi
-
-            sleep 15
-
-            # PM2 상태 확인
-            if ! sudo -u ubuntu pm2 describe ${APP_NAME} > /dev/null 2>&1; then
-              echo "PM2 process not running after reload"
-              exit 1
-            fi
-
-            # Caddy 리로드
-            systemctl is-active --quiet caddy && sudo systemctl reload caddy 2>/dev/null || true
-            sleep 5
-
-            # 헬스체크: 초기 15초 대기 후 최대 5회 재시도 (HTTP 200만 확인)
-            echo "Running backend health check (initial 15s wait, up to 5 retries)..."
-            if [ -n "${HEALTH_CHECK_URL}" ]; then
-              # 추가 대기 시간을 통해 백엔드 기동 여유 확보
-              sleep 15
-
-              for i in {1..5}; do
-                HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_CHECK_URL}" 2>/dev/null || echo "000")
-                if [ "${HTTP_STATUS}" = "200" ]; then
-                  echo "Rollback successful! Backend is healthy (HTTP ${HTTP_STATUS})"
-                  sudo -u ubuntu pm2 save 2>/dev/null || true
-                  sudo -u ubuntu pm2 status ${APP_NAME} || true
-                  exit 0
-                fi
-                echo "Attempt $i/5: HTTP ${HTTP_STATUS}"
-                [ $i -lt 5 ] && sleep 3
-              done
-
-              echo "Health check failed after backend rollback"
-              sudo -u ubuntu pm2 logs ${APP_NAME} --lines 20 --nostream || true
-              exit 1
-            else
-              echo "HEALTH_CHECK_URL not set. Skipping HTTP health check."
-              sudo -u ubuntu pm2 save 2>/dev/null || true
-              exit 0
-            fi
+      - name: Create CodeDeploy revision and rollback
+        if: inputs.mode == 'rollback'
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          S3_BUCKET: ${{ secrets.CODEDEPLOY_REVISION_BUCKET }}
+          APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
+          DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
+          COMPOSE_ENV_BASE: ${{ secrets.COMPOSE_ENV_FILE }}
+        run: |
+          set -e
+          # ECR 레지스트리 동적 조회 (credentials 노출 방지)
+          REGISTRY=$(aws ecr describe-repositories --repository-names ${{ secrets.ECR_REPOSITORY_BACKEND }} --query 'repositories[0].repositoryUri' --output text | sed 's|/.*||')
+          REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
+          rm -rf "$REVISION_DIR" && mkdir -p "$REVISION_DIR"
+          cp appspec.yml "$REVISION_DIR/"
+          mkdir -p "$REVISION_DIR/scripts/codedeploy"
+          cp scripts/codedeploy/deploy.sh "$REVISION_DIR/scripts/codedeploy/"
+          cp docker-compose.yml "$REVISION_DIR/"
+          # .env 파일 생성: 기본 내용 + 동적 값들
+          if [ -n "$COMPOSE_ENV_BASE" ]; then
+            echo "$COMPOSE_ENV_BASE" > "$REVISION_DIR/.env"
+          else
+            touch "$REVISION_DIR/.env"
           fi
-          SCRIPT_END
-          )
-          
-          # SSM 명령 실행
-          SCRIPT_ENCODED=$(echo "$SCRIPT" | base64 -w 0)
-          SSM_COMMAND="bash -c \"echo '$SCRIPT_ENCODED' | base64 -d | bash -s -- '$BASE_PATH' '$APP_DIR' '$JAR_PATH' '$BACKUP_DIR' '$MODE' '$BACKUP_ID' '$HEALTH_CHECK_URL'\""
-          
-          PARAMETERS_JSON=$(jq -n --arg cmd "$SSM_COMMAND" '{commands: [$cmd]}')
-          
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$EC2_INSTANCE_ID" \
-            --document-name "AWS-RunShellScript" \
-            --parameters "$PARAMETERS_JSON" \
-            --timeout-seconds 600 \
-            --region ap-northeast-2 \
-            --query 'Command.CommandId' \
-            --output text)
-            
-          [ -n "$COMMAND_ID" ] || exit 1
-          
-          # 실행 상태 확인
-          for i in {1..60}; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$EC2_INSTANCE_ID" \
-              --region ap-northeast-2 \
-              --query 'Status' \
-              --output text 2>/dev/null || echo "InProgress")
-            
-            if [ "$STATUS" = "Success" ]; then
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$EC2_INSTANCE_ID" \
-                --region ap-northeast-2 \
-                --query 'StandardOutputContent' \
-                --output text
-              exit 0
-            elif [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Cancelled" ] || [ "$STATUS" = "TimedOut" ]; then
-              aws ssm get-command-invocation \
-                --command-id "$COMMAND_ID" \
-                --instance-id "$EC2_INSTANCE_ID" \
-                --region ap-northeast-2 \
-                --query 'StandardErrorContent' \
-                --output text
-              exit 1
-            fi
-            sleep 3
-          done
-          exit 1
+          # 동적 값들 추가/덮어쓰기
+          echo "IMAGE_TAG=${IMAGE_TAG}" >> "$REVISION_DIR/.env"
+          echo "ECR_REGISTRY=${REGISTRY}" >> "$REVISION_DIR/.env"
+          echo "ECR_REPOSITORY=${{ secrets.ECR_REPOSITORY_BACKEND }}" >> "$REVISION_DIR/.env"
+          echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> "$REVISION_DIR/.env"
+          ZIP_KEY="backend/rollback-$(date +%Y%m%d%H%M%S).zip"
+          (cd "$REVISION_DIR" && zip -r -q "../rollback.zip" .)
+          aws s3 cp "${GITHUB_WORKSPACE}/rollback.zip" "s3://${S3_BUCKET}/${ZIP_KEY}"
+          DEPLOY_ID=$(aws deploy create-deployment \
+            --application-name "$APP_NAME" \
+            --deployment-group-name "$DG_NAME" \
+            --s3-location bucket="${S3_BUCKET}",key="${ZIP_KEY}",bundleType=zip \
+            --query 'deploymentId' --output text)
+          echo "Rollback deployment started: $DEPLOY_ID"
+          echo "deployment_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
 
-      - name: Notify Discord on Result
-        if: always() && inputs.mode == 'restore'
+      - name: Discord notification
+        if: always() && inputs.mode == 'rollback' && secrets.DISCORD_WEBHOOK != ''
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
-          BACKUP_ID: ${{ inputs.backup_id }}
-          RUN_ID: ${{ github.run_id }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_ID: ${{ steps.verify-image.outputs.deployment_id }}
         run: |
-          if [ "$STATUS" = "success" ]; then
-            COLOR=3066993
-            TITLE="Rollback Successful"
-          else
-            COLOR=15158332
-            TITLE="Rollback Failed"
-          fi
-
-          BACKUP_TEXT="${BACKUP_ID:-latest backend-*.jar}"
-
+          COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
           payload=$(cat <<EOF
-          {
-            "embeds": [{
-              "title": "BE Rollback Result: $TITLE",
-              "color": $COLOR,
-              "fields": [
-                {"name": "서비스", "value": "Re-Fit Backend", "inline": true},
-                {"name": "상태", "value": "\`$STATUS\`", "inline": true},
-                {"name": "롤백 대상", "value": "\`$BACKUP_TEXT\`", "inline": false},
-                {"name": "워크플로우", "value": "[상세 보기](https://github.com/${{ github.repository }}/actions/runs/$RUN_ID)", "inline": false}
-              ],
-              "footer": { "text": "Re-Fit Backend Rollback System" },
-              "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            }]
-          }
+          {"embeds":[{"title":"BE Rollback: $STATUS","color":$COLOR,"fields":[{"name":"Image Tag","value":"\`$IMAGE_TAG\`","inline":true},{"name":"Workflow","value":"[Details](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
           EOF
           )
-
-          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
