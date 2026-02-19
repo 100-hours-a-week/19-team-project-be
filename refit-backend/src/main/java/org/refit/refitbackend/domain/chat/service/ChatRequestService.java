@@ -9,6 +9,7 @@ import org.refit.refitbackend.domain.chat.entity.ChatRequestType;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
@@ -30,6 +31,7 @@ public class ChatRequestService {
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public ChatRes.ChatRequestId createRequest(Long requesterId, ChatReq.CreateRequestV2 request) {
@@ -58,6 +60,8 @@ public class ChatRequestService {
                 .requestType(requestType)
                 .jobPostUrl(request.jobPostUrl())
                 .build());
+
+        notificationService.notifyChatRequestCreated(requester, receiver, saved.getId());
 
         return ChatRes.ChatRequestId.from(saved);
     }

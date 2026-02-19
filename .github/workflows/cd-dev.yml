@@ -76,12 +76,13 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           APPLICATION_SECRET_YML: ${{ secrets.APPLICATION_SECRET_YML_DEV }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           port: ${{ secrets.DEV_SSH_PORT }}
-          envs: APPLICATION_SECRET_YML
+          envs: APPLICATION_SECRET_YML,FIREBASE_SERVICE_ACCOUNT_JSON
           script: |
             set -euo pipefail
 
@@ -108,6 +109,12 @@ jobs:
             echo "$APPLICATION_SECRET_YML" > application-secret.yml
             chmod 644 application-secret.yml
             echo "application-secret.yml 주입 완료"
+
+            # Firebase 서비스 계정 키 주입
+            mkdir -p firebase
+            echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > firebase/refit-fcm.json
+            chmod 644 firebase/refit-fcm.json
+            echo "🔐 refit-fcm.json 주입 완료"
 
             # 이미지 태그를 .env 파일에 영구 저장
             ENV_FILE="${COMPOSE_DIR}/.env"

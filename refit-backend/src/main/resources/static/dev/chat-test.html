@@ -286,6 +286,54 @@
       </section>
 
       <section>
+        <h2>V2 Notifications</h2>
+        <div class="row">
+          <div>
+            <label>Cursor (optional)</label>
+            <input id="notiCursor" placeholder="예: 120" />
+          </div>
+          <div>
+            <label>Size</label>
+            <input id="notiSize" placeholder="20" value="20" />
+          </div>
+        </div>
+        <label>Notification ID</label>
+        <input id="notiId" placeholder="단일 읽음 처리할 notification_id" />
+        <label>FCM Token</label>
+        <textarea id="fcmToken" placeholder="디바이스에서 발급받은 FCM 토큰 입력"></textarea>
+        <div class="row">
+          <button class="secondary" id="btnListNotifications">List Notifications</button>
+          <button class="secondary" id="btnReadNotification">Read One</button>
+        </div>
+        <div class="row">
+          <button class="secondary" id="btnReadAllNotifications">Read All</button>
+          <button id="btnRegisterFcmToken">Register FCM Token</button>
+        </div>
+        <button class="warn" id="btnDeleteFcmToken">Delete FCM Token</button>
+      </section>
+
+      <section>
+        <h2>Web FCM Token</h2>
+        <label>Firebase API Key</label>
+        <input id="firebaseApiKey" placeholder="AIza..." />
+        <label>Firebase Auth Domain</label>
+        <input id="firebaseAuthDomain" placeholder="re-fit-cf52c.firebaseapp.com" />
+        <label>Firebase Project ID</label>
+        <input id="firebaseProjectId" placeholder="re-fit-cf52c" />
+        <label>Firebase Messaging Sender ID</label>
+        <input id="firebaseMessagingSenderId" placeholder="1234567890" />
+        <label>Firebase App ID</label>
+        <input id="firebaseAppId" placeholder="1:1234567890:web:abcdef123456" />
+        <label>Web Push VAPID Key</label>
+        <textarea id="firebaseVapidKey" placeholder="B..." ></textarea>
+        <div class="row">
+          <button class="secondary" id="btnSaveWebFcmConfig">Save Web FCM Config</button>
+          <button id="btnGetWebFcmToken">Get Web FCM Token</button>
+        </div>
+        <p class="muted">발급 성공 시 위 V2 Notifications의 FCM Token 입력창에 자동 반영됩니다.</p>
+      </section>
+
+      <section>
         <h2>Send Message (WS)</h2>
         <label>Chat ID</label>
         <input id="wsChatId" placeholder="예: 1" />
@@ -389,6 +437,7 @@
       const messageTypeEl = document.getElementById("messageType");
       let stompClient = null;
       let currentRoomSub = null;
+      let latestNotifications = [];
 
       function log(tag, message, kind = "ok") {
         const p = document.createElement("p");
@@ -606,6 +655,121 @@
         res.ok ? log("V2-FEEDBACK", JSON.stringify(res.data)) : log("V2-FEEDBACK", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
       });
 
+      document.getElementById("btnListNotifications").addEventListener("click", async () => {
+        const cursor = document.getElementById("notiCursor").value.trim();
+        const size = document.getElementById("notiSize").value.trim() || "20";
+        const query = new URLSearchParams();
+        if (cursor) query.set("cursor", cursor);
+        query.set("size", size);
+
+        const res = await request("GET", `/v2/notifications?${query.toString()}`);
+        if (!res.ok) return log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+
+        latestNotifications = res.data?.data?.notifications || [];
+        const unreadCount = res.data?.data?.unread_count ?? "?";
+        const nextCursor = res.data?.data?.next_cursor ?? null;
+        const hasMore = res.data?.data?.has_more ?? false;
+
+        if (latestNotifications.length > 0) {
+          const firstId = latestNotifications[0]?.notification_id;
+          if (firstId) document.getElementById("notiId").value = String(firstId);
+        }
+
+        log("NOTI", `count=${latestNotifications.length}, unread=${unreadCount}, nextCursor=${nextCursor}, hasMore=${hasMore}`);
+        log("NOTI", JSON.stringify(latestNotifications));
+      });
+
+      document.getElementById("btnReadNotification").addEventListener("click", async () => {
+        const notiId = document.getElementById("notiId").value.trim();
+        if (!notiId) return log("NOTI", "notification_id required", "err");
+
+        const res = await request("PATCH", `/v2/notifications/${notiId}`, { is_read: true });
+        res.ok ? log("NOTI", JSON.stringify(res.data)) : log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnReadAllNotifications").addEventListener("click", async () => {
+        const res = await request("PATCH", "/v2/notifications", { is_read: true });
+        res.ok ? log("NOTI", JSON.stringify(res.data)) : log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnRegisterFcmToken").addEventListener("click", async () => {
+        const token = document.getElementById("fcmToken").value.trim();
+        if (!token) return log("FCM", "token required", "err");
+
+        const res = await request("POST", "/v2/notifications/fcm-tokens", { token });
+        res.ok ? log("FCM", JSON.stringify(res.data)) : log("FCM", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnDeleteFcmToken").addEventListener("click", async () => {
+        const token = document.getElementById("fcmToken").value.trim();
+        if (!token) return log("FCM", "token required", "err");
+
+        const res = await request("DELETE", "/v2/notifications/fcm-tokens", { token });
+        res.ok ? log("FCM", JSON.stringify(res.data)) : log("FCM", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnGetWebFcmToken").addEventListener("click", async () => {
+        const apiKey = document.getElementById("firebaseApiKey").value.trim();
+        const authDomain = document.getElementById("firebaseAuthDomain").value.trim();
+        const projectId = document.getElementById("firebaseProjectId").value.trim();
+        const messagingSenderId = document.getElementById("firebaseMessagingSenderId").value.trim();
+        const appId = document.getElementById("firebaseAppId").value.trim();
+        const vapidKey = document.getElementById("firebaseVapidKey").value.trim();
+
+        if (!apiKey || !projectId || !messagingSenderId || !appId || !vapidKey) {
+          return log("WEB-FCM", "apiKey/projectId/messagingSenderId/appId/vapidKey required", "err");
+        }
+        if (!("serviceWorker" in navigator)) {
+          return log("WEB-FCM", "service worker not supported in this browser", "err");
+        }
+
+        try {
+          const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js");
+          const { getMessaging, getToken } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js");
+
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            return log("WEB-FCM", `notification permission=${permission}`, "err");
+          }
+
+          const registration = await navigator.serviceWorker.register("/dev/firebase-messaging-sw.js");
+          const app = initializeApp({
+            apiKey,
+            authDomain: authDomain || undefined,
+            projectId,
+            messagingSenderId,
+            appId,
+          });
+          const messaging = getMessaging(app);
+          const token = await getToken(messaging, {
+            vapidKey,
+            serviceWorkerRegistration: registration,
+          });
+
+          if (!token) {
+            return log("WEB-FCM", "token is empty; check VAPID key and Firebase config", "err");
+          }
+
+          document.getElementById("fcmToken").value = token;
+          log("WEB-FCM", `token issued (len=${token.length})`);
+        } catch (e) {
+          log("WEB-FCM", `failed: ${e?.message || e}`, "err");
+        }
+      });
+
+      document.getElementById("btnSaveWebFcmConfig").addEventListener("click", () => {
+        const config = {
+          apiKey: document.getElementById("firebaseApiKey").value.trim(),
+          authDomain: document.getElementById("firebaseAuthDomain").value.trim(),
+          projectId: document.getElementById("firebaseProjectId").value.trim(),
+          messagingSenderId: document.getElementById("firebaseMessagingSenderId").value.trim(),
+          appId: document.getElementById("firebaseAppId").value.trim(),
+          vapidKey: document.getElementById("firebaseVapidKey").value.trim(),
+        };
+        localStorage.setItem("refit.dev.webFcmConfig", JSON.stringify(config));
+        log("WEB-FCM", "config saved in localStorage");
+      });
+
       document.getElementById("btnMarkRead").addEventListener("click", async () => {
         const chatId = document.getElementById("chatId").value.trim();
         const lastReadSeq = document.getElementById("lastReadSeq").value.trim();
@@ -671,6 +835,19 @@
       });
 
       baseUrlEl.value = "http://localhost:8080/api";
+      document.getElementById("firebaseProjectId").value = "re-fit-cf52c";
+      document.getElementById("firebaseAuthDomain").value = "re-fit-cf52c.firebaseapp.com";
+      try {
+        const saved = JSON.parse(localStorage.getItem("refit.dev.webFcmConfig") || "{}");
+        if (saved.apiKey) document.getElementById("firebaseApiKey").value = saved.apiKey;
+        if (saved.authDomain) document.getElementById("firebaseAuthDomain").value = saved.authDomain;
+        if (saved.projectId) document.getElementById("firebaseProjectId").value = saved.projectId;
+        if (saved.messagingSenderId) document.getElementById("firebaseMessagingSenderId").value = saved.messagingSenderId;
+        if (saved.appId) document.getElementById("firebaseAppId").value = saved.appId;
+        if (saved.vapidKey) document.getElementById("firebaseVapidKey").value = saved.vapidKey;
+      } catch (_) {
+        // ignore malformed localStorage
+      }
       log("SYS", "page ready");
       log("SYS", "stomp-lite loaded");
     </script>
