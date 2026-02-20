@@ -94,8 +94,3 @@ server:
 fcm:
   enabled: ${FCM_ENABLED:true}
   credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
-  project-id: ${FCM_PROJECT_ID:${fcm.project-id:}}
-  file_path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
-  project_id: ${FCM_PROJECT_ID:${fcm.project-id:}}
-  url: https://fcm.googleapis.com/v1/projects/${FCM_PROJECT_ID:${fcm.project-id:}}/messages:send
-  google_api: https://www.googleapis.com/auth/cloud-platform
