@@ -26,9 +26,14 @@ receivers:
         from: attributes.log
         to: body
 
-      # 3) ECS JSON 파싱
+      # 3) refit-backend 로그만 선별
+      - type: filter
+        expr: 'not (body matches "\"service\"\\s*:\\s*\\{[^}]*\"name\"\\s*:\\s*\"refit-backend\"")'
+
+      # 4) ECS JSON 파싱
       - type: json_parser
         id: parse_ecs_json
+        if: 'body matches "^\\s*\\{"'
         on_error: drop
         parse_to: attributes
         severity:
@@ -41,16 +46,7 @@ receivers:
             debug: DEBUG
             trace: TRACE
 
-      # 4) refit-backend 서비스 로그만 통과
-      - type: filter
-        expr: 'attributes.service == nil or attributes["service"]["name"] != "refit-backend"'
-
-      # 5) 로그 본문/연계 필드 정규화
-      - type: move
-        if: attributes.message != nil
-        from: attributes.message
-        to: body
-
+      # 5) Trace 연계용 필드만 정규화
       - type: move
         if: attributes.traceId != nil
         from: attributes.traceId
@@ -59,32 +55,8 @@ receivers:
         if: attributes.spanId != nil
         from: attributes.spanId
         to: attributes["span_id"]
-      - type: move
-        if: attributes.log != nil and attributes["log"]["level"] != nil
-        from: attributes["log"]["level"]
-        to: attributes["level"]
 
-      # 6) 중간 필드 정리
-      - type: remove
-        if: attributes.log != nil
-        field: attributes["log"]
-      - type: remove
-        if: attributes["@timestamp"] != nil
-        field: attributes["@timestamp"]
-      - type: remove
-        if: attributes.ecs != nil
-        field: attributes.ecs
-      - type: remove
-        if: attributes.service != nil
-        field: attributes.service
-      - type: remove
-        if: attributes.process != nil
-        field: attributes.process
-      - type: remove
-        if: attributes.stream != nil
-        field: attributes.stream
-
-      # 7) 고정 리소스 태그
+      # 6) 고정 리소스 태그
       - type: add
         field: resource["service.name"]
         value: refit-backend
