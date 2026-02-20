@@ -31,6 +31,7 @@ dependencies {
 
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-micrometer-metrics'
+    implementation 'org.springframework.boot:spring-boot-starter-opentelemetry'
     implementation 'io.micrometer:micrometer-registry-prometheus'
     implementation 'io.micrometer:micrometer-registry-otlp'
     implementation 'co.elastic.logging:ecs-logging-core:1.6.0'
