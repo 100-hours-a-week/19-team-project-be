@@ -6,25 +6,95 @@ receivers:
       http:
         endpoint: 0.0.0.0:4318
 
+  filelog/backend:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      # Docker JSON 래퍼 파싱 {"log":"<앱로그>","stream":"stdout","time":"..."}
+      - type: json_parser
+        id: parse_docker_json
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # 실제 앱 로그(ECS JSON 문자열)를 body로 이동
+      - type: move
+        from: attributes.log
+        to: body
+
+      # refit-backend 앱 로그만 통과
+      - type: filter
+        expr: 'not (body matches "refit-backend")'
+
+      # ECS JSON 파싱 → message 필드가 body로, 나머지는 attributes로
+      # log.level → severity(stream label), message → body, traceId/spanId → attributes
+      - type: json_parser
+        id: parse_ecs_json
+        parse_to: attributes
+        severity:
+          parse_from: attributes["log"]["level"]
+          mapping:
+            fatal: FATAL
+            error: ERROR
+            warn:  WARN
+            info:  INFO
+            debug: DEBUG
+            trace: TRACE
+
+      # message 필드를 body로 승격 (Grafana에서 로그 라인으로 표시)
+      - type: move
+        from: attributes.message
+        to: body
+
+      # trace 연계용 필드 정리
+      - type: move
+        from: attributes.traceId
+        to: attributes["trace_id"]
+      - type: move
+        from: attributes.spanId
+        to: attributes["span_id"]
+      - type: move
+        from: attributes["log"]["level"]
+        to: attributes["level"]
+
+      # 불필요한 중간 파싱 필드 제거
+      - type: remove
+        field: attributes["log"]
+      - type: remove
+        field: attributes["@timestamp"]
+      - type: remove
+        field: attributes.ecs
+      - type: remove
+        field: attributes.service
+      - type: remove
+        field: attributes.process
+      - type: remove
+        field: attributes.stream
+
+      # 리소스 태그 (Loki stream label로 활용)
+      - type: add
+        field: resource["service.name"]
+        value: refit-backend
+      - type: add
+        field: resource["deployment.environment"]
+        value: prod
+
 processors:
-  batch:
-    timeout: 10s
-    send_batch_size: 1024
-  
   memory_limiter:
     check_interval: 1s
     limit_mib: 256
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
 
 exporters:
   otlp:
-    endpoint: ${PLG_OTLP_ENDPOINT}
+    endpoint: ${env:PLG_OTLP_ENDPOINT}
     tls:
       insecure: true
-    # 헤더 설정 (인증이 필요한 경우)
-    # 형식: key: value (YAML map 형식)
-    # 예시:
-    #   x-api-key: your-api-key
-    #   Authorization: Bearer your-token
     headers: {}
 
 service:
@@ -33,13 +103,11 @@ service:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlp]
-
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
       exporters: [otlp]
-
     logs:
-      receivers: [otlp]
+      receivers: [otlp, filelog/backend]
       processors: [memory_limiter, batch]
       exporters: [otlp]

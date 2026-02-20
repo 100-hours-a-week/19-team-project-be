@@ -29,7 +29,6 @@ services:
       start_period: 60s
     
     volumes:
-      - app_logs:/app/logs
       - /etc/refit/application-secret.yml:/app/application-secret.yml:ro
     
     logging:
@@ -49,6 +48,7 @@ services:
     container_name: refit-backend-otel-agent
     hostname: otel-agent
     restart: unless-stopped
+    user: "0"
     command: ["--config=/etc/refit/otel-agent-config.yaml"]
     
     env_file:
@@ -60,6 +60,7 @@ services:
     
     volumes:
       - /etc/refit/otel-agent-config.yaml:/etc/refit/otel-agent-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
     
     logging:
       driver: "json-file"
@@ -69,9 +70,6 @@ services:
     
     networks:
       - refit-network
-
-volumes:
-  app_logs:
 
 networks:
   refit-network:
