@@ -13,26 +13,23 @@ receivers:
     include_file_path: true
     include_file_name: false
     operators:
-      # Docker JSON 래퍼 파싱 {"log":"<앱로그>","stream":"stdout","time":"..."}
+      # 1) Docker json-file wrapper 파싱
       - type: json_parser
         id: parse_docker_json
+        on_error: drop
         timestamp:
           parse_from: attributes.time
           layout: '%Y-%m-%dT%H:%M:%S.%LZ'
 
-      # 실제 앱 로그(ECS JSON 문자열)를 body로 이동
+      # 2) 실제 애플리케이션 로그 본문 추출
       - type: move
         from: attributes.log
         to: body
 
-      # refit-backend 앱 로그만 통과
-      - type: filter
-        expr: 'not (body matches "refit-backend")'
-
-      # ECS JSON 파싱 → message 필드가 body로, 나머지는 attributes로
-      # log.level → severity(stream label), message → body, traceId/spanId → attributes
+      # 3) ECS JSON 파싱
       - type: json_parser
         id: parse_ecs_json
+        on_error: drop
         parse_to: attributes
         severity:
           parse_from: attributes["log"]["level"]
@@ -44,12 +41,16 @@ receivers:
             debug: DEBUG
             trace: TRACE
 
-      # message 필드를 body로 승격 (Grafana에서 로그 라인으로 표시)
+      # 4) refit-backend 서비스 로그만 통과
+      - type: filter
+        expr: 'attributes.service == nil or attributes["service"]["name"] != "refit-backend"'
+
+      # 5) 로그 본문/연계 필드 정규화
       - type: move
+        if: attributes.message != nil
         from: attributes.message
         to: body
 
-      # trace 연계용 필드 정리
       - type: move
         if: attributes.traceId != nil
         from: attributes.traceId
@@ -59,25 +60,31 @@ receivers:
         from: attributes.spanId
         to: attributes["span_id"]
       - type: move
-        if: attributes["log"]["level"] != nil
+        if: attributes.log != nil and attributes["log"]["level"] != nil
         from: attributes["log"]["level"]
         to: attributes["level"]
 
-      # 불필요한 중간 파싱 필드 제거
+      # 6) 중간 필드 정리
       - type: remove
+        if: attributes.log != nil
         field: attributes["log"]
       - type: remove
+        if: attributes["@timestamp"] != nil
         field: attributes["@timestamp"]
       - type: remove
+        if: attributes.ecs != nil
         field: attributes.ecs
       - type: remove
+        if: attributes.service != nil
         field: attributes.service
       - type: remove
+        if: attributes.process != nil
         field: attributes.process
       - type: remove
+        if: attributes.stream != nil
         field: attributes.stream
 
-      # 리소스 태그 (Loki stream label로 활용)
+      # 7) 고정 리소스 태그
       - type: add
         field: resource["service.name"]
         value: refit-backend
