@@ -71,6 +71,9 @@ management:
         enabled: true
       otlp:
         enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
 
   otlp:
     metrics:
@@ -80,6 +83,11 @@ management:
         resource-attributes:
           service.name: ${spring.application.name:refit-backend}
           deployment.environment: prod
+  opentelemetry:
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-agent:4318}/v1/traces
 
 # ============================================
 # Structured JSON Logging (운영 환경)
@@ -97,7 +105,7 @@ logging:
     root: info
     org.springframework: warn
     org.hibernate: warn
-    org.refit.backend: info  # 운영 환경은 info 레벨
+    org.refit.refitbackend: info  # 운영 환경은 info 레벨
 
 server:
   forward-headers-strategy: framework

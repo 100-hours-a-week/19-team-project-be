@@ -26,23 +26,20 @@ exporters:
     #   x-api-key: your-api-key
     #   Authorization: Bearer your-token
     headers: {}
-  
-  debug:
-    verbosity: normal
 
 service:
   pipelines:
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp, debug]
+      exporters: [otlp]
 
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp, debug]
+      exporters: [otlp]
 
     logs:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp, debug]
+      exporters: [otlp]
