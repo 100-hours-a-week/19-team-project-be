@@ -3,8 +3,8 @@ FROM eclipse-temurin:21-jre-alpine
 
 WORKDIR /app
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Update Alpine packages and install curl
+RUN apk update && apk add --no-cache curl
 
 # Create non-root user
 RUN addgroup -S spring && adduser -S spring -G spring
