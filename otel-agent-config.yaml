@@ -51,12 +51,15 @@ receivers:
 
       # trace 연계용 필드 정리
       - type: move
+        if: attributes.traceId != nil
         from: attributes.traceId
         to: attributes["trace_id"]
       - type: move
+        if: attributes.spanId != nil
         from: attributes.spanId
         to: attributes["span_id"]
       - type: move
+        if: attributes["log"]["level"] != nil
         from: attributes["log"]["level"]
         to: attributes["level"]
 
