@@ -8,12 +8,14 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 
@@ -66,6 +68,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<Object>> handleNotReadable(HttpMessageNotReadableException ex) {
         return ResponseUtil.error(ExceptionType.INVALID_JSON);
+    }
+
+    // 존재하지 않는 정적 리소스/경로 요청 (예: actuator 엔드포인트 오타)
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
+        log.debug("No resource found: {}", ex.getResourcePath());
+        return ResponseUtil.error(HttpStatus.NOT_FOUND, "NOT_FOUND", "요청한 리소스를 찾을 수 없습니다.");
     }
 
     // DB 무결성 제약 위반 (ex: UNIQUE, FK 등)
