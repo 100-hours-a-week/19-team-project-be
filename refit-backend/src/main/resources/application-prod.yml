@@ -50,10 +50,20 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,metrics,info,prometheus
   metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
     enable:
       hikari: true
+
+app:
+  metrics:
+    db-query-count:
+      enabled: true
 
 logging:
   level:
