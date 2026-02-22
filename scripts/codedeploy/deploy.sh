@@ -9,6 +9,8 @@ OTEL_CFG_DST="/etc/refit/otel-agent-config.yaml"
 OTEL_CFG_SRC="$DEPLOY_DIR/otel-agent-config.yaml"
 SECRET_CFG_DST="/etc/refit/application-secret.yml"
 SECRET_CFG_SRC="$DEPLOY_DIR/application-secret.yml"
+FIREBASE_DST="/etc/refit/firebase/refit-fcm.json"
+FIREBASE_SRC="$DEPLOY_DIR/firebase/refit-fcm.json"
 
 log_info() { echo "[INFO] $*"; }
 log_ok()   { echo "[OK] $*"; }
@@ -58,6 +60,15 @@ run_after_install() {
     chown root:docker "$SECRET_CFG_DST"
     chmod 640 "$SECRET_CFG_DST"
     rm -f "$SECRET_CFG_SRC"
+  fi
+
+  # Firebase 서비스 계정 키 설정
+  if [ -f "$FIREBASE_SRC" ]; then
+    mkdir -p "$(dirname "$FIREBASE_DST")"
+    cp "$FIREBASE_SRC" "$FIREBASE_DST"
+    chown root:docker "$FIREBASE_DST"
+    chmod 640 "$FIREBASE_DST"
+    rm -f "$FIREBASE_SRC"
   fi
 
   [ -f "$DEPLOY_ENV" ] && chmod 600 "$DEPLOY_ENV"

@@ -30,6 +30,7 @@ services:
     
     volumes:
       - /etc/refit/application-secret.yml:/app/application-secret.yml:ro
+      - /etc/refit/firebase/refit-fcm.json:/app/firebase/refit-fcm.json:ro
     
     logging:
       driver: "json-file"
