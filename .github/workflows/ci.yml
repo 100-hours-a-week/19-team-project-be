@@ -295,7 +295,7 @@ jobs:
         id: wait-deploy
         run: |
           DEPLOY_ID="${{ steps.codedeploy.outputs.deploy_id }}"
-          echo "Deployment ID: $DEPLOY_ID — polling (max 15min)"
+          echo "Deployment ID: $DEPLOY_ID — polling (max 10min)"
           for i in $(seq 1 30); do
             STATUS=$(aws deploy get-deployment \
               --deployment-id "$DEPLOY_ID" \
@@ -315,10 +315,10 @@ jobs:
                 echo "deploy_error=${ERROR}" >> $GITHUB_OUTPUT
                 exit 1 ;;
             esac
-            sleep 30
+            sleep 15
           done
           echo "deploy_status=Timeout" >> $GITHUB_OUTPUT
-          echo "deploy_error=Timed out after 15 minutes" >> $GITHUB_OUTPUT
+          echo "deploy_error=Timed out after 10 minutes" >> $GITHUB_OUTPUT
           exit 1
 
       - name: Discord notification
