@@ -109,7 +109,7 @@ jobs:
         id: wait-deploy
         run: |
           DEPLOY_ID="${{ steps.codedeploy.outputs.deploy_id }}"
-          echo "배포 ID: $DEPLOY_ID — 폴링 시작 (최대 15분)"
+          echo "배포 ID: $DEPLOY_ID — 폴링 시작 (최대 10분)"
           for i in $(seq 1 30); do
             STATUS=$(aws deploy get-deployment \
               --deployment-id "$DEPLOY_ID" \
@@ -129,10 +129,10 @@ jobs:
                 echo "deploy_error=${ERROR}" >> $GITHUB_OUTPUT
                 exit 1 ;;
             esac
-            sleep 30
+            sleep 20
           done
           echo "deploy_status=Timeout" >> $GITHUB_OUTPUT
-          echo "deploy_error=15분 내 완료되지 않음" >> $GITHUB_OUTPUT
+          echo "deploy_error=10분 내 완료되지 않음" >> $GITHUB_OUTPUT
           exit 1
 
       - name: Discord notification
