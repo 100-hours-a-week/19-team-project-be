@@ -69,7 +69,11 @@ jobs:
   integration:
     if: |
       (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.job_to_run == 'integration' ||
+        github.event.inputs.job_to_run == 'release-dev' ||
+        github.event.inputs.job_to_run == 'all'
+      ))
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
