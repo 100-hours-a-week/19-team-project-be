@@ -69,7 +69,7 @@ run_after_install() {
     mkdir -p "$(dirname "$FIREBASE_DST")"
     cp "$FIREBASE_SRC" "$FIREBASE_DST"
     chown root:docker "$FIREBASE_DST"
-    chmod 640 "$FIREBASE_DST"
+    chmod 644 "$FIREBASE_DST"
     rm -f "$FIREBASE_SRC"
   fi
 
