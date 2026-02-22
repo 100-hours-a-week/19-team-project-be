@@ -64,6 +64,8 @@ run_after_install() {
 
   # Firebase 서비스 계정 키 설정
   if [ -f "$FIREBASE_SRC" ]; then
+    # Docker가 디렉토리로 자동생성한 경우 제거
+    [ -d "$FIREBASE_DST" ] && rm -rf "$FIREBASE_DST"
     mkdir -p "$(dirname "$FIREBASE_DST")"
     cp "$FIREBASE_SRC" "$FIREBASE_DST"
     chown root:docker "$FIREBASE_DST"
