@@ -15,7 +15,6 @@ import org.refit.refitbackend.domain.user.repository.UserSkillRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class ExpertService {
-
     private final ExpertRepository expertRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final UserJobRepository userJobRepository;
@@ -43,52 +41,20 @@ public class ExpertService {
             int size
     ) {
         String keywordPattern = toKeywordPattern(keyword);
-        List<ExpertSearchRow> experts = keywordPattern == null
-                ? expertRepository.searchExpertsByCursorNoKeyword(
-                    jobId,
-                    skillId,
-                    careerLevelId,
-                    cursorId,
-                    PageRequest.of(0, size + 1)
-                )
-                : expertRepository.searchExpertsByCursorWithKeyword(
-                    keywordPattern,
-                    jobId,
-                    skillId,
-                    careerLevelId,
-                    cursorId,
-                    PageRequest.of(0, size + 1)
-                );
-
-        boolean hasMore = experts.size() > size;
-        if (hasMore) {
-            experts = experts.subList(0, size);
+        if (shouldReturnEmptyOnFirstPage(keywordPattern, cursorId)) {
+            return new CursorPage<>(List.of(), null, false);
         }
 
-        List<Long> expertIds = experts.stream()
-                .map(ExpertSearchRow::userId)
-                .toList();
-        Map<Long, List<ExpertRes.JobDto>> jobsMap = getJobsByUserIds(expertIds);
-        Map<Long, List<ExpertRes.SkillDto>> skillsMap = getSkillsByUserIds(expertIds);
+        List<Long> fetchedIds = fetchExpertIds(keywordPattern, jobId, skillId, careerLevelId, cursorId, size + 1);
+        boolean hasMore = fetchedIds.size() > size;
+        List<Long> pageIds = hasMore ? fetchedIds.subList(0, size) : fetchedIds;
 
-        List<ExpertRes.ExpertListItem> items = experts.stream()
-                .map(expert -> new ExpertRes.ExpertListItem(
-                        expert.userId(),
-                        expert.nickname(),
-                        expert.profileImageUrl(),
-                        expert.introduction(),
-                        new ExpertRes.CareerLevelDto(expert.careerLevelId(), expert.careerLevelName()),
-                        expert.companyName(),
-                        Boolean.TRUE.equals(expert.verified()),
-                        expert.ratingAvg() != null ? expert.ratingAvg() : 0.0,
-                        expert.ratingCount() != null ? expert.ratingCount() : 0,
-                        jobsMap.getOrDefault(expert.userId(), List.of()),
-                        skillsMap.getOrDefault(expert.userId(), List.of()),
-                        expert.lastActiveAt()
-                ))
-                .toList();
+        List<ExpertSearchRow> expertRows = fetchExpertRows(pageIds);
+        Map<Long, List<ExpertRes.JobDto>> jobsMap = getJobsByUserIds(pageIds);
+        Map<Long, List<ExpertRes.SkillDto>> skillsMap = getSkillsByUserIds(pageIds);
 
-        String nextCursor = experts.isEmpty() ? null : String.valueOf(experts.get(experts.size() - 1).userId());
+        List<ExpertRes.ExpertListItem> items = toExpertListItems(expertRows, jobsMap, skillsMap);
+        String nextCursor = items.isEmpty() ? null : String.valueOf(items.get(items.size() - 1).userId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
     }
@@ -169,6 +135,70 @@ public class ExpertService {
                                 Collectors.toList()
                         )
                 ));
+    }
+
+    private boolean shouldReturnEmptyOnFirstPage(String keywordPattern, Long cursorId) {
+        return isFirstPage(cursorId)
+                && keywordPattern != null
+                && !hasAnyKeywordMatch(keywordPattern);
+    }
+
+    private boolean isFirstPage(Long cursorId) {
+        return cursorId == null;
+    }
+
+    private boolean hasAnyKeywordMatch(String keywordPattern) {
+        return expertRepository.existsNicknamePrefixMatch(keywordPattern)
+                || expertRepository.existsJobNamePrefixMatch(keywordPattern)
+                || expertRepository.existsSkillNamePrefixMatch(keywordPattern);
+    }
+
+    private List<Long> fetchExpertIds(
+            String keywordPattern,
+            Long jobId,
+            Long skillId,
+            Long careerLevelId,
+            Long cursorId,
+            int limit
+    ) {
+        if (keywordPattern == null) {
+            return expertRepository.searchExpertIdsByCursorNoKeyword(
+                    jobId, skillId, careerLevelId, cursorId, limit
+            );
+        }
+        return expertRepository.searchExpertIdsByCursorWithKeyword(
+                keywordPattern, jobId, skillId, careerLevelId, cursorId, limit
+        );
+    }
+
+    private List<ExpertSearchRow> fetchExpertRows(List<Long> userIds) {
+        if (userIds.isEmpty()) {
+            return List.of();
+        }
+        return expertRepository.findExpertRowsByUserIds(userIds);
+    }
+
+    private List<ExpertRes.ExpertListItem> toExpertListItems(
+            List<ExpertSearchRow> expertRows,
+            Map<Long, List<ExpertRes.JobDto>> jobsMap,
+            Map<Long, List<ExpertRes.SkillDto>> skillsMap
+    ) {
+        return expertRows.stream()
+                .map(expert -> new ExpertRes.ExpertListItem(
+                        expert.userId(),
+                        expert.nickname(),
+                        expert.profileImageUrl(),
+                        expert.introduction(),
+                        new ExpertRes.CareerLevelDto(expert.careerLevelId(), expert.careerLevelName()),
+                        expert.companyName(),
+                        Boolean.TRUE.equals(expert.verified()),
+                        expert.ratingAvg() != null ? expert.ratingAvg() : 0.0,
+                        expert.ratingCount() != null ? expert.ratingCount() : 0,
+                        jobsMap.getOrDefault(expert.userId(), List.of()),
+                        skillsMap.getOrDefault(expert.userId(), List.of()),
+                        expert.lastActiveAt()
+                ))
+                .toList();
     }
 
     private String toKeywordPattern(String keyword) {

@@ -7,51 +7,121 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import org.springframework.data.domain.Pageable;
 import java.util.Optional;
 import java.util.List;
 
 @Repository
 public interface ExpertRepository extends JpaRepository<User, Long> {
 
-    @Query("""
-      SELECT new org.refit.refitbackend.domain.expert.dto.ExpertSearchRow(
-          u.id,
-          u.nickname,
-          u.profileImageUrl,
-          u.introduction,
-          cl.id,
-          cl.level,
-          ep.companyName,
-          ep.verified,
-          ep.ratingAvg,
-          ep.ratingCount,
-          ep.lastActiveAt
-      )
-      FROM User u
-      LEFT JOIN u.expertProfile ep
-      JOIN u.careerLevel cl
-      WHERE u.userType = 'EXPERT'
+    @Query(value = """
+      SELECT u.id
+      FROM users u
+      WHERE u.user_type = 'EXPERT'
         AND u.status = 'ACTIVE'
+        AND (:careerLevelId IS NULL OR u.career_level_id = :careerLevelId)
+        AND (:cursorId IS NULL OR u.id < :cursorId)
         AND (:jobId IS NULL OR EXISTS (
-             SELECT 1 FROM UserJob uj2
-             WHERE uj2.user = u AND uj2.job.id = :jobId
+             SELECT 1 FROM user_jobs uj2
+             WHERE uj2.user_id = u.id AND uj2.job_id = :jobId
         ))
         AND (:skillId IS NULL OR EXISTS (
-             SELECT 1 FROM UserSkill us2
-             WHERE us2.user = u AND us2.skill.id = :skillId
+             SELECT 1 FROM user_skills us2
+             WHERE us2.user_id = u.id AND us2.skill_id = :skillId
         ))
-        AND (:careerLevelId IS NULL OR u.careerLevel.id = :careerLevelId)
-        AND (:cursorId IS NULL OR u.id < :cursorId)
       ORDER BY u.id DESC
-  """)
-    List<ExpertSearchRow> searchExpertsByCursorNoKeyword(
+      LIMIT :limit
+  """, nativeQuery = true)
+    List<Long> searchExpertIdsByCursorNoKeyword(
             @Param("jobId") Long jobId,
             @Param("skillId") Long skillId,
             @Param("careerLevelId") Long careerLevelId,
             @Param("cursorId") Long cursorId,
-            Pageable pageable
+            @Param("limit") int limit
     );
+
+    @Query(value = """
+      SELECT u.id
+      FROM users u
+      WHERE u.user_type = 'EXPERT'
+        AND u.status = 'ACTIVE'
+        AND (
+             lower(u.nickname) LIKE :keywordPattern ESCAPE '\\' OR
+             EXISTS (
+                 SELECT 1
+                 FROM user_jobs uj
+                 JOIN jobs j ON j.id = uj.job_id
+                 WHERE uj.user_id = u.id
+                   AND lower(j.name) LIKE :keywordPattern ESCAPE '\\'
+             ) OR
+             EXISTS (
+                 SELECT 1
+                 FROM user_skills us
+                 JOIN skills s ON s.id = us.skill_id
+                 WHERE us.user_id = u.id
+                   AND lower(s.name) LIKE :keywordPattern ESCAPE '\\'
+             )
+        )
+        AND (:careerLevelId IS NULL OR u.career_level_id = :careerLevelId)
+        AND (:cursorId IS NULL OR u.id < :cursorId)
+        AND (:jobId IS NULL OR EXISTS (
+             SELECT 1 FROM user_jobs uj2
+             WHERE uj2.user_id = u.id AND uj2.job_id = :jobId
+        ))
+        AND (:skillId IS NULL OR EXISTS (
+             SELECT 1 FROM user_skills us2
+             WHERE us2.user_id = u.id AND us2.skill_id = :skillId
+        ))
+      ORDER BY u.id DESC
+      LIMIT :limit
+  """, nativeQuery = true)
+    List<Long> searchExpertIdsByCursorWithKeyword(
+            @Param("keywordPattern") String keywordPattern,
+            @Param("jobId") Long jobId,
+            @Param("skillId") Long skillId,
+            @Param("careerLevelId") Long careerLevelId,
+            @Param("cursorId") Long cursorId,
+            @Param("limit") int limit
+    );
+
+    @Query(value = """
+      SELECT EXISTS (
+          SELECT 1
+          FROM users u
+          WHERE u.user_type = 'EXPERT'
+            AND u.status = 'ACTIVE'
+            AND lower(u.nickname) LIKE :keywordPattern ESCAPE '\\'
+          LIMIT 1
+      )
+  """, nativeQuery = true)
+    boolean existsNicknamePrefixMatch(@Param("keywordPattern") String keywordPattern);
+
+    @Query(value = """
+      SELECT EXISTS (
+          SELECT 1
+          FROM user_jobs uj
+          JOIN users u ON u.id = uj.user_id
+          JOIN jobs j ON j.id = uj.job_id
+          WHERE u.user_type = 'EXPERT'
+            AND u.status = 'ACTIVE'
+            AND lower(j.name) LIKE :keywordPattern ESCAPE '\\'
+          LIMIT 1
+      )
+  """, nativeQuery = true)
+    boolean existsJobNamePrefixMatch(@Param("keywordPattern") String keywordPattern);
+
+    @Query(value = """
+      SELECT EXISTS (
+          SELECT 1
+          FROM user_skills us
+          JOIN users u ON u.id = us.user_id
+          JOIN skills s ON s.id = us.skill_id
+          WHERE u.user_type = 'EXPERT'
+            AND u.status = 'ACTIVE'
+            AND lower(s.name) LIKE :keywordPattern ESCAPE '\\'
+          LIMIT 1
+      )
+  """, nativeQuery = true)
+    boolean existsSkillNamePrefixMatch(@Param("keywordPattern") String keywordPattern);
 
     @Query("""
       SELECT new org.refit.refitbackend.domain.expert.dto.ExpertSearchRow(
@@ -70,44 +140,10 @@ public interface ExpertRepository extends JpaRepository<User, Long> {
       FROM User u
       LEFT JOIN u.expertProfile ep
       JOIN u.careerLevel cl
-      WHERE u.userType = 'EXPERT'
-        AND u.status = 'ACTIVE'
-        AND (
-             lower(u.nickname) LIKE :keywordPattern ESCAPE '\\' OR
-             lower(u.introduction) LIKE :keywordPattern ESCAPE '\\' OR
-             EXISTS (
-                 SELECT 1 FROM UserJob uj
-                 JOIN uj.job j
-                 WHERE uj.user = u
-                   AND lower(j.name) LIKE :keywordPattern ESCAPE '\\'
-             ) OR
-             EXISTS (
-                 SELECT 1 FROM UserSkill us
-                 JOIN us.skill s
-                 WHERE us.user = u
-                   AND lower(s.name) LIKE :keywordPattern ESCAPE '\\'
-             )
-        )
-        AND (:jobId IS NULL OR EXISTS (
-             SELECT 1 FROM UserJob uj2
-             WHERE uj2.user = u AND uj2.job.id = :jobId
-        ))
-        AND (:skillId IS NULL OR EXISTS (
-             SELECT 1 FROM UserSkill us2
-             WHERE us2.user = u AND us2.skill.id = :skillId
-        ))
-        AND (:careerLevelId IS NULL OR u.careerLevel.id = :careerLevelId)
-        AND (:cursorId IS NULL OR u.id < :cursorId)
+      WHERE u.id IN :userIds
       ORDER BY u.id DESC
   """)
-    List<ExpertSearchRow> searchExpertsByCursorWithKeyword(
-            @Param("keywordPattern") String keywordPattern,
-            @Param("jobId") Long jobId,
-            @Param("skillId") Long skillId,
-            @Param("careerLevelId") Long careerLevelId,
-            @Param("cursorId") Long cursorId,
-            Pageable pageable
-    );
+    List<ExpertSearchRow> findExpertRowsByUserIds(@Param("userIds") List<Long> userIds);
 
     @Query("""
       SELECT u FROM User u
