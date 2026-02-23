@@ -71,13 +71,6 @@ public class GlobalExceptionHandler {
         return ResponseUtil.error(ExceptionType.INVALID_JSON);
     }
 
-    // 존재하지 않는 정적 리소스/경로 요청 (예: actuator 엔드포인트 오타)
-    @ExceptionHandler(NoResourceFoundException.class)
-    public ResponseEntity<ApiResponse<Void>> handleNoResourceFound(NoResourceFoundException ex) {
-        log.debug("No resource found: {}", ex.getResourcePath());
-        return ResponseUtil.error(HttpStatus.NOT_FOUND, "NOT_FOUND", "요청한 리소스를 찾을 수 없습니다.");
-    }
-
     // DB 무결성 제약 위반 (ex: UNIQUE, FK 등)
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiResponse<Object>> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
