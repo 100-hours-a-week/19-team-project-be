@@ -7,6 +7,7 @@ import org.refit.refitbackend.domain.auth.entity.EmailVerificationStatus;
 import org.refit.refitbackend.domain.auth.repository.EmailVerificationRepository;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
+import org.refit.refitbackend.domain.expert.service.ExpertService;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.master.entity.Job;
 import org.refit.refitbackend.domain.master.entity.Skill;
@@ -44,6 +45,7 @@ public class AuthService {
     private final UserJobRepository userJobRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final EmailVerificationRepository emailVerificationRepository;
+    private final ExpertService expertService;
 
     @Transactional
     public User signup(AuthReq.SignUp signUpDto) {
@@ -74,6 +76,7 @@ public class AuthService {
             } else {
                 createExpertProfileIfNeeded(existing, signUpDto);
             }
+            refreshMentorEmbeddingIfNeeded(existing);
             return existing;
         }
 
@@ -82,6 +85,7 @@ public class AuthService {
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
         createExpertProfileIfNeeded(user, signUpDto);
+        refreshMentorEmbeddingIfNeeded(user);
         return user;
     }
 
@@ -277,6 +281,16 @@ public class AuthService {
     private CareerLevel getCareerLevel(Long careerLevelId) {
         return careerLevelRepository.findById(careerLevelId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CAREER_LEVEL_NOT_FOUND));
+    }
+
+    private void refreshMentorEmbeddingIfNeeded(User user) {
+        if (user.getUserType() != UserType.EXPERT) {
+            return;
+        }
+        if (user.getExpertProfile() == null) {
+            return;
+        }
+        expertService.refreshMentorEmbeddingBestEffort(user.getId());
     }
 
 

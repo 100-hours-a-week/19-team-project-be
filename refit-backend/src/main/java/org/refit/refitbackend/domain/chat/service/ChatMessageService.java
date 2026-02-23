@@ -6,9 +6,11 @@ import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
+import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
 import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
@@ -27,6 +29,7 @@ public class ChatMessageService {
     private final ChatRoomRepository chatRoomRepository;
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final NotificationService notificationService;
 
     /**
      * 메시지 전송
@@ -40,6 +43,10 @@ public class ChatMessageService {
         // 채팅방 조회 및 권한 체크
         ChatRoom chatRoom = chatRoomRepository.findByIdAndUserId(request.chatId(), senderId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
+
+        if (chatRoom.getStatus() == ChatRoomStatus.CLOSED) {
+            throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
+        }
 
         long roomSequence = chatRoom.nextMessageSequence();
 
@@ -70,6 +77,14 @@ public class ChatMessageService {
         // 1:1 채팅 - 채팅방 구독자에게 브로드캐스트
         messagingTemplate.convertAndSend("/queue/chat." + request.chatId(), payload);
         log.info("메시지 전송 성공 - roomId: {}, senderId: {}", request.chatId(), senderId);
+
+        // 상대방에게 새 메시지 푸시 알림 (시스템 메시지 제외)
+        if (messageType != MessageType.SYSTEM) {
+            User receiver = chatRoom.getRequester().getId().equals(senderId)
+                    ? chatRoom.getReceiver()
+                    : chatRoom.getRequester();
+            notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), request.content());
+        }
 
         return payload;
     }

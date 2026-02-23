@@ -2,6 +2,7 @@ package org.refit.refitbackend.domain.resume.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.resume.dto.ResumeTaskReq;
 import org.refit.refitbackend.domain.resume.dto.ResumeTaskRes;
 import org.refit.refitbackend.domain.task.entity.Task;
@@ -40,6 +41,7 @@ public class ResumeTaskService {
     private final ObjectMapper objectMapper;
     private final TaskRepository taskRepository;
     private final StorageClient storageClient;
+    private final NotificationService notificationService;
 
     @Value("${ai.base-url:https://re-fit.kr/api/ai}")
     private String aiBaseUrl;
@@ -82,10 +84,12 @@ public class ResumeTaskService {
         } catch (CustomException e) {
             task.markFailed(e.getExceptionType().getCode());
             taskRepository.save(task);
+            notifyResumeFailedSafely(userId, taskId, e.getExceptionType().getCode());
             throw e;
         } catch (Exception e) {
             task.markFailed("INTERNAL_SERVER_ERROR");
             taskRepository.save(task);
+            notifyResumeFailedSafely(userId, taskId, "INTERNAL_SERVER_ERROR");
             throw e;
         }
 
@@ -103,6 +107,7 @@ public class ResumeTaskService {
 
         task.markCompleted(toJson(parsedResult));
         taskRepository.save(task);
+        notifyResumeCompletedSafely(userId, taskId);
 
         return new ResumeTaskRes.TaskResult(
                 taskId,
@@ -205,6 +210,22 @@ public class ResumeTaskService {
             return objectMapper.writeValueAsString(value);
         } catch (Exception e) {
             throw new CustomException(ExceptionType.INVALID_JSON);
+        }
+    }
+
+    private void notifyResumeCompletedSafely(Long userId, String taskId) {
+        try {
+            notificationService.notifyResumeParseCompleted(userId, taskId);
+        } catch (Exception e) {
+            log.warn("[RESUME_PARSE] completion notification failed. taskId={}", taskId, e);
+        }
+    }
+
+    private void notifyResumeFailedSafely(Long userId, String taskId, String reasonCode) {
+        try {
+            notificationService.notifyResumeParseFailed(userId, taskId, reasonCode);
+        } catch (Exception e) {
+            log.warn("[RESUME_PARSE] failure notification failed. taskId={}, reason={}", taskId, reasonCode, e);
         }
     }
 }

@@ -17,7 +17,9 @@ public class CorsConfig {
         config.setAllowedOrigins(List.of(
                 "http://localhost:3000",
                 "http://localhost:8080",
-                "https://re-fit.kr"
+                "https://re-fit.kr",
+                "https://dev.re-fit.kr",
+                "https://prod-v2.re-fit.kr"
         ));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         config.setAllowedHeaders(List.of("*"));

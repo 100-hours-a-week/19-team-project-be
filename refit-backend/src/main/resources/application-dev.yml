@@ -1,0 +1,119 @@
+# ============================================
+# Development Environment Configuration
+# ============================================
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        generate_statistics: true
+
+  jwt:
+    issuer: re-fit
+    access-exp-ms: 10000
+    refresh-exp-ms: 1209600000 # 2주
+
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    deserialization:
+      fail-on-unknown-properties: true
+
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  cloud:
+    aws:
+      credentials:
+        access-key: ${AWS_ACCESS_KEY}
+        secret-key: ${AWS_SECRET_KEY}
+      region:
+        static: ${AWS_S3_REGION:ap-northeast-2}
+      s3:
+        bucket: ${AWS_S3_BUCKET:refit-storage-dev}
+        domain: ${AWS_S3_DOMAIN:https://refit-storage-dev.s3.ap-northeast-2.amazonaws.com/}
+
+springdoc:
+  swagger-ui:
+    disable-swagger-default-url: true
+    persist-authorization: true
+    urls:
+      - name: v1
+        url: /v3/api-docs/v1
+      - name: v2
+        url: /v3/api-docs/v2
+  api-docs:
+    enabled: true
+
+fcm:
+  enabled: true
+  credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
+
+# ============================================
+# Actuator & Prometheus (개발 환경)
+# ============================================
+management:
+  endpoints:
+    enabled-by-default: true
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
+    health:
+      enabled: true
+    info:
+      enabled: true
+  metrics:
+    enable:
+      hikari: true
+      jvm: true
+      logback: true
+      system: true
+    tags:
+      application: ${spring.application.name:refit-backend}
+      environment: dev
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+    export:
+      prometheus:
+        enabled: true
+
+# ============================================
+# Structured JSON Logging (개발 환경)
+# ============================================
+logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name:refit-backend}
+        environment: dev
+
+  level:
+    root: info
+    org.springframework: info
+    org.hibernate: info
+    org.refit.backend: debug  # 개발 환경은 debug 레벨
+
+server:
+  forward-headers-strategy: framework
+
+ai:
+  base-url: https://dev.re-fit.kr/api/ai

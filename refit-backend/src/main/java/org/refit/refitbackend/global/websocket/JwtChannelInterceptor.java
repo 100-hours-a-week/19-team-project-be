@@ -30,8 +30,8 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
 
         if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-            log.info("[WS] CONNECT headers: {}", accessor.toNativeHeaderMap());
-            log.info("[WS] session attributes: {}", accessor.getSessionAttributes());
+            log.debug("[WS] CONNECT headers: {}", accessor.toNativeHeaderMap());
+            log.debug("[WS] session attributes: {}", accessor.getSessionAttributes());
             String token = extractToken(accessor);
             if (token != null && !token.isBlank()) {
                 authenticateUser(accessor, token);
@@ -85,7 +85,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             log.info("WebSocket 인증 성공 - userId: {}", userId);
 
         } catch (Exception e) {
-            log.error("WebSocket 인증 실패", e);
+            log.warn("WebSocket 인증 실패: {}", e.getMessage());
         }
     }
 

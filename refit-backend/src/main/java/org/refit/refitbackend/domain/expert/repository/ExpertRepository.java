@@ -2,6 +2,8 @@ package org.refit.refitbackend.domain.expert.repository;
 
 import org.refit.refitbackend.domain.expert.dto.ExpertSearchRow;
 import org.refit.refitbackend.domain.user.entity.User;
+import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -145,13 +147,42 @@ public interface ExpertRepository extends JpaRepository<User, Long> {
   """)
     List<ExpertSearchRow> findExpertRowsByUserIds(@Param("userIds") List<Long> userIds);
 
-    @Query("""
-      SELECT u FROM User u
-      LEFT JOIN FETCH u.expertProfile ep
-      JOIN FETCH u.careerLevel cl
-      WHERE u.id = :userId
-        AND u.userType = 'EXPERT'
-        AND u.status = 'ACTIVE'
-  """)
-    Optional<User> findExpertById(@Param("userId") Long userId);
+      @Query("""
+        SELECT u FROM User u
+        LEFT JOIN FETCH u.expertProfile ep
+        JOIN FETCH u.careerLevel cl
+        WHERE u.id = :userId
+          AND u.userType = 'EXPERT'
+          AND u.status = 'ACTIVE'
+    """)
+      Optional<User> findExpertById(@Param("userId") Long userId);
+
+      @Query("""
+        SELECT u FROM User u
+        JOIN FETCH u.expertProfile ep
+        JOIN FETCH u.careerLevel cl
+        WHERE u.userType = 'EXPERT'
+          AND u.status = UserStatus.ACTIVE
+          AND u.id <> :userId
+          AND (:verified = false OR ep.verified = true)
+        ORDER BY u.id DESC
+    """)
+      List<User> findRecommendationCandidates(
+              @Param("userId") Long userId,
+              @Param("verified") boolean verified
+      );
+
+      @Query("""
+        SELECT u FROM User u
+        JOIN FETCH u.expertProfile ep
+        WHERE u.userType = 'EXPERT'
+          AND u.status = UserStatus.ACTIVE
+          AND (:verified = false OR ep.verified = true)
+        ORDER BY ep.ratingCount DESC, ep.ratingAvg DESC, ep.lastActiveAt DESC, u.id DESC
+    """)
+      List<User> findTopPopularExperts(
+              @Param("verified") boolean verified,
+              Pageable pageable
+      );
+
 }

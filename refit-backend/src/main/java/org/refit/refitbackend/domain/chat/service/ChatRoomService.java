@@ -6,6 +6,7 @@ import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
+import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
@@ -43,6 +44,8 @@ public class ChatRoomService {
      */
     @Transactional
     public ChatRes.CreateChat createRoom(Long requesterId, ChatReq.CreateRoom request) {
+        validateResumeOwnership(requesterId, request.resumeId());
+
         // 요청자 조회
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
@@ -73,6 +76,14 @@ public class ChatRoomService {
         ChatRoom savedRoom = chatRoomRepository.save(chatRoom);
 
         return ChatRes.CreateChat.from(savedRoom);
+    }
+
+    private void validateResumeOwnership(Long requesterId, Long resumeId) {
+        if (resumeId == null) {
+            return;
+        }
+        resumeRepository.findByIdAndUserId(resumeId, requesterId)
+                .orElseThrow(() -> new CustomException(ExceptionType.RESUME_NOT_FOUND));
     }
 
     /**
@@ -183,7 +194,20 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
+        if (room.getStatus() == ChatRoomStatus.CLOSED) {
+            throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
+        }
+
         room.close();
+
+        ChatMessage systemMessage = chatMessageRepository.save(ChatMessage.builder()
+                .chatRoom(room)
+                .sender(room.getReceiver())
+                .messageType(MessageType.SYSTEM)
+                .content("채팅이 종료되었습니다.")
+                .roomSequence(room.nextMessageSequence())
+                .build());
+        room.updateLastMessage(systemMessage);
     }
 
     /**
@@ -208,6 +232,7 @@ public class ChatRoomService {
     /**
      * 채팅방 메시지 목록 조회 (커서)
      */
+    @Transactional
     public CursorPage<ChatRes.MessageInfo> getMessages(
             Long userId,
             Long roomId,
@@ -224,9 +249,9 @@ public class ChatRoomService {
                 PageRequest.of(0, size + 1)
         );
 
-        if (!messages.isEmpty()) {
-            ChatMessage latest = messages.get(0); // id DESC 기준
-            room.updateLastReadMessage(userId, latest);
+        if (room.getLastMessageSeq() != null) {
+            // 메시지 페이지 커서와 무관하게, 방에 존재하는 최신 메시지까지 읽음 처리
+            room.updateLastReadSeq(userId, room.getLastMessageSeq());
         }
 
         boolean hasMore = messages.size() > size;

@@ -40,17 +40,23 @@ spring:
 
 springdoc:
   swagger-ui:
-    url: /v3/api-docs
-    config-url: /v3/api-docs/swagger-config
-    disable-swagger-default-url: true
+    enabled: false
   api-docs:
-    enabled: true
+    enabled: false
 
+# ============================================
+# Actuator & Prometheus (운영 환경)
+# ============================================
 management:
   endpoints:
     web:
       exposure:
         include: health,metrics,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
   metrics:
     distribution:
       percentiles-histogram:
@@ -59,17 +65,37 @@ management:
             requests: true
     enable:
       hikari: true
+      jvm: true
+      logback: true
+      system: true
+    tags:
+      application: ${spring.application.name:refit-backend}
+      environment: prod
+    export:
+      prometheus:
+        enabled: true
 
-app:
-  metrics:
-    db-query-count:
-      enabled: true
-
+# ============================================
+# Structured JSON Logging (운영 환경)
+# ============================================
 logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name:refit-backend}
+        environment: prod
+
   level:
     root: info
     org.springframework: warn
     org.hibernate: warn
+    org.refit.backend: info  # 운영 환경은 info 레벨
 
 server:
   forward-headers-strategy: framework
+
+fcm:
+  enabled: ${FCM_ENABLED:true}
+  credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}

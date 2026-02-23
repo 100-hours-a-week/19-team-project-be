@@ -61,9 +61,10 @@ public class ChatRoom extends BaseEntity {
     private String jobPostUrl;
 
     @Builder
-    private ChatRoom(User requester, User receiver, Long resumeId, String jobPostUrl) {
+    private ChatRoom(User requester, User receiver, Long chatRequestId, Long resumeId, String jobPostUrl) {
         this.requester = requester;
         this.receiver = receiver;
+        this.chatRequestId = chatRequestId;
         this.resumeId = resumeId;
         this.jobPostUrl = jobPostUrl;
         this.status = ChatRoomStatus.ACTIVE;
