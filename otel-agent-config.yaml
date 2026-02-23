@@ -9,6 +9,7 @@ receivers:
   filelog/backend:
     include:
       - /var/lib/docker/containers/*/*-json.log
+    max_log_size: 16MiB
     start_at: end
     include_file_path: true
     include_file_name: false
@@ -16,7 +17,7 @@ receivers:
       # 1) Docker json-file wrapper 파싱
       - type: json_parser
         id: parse_docker_json
-        on_error: drop
+        on_error: send
         timestamp:
           parse_from: attributes.time
           layout: '%Y-%m-%dT%H:%M:%S.%LZ'
@@ -34,7 +35,7 @@ receivers:
       - type: json_parser
         id: parse_ecs_json
         if: 'body matches "^\\s*\\{"'
-        on_error: drop
+        on_error: send
         parse_to: attributes
         severity:
           parse_from: attributes["log"]["level"]
