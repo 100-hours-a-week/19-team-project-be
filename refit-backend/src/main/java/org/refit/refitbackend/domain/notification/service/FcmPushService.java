@@ -8,6 +8,9 @@ import com.google.firebase.messaging.FirebaseMessagingException;
 import com.google.firebase.messaging.BatchResponse;
 import com.google.firebase.messaging.MulticastMessage;
 import com.google.firebase.messaging.Notification;
+import com.google.firebase.messaging.WebpushConfig;
+import com.google.firebase.messaging.WebpushFcmOptions;
+import com.google.firebase.messaging.WebpushNotification;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,6 +31,12 @@ public class FcmPushService {
 
     @Value("${fcm.project-id:}")
     private String projectId;
+
+    @Value("${fcm.webpush-icon-url:}")
+    private String webpushIconUrl;
+
+    @Value("${fcm.webpush-link:}")
+    private String webpushLink;
 
     private FirebaseApp firebaseApp;
 
@@ -66,11 +75,27 @@ public class FcmPushService {
             return new SendResult(tokens == null ? 0 : tokens.size(), 0, 0, false);
         }
         try {
+            WebpushNotification.Builder webpushNotificationBuilder = WebpushNotification.builder()
+                    .setTitle(title)
+                    .setBody(body);
+            if (webpushIconUrl != null && !webpushIconUrl.isBlank()) {
+                webpushNotificationBuilder.setIcon(webpushIconUrl);
+            }
+
+            WebpushConfig.Builder webpushConfigBuilder = WebpushConfig.builder()
+                    .setNotification(webpushNotificationBuilder.build());
+            if (webpushLink != null && !webpushLink.isBlank()) {
+                webpushConfigBuilder.setFcmOptions(
+                        WebpushFcmOptions.withLink(webpushLink)
+                );
+            }
+
             MulticastMessage message = MulticastMessage.builder()
                     .setNotification(Notification.builder()
                             .setTitle(title)
                             .setBody(body)
                             .build())
+                    .setWebpushConfig(webpushConfigBuilder.build())
                     .addAllTokens(tokens)
                     .build();
 

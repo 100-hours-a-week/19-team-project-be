@@ -57,6 +57,7 @@ springdoc:
 fcm:
   enabled: true
   credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
+  webpush-link: ${FCM_WEBPUSH_LINK:https://dev.re-fit.kr/}
 
 # ============================================
 # Actuator & Prometheus (개발 환경)
