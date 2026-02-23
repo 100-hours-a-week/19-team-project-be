@@ -99,3 +99,4 @@ server:
 fcm:
   enabled: ${FCM_ENABLED:true}
   credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
+  webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
