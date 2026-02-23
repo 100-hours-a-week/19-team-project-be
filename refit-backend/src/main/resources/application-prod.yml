@@ -58,6 +58,11 @@ management:
     metrics:
       enabled: true
   metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
     enable:
       hikari: true
       jvm: true
