@@ -4,10 +4,12 @@ import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
+import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
 import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
+import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
 import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
@@ -26,6 +28,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +39,7 @@ public class ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatRequestRepository chatRequestRepository;
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
     private final StorageService storageService;
@@ -107,23 +113,43 @@ public class ChatRoomService {
             rooms = rooms.subList(0, size);
         }
 
+        Map<Long, String> requestTypeByRequestId = getRequestTypeByRequestId(rooms);
+
         List<ChatRes.RoomListItem> items = rooms.stream()
                 .map(r -> {
+                    String requestType = r.getChatRequestId() == null
+                            ? null
+                            : requestTypeByRequestId.get(r.getChatRequestId());
                     if (r.getLastMessageSeq() == null) {
-                        return ChatRes.RoomListItem.from(r, 0L);
+                        return ChatRes.RoomListItem.from(r, 0L, requestType);
                     }
                     Long lastReadSeq = r.getRequester().getId().equals(userId)
                             ? r.getRequesterLastReadSeq()
                             : r.getReceiverLastReadSeq();
                     long lastRead = lastReadSeq != null ? lastReadSeq : 0L;
                     long unread = Math.max(0L, r.getLastMessageSeq() - lastRead);
-                    return ChatRes.RoomListItem.from(r, unread);
+                    return ChatRes.RoomListItem.from(r, unread, requestType);
                 })
                 .toList();
 
         String nextCursor = rooms.isEmpty() ? null : String.valueOf(rooms.get(rooms.size() - 1).getId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
+    }
+
+    private Map<Long, String> getRequestTypeByRequestId(List<ChatRoom> rooms) {
+        List<Long> chatRequestIds = rooms.stream()
+                .map(ChatRoom::getChatRequestId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        if (chatRequestIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return chatRequestRepository.findAllById(chatRequestIds).stream()
+                .collect(Collectors.toMap(ChatRequest::getId, request -> request.getRequestType().name()));
     }
 
     /**
