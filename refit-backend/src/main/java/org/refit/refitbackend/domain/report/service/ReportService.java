@@ -10,15 +10,24 @@ import org.refit.refitbackend.domain.chat.repository.ChatFeedbackAnswerRepositor
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.report.dto.ReportReq;
 import org.refit.refitbackend.domain.report.dto.ReportRes;
 import org.refit.refitbackend.domain.report.entity.Report;
 import org.refit.refitbackend.domain.report.entity.enums.ReportStatus;
 import org.refit.refitbackend.domain.report.repository.ReportRepository;
+import org.refit.refitbackend.domain.task.entity.Task;
+import org.refit.refitbackend.domain.task.entity.enums.TaskStatus;
+import org.refit.refitbackend.domain.task.entity.enums.TaskTargetType;
+import org.refit.refitbackend.domain.task.entity.enums.TaskType;
+import org.refit.refitbackend.domain.task.kafka.TaskEventPublisher;
+import org.refit.refitbackend.domain.task.kafka.event.ReportGenerateRequestedEvent;
+import org.refit.refitbackend.domain.task.repository.TaskRepository;
 import org.refit.refitbackend.domain.user.entity.UserSkill;
 import org.refit.refitbackend.domain.user.repository.UserSkillRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpEntity;
@@ -36,6 +45,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
 @Slf4j
@@ -50,6 +60,9 @@ public class ReportService {
     private final ChatFeedbackAnswerRepository chatFeedbackAnswerRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final UserSkillRepository userSkillRepository;
+    private final NotificationService notificationService;
+    private final ObjectProvider<TaskEventPublisher> taskEventPublisherProvider;
+    private final TaskRepository taskRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${ai.base-url:https://dev.re-fit.kr/api/ai}")
@@ -80,9 +93,6 @@ public class ReportService {
         if (jobPostUrl == null || jobPostUrl.isBlank()) {
             throw new CustomException(ExceptionType.INVALID_REQUEST);
         }
-        Long jobPostId = requestJobPostParse(jobPostUrl);
-        Map<String, Object> aiResultJson = requestReportGenerate(resumeId, jobPostId, room.getId(), feedbackAnswers, userId);
-
         Report report = reportRepository.save(Report.builder()
                 .userId(userId)
                 .expertId(room.getReceiver().getId())
@@ -91,10 +101,30 @@ public class ReportService {
                 .chatRequestId(chatRequestId)
                 .resumeId(resumeId)
                 .title("AI 리포트")
-                .status(ReportStatus.COMPLETED)
-                .resultJson(aiResultJson)
+                .status(ReportStatus.PROCESSING)
                 .jobPostUrl(jobPostUrl)
                 .build());
+        Task task = createReportTask(userId, report.getId());
+
+        try {
+            TaskEventPublisher publisher = taskEventPublisherProvider.getIfAvailable();
+            if (publisher == null) {
+                report.markFailed();
+                task.markFailed("KAFKA_DISABLED");
+                taskRepository.save(task);
+                throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+            }
+            publisher.publishReportGenerateRequested(
+                    new ReportGenerateRequestedEvent(task.getId(), userId, report.getId(), room.getId())
+            );
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            report.markFailed();
+            task.markFailed("KAFKA_PUBLISH_FAILED");
+            taskRepository.save(task);
+            throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+        }
 
         return new ReportRes.ReportId(report.getId());
     }
@@ -210,6 +240,57 @@ public class ReportService {
         } catch (Exception e) {
             report.markFailed();
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        }
+    }
+
+    @Transactional
+    public void processAsyncGenerateReportTask(ReportGenerateRequestedEvent event) {
+        Report report = reportRepository.findById(event.reportId()).orElse(null);
+        Task task = taskRepository.findById(event.taskId()).orElse(null);
+        if (report == null) {
+            log.warn("[REPORT_ASYNC] report not found. reportId={}", event.reportId());
+            return;
+        }
+        if (task == null) {
+            log.warn("[REPORT_ASYNC] task not found. taskId={}", event.taskId());
+            return;
+        }
+        if (task.getStatus() != TaskStatus.PROCESSING) {
+            log.info("[REPORT_ASYNC] skip task. taskId={}, status={}", task.getId(), task.getStatus());
+            return;
+        }
+        if (report.getStatus() != ReportStatus.PROCESSING) {
+            log.info("[REPORT_ASYNC] skip. reportId={}, status={}", report.getId(), report.getStatus());
+            return;
+        }
+
+        try {
+            ChatRoom room = chatRoomRepository.findById(report.getChatRoomId())
+                    .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
+            ChatFeedback feedback = chatFeedbackRepository.findDetailByChatRoomId(room.getId())
+                    .orElseThrow(() -> new CustomException(ExceptionType.FEEDBACK_ANSWER_MISSING));
+            List<ChatFeedbackAnswer> feedbackAnswers =
+                    chatFeedbackAnswerRepository.findByChatFeedbackIdOrderByQuestion(feedback.getId());
+
+            Long jobPostId = requestJobPostParse(report.getJobPostUrl());
+            Map<String, Object> aiResultJson = requestReportGenerate(
+                    report.getResumeId(), jobPostId, room.getId(), feedbackAnswers, report.getUserId()
+            );
+            report.markCompleted(aiResultJson);
+            task.markCompleted(toJson(Map.of("report_id", report.getId())));
+            notifyReportCompletedSafely(report.getUserId(), report.getId());
+        } catch (CustomException e) {
+            if (isReportAsyncRetryable(e)) {
+                log.warn("[REPORT_ASYNC] retryable failure. reportId={}, code={}",
+                        report.getId(), e.getExceptionType().getCode());
+                throw e;
+            }
+            report.markFailed();
+            task.markFailed(e.getExceptionType().getCode());
+            notifyReportFailedSafely(report.getUserId(), report.getId());
+        } catch (Exception e) {
+            log.error("[REPORT_ASYNC] retryable unexpected failure. reportId={}", report.getId(), e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -469,6 +550,66 @@ public class ReportService {
             }
         }
         return result;
+    }
+
+    private boolean isReportAsyncRetryable(CustomException e) {
+        return e.getExceptionType() == ExceptionType.AI_SERVER_ERROR
+                || e.getExceptionType() == ExceptionType.INTERNAL_SERVER_ERROR;
+    }
+
+    @Transactional
+    public void markAsyncGenerateReportFailedFromDlq(String taskId, Long reportId, String reasonCode) {
+        Task task = taskRepository.findById(taskId).orElse(null);
+        if (task != null && task.getStatus() == TaskStatus.PROCESSING) {
+            task.markFailed(reasonCode);
+            taskRepository.save(task);
+        }
+        Report report = reportRepository.findById(reportId).orElse(null);
+        if (report == null) {
+            return;
+        }
+        if (report.getStatus() != ReportStatus.PROCESSING) {
+            return;
+        }
+        report.markFailed();
+        notifyReportFailedSafely(report.getUserId(), report.getId());
+    }
+
+    private void notifyReportCompletedSafely(Long userId, Long reportId) {
+        try {
+            notificationService.notifyReportGenerateCompleted(userId, reportId);
+        } catch (Exception e) {
+            log.warn("[REPORT] completion notification failed. reportId={}", reportId, e);
+        }
+    }
+
+    private void notifyReportFailedSafely(Long userId, Long reportId) {
+        try {
+            notificationService.notifyReportGenerateFailed(userId, reportId);
+        } catch (Exception e) {
+            log.warn("[REPORT] failure notification failed. reportId={}", reportId, e);
+        }
+    }
+
+    private Task createReportTask(Long userId, Long reportId) {
+        Task task = Task.builder()
+                .id("task_report_" + UUID.randomUUID().toString().replace("-", ""))
+                .userId(userId)
+                .type(TaskType.REPORT_GENERATION)
+                .status(TaskStatus.PROCESSING)
+                .progress(0)
+                .targetType(TaskTargetType.REPORT)
+                .targetId(reportId)
+                .build();
+        return taskRepository.save(task);
+    }
+
+    private String toJson(Object value) {
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
 }
