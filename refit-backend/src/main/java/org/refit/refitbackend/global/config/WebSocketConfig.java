@@ -43,7 +43,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOrigins(
                         "http://localhost:3000",
                         "http://localhost:8080",
-                        "https://re-fit.kr"
+                        "https://re-fit.kr",
+                        "https://dev.re-fit.kr",
+                        "https://prod-v2.re-fit.kr"
                 )
                 .addInterceptors(jwtHandshakeInterceptor)
                 .withSockJS();  // SockJS fallback 옵션 활성화
@@ -53,7 +55,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOrigins(
                         "http://localhost:3000",
                         "http://localhost:8080",
-                        "https://re-fit.kr"
+                        "https://re-fit.kr",
+                        "https://dev.re-fit.kr",
+                        "https://prod-v2.re-fit.kr"
                 )
                 .addInterceptors(jwtHandshakeInterceptor);
 
@@ -61,7 +65,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOrigins(
                         "http://localhost:3000",
                         "http://localhost:8080",
-                        "https://re-fit.kr"
+                        "https://re-fit.kr",
+                        "https://dev.re-fit.kr",
+                        "https://prod-v2.re-fit.kr"
                 )
                 .addInterceptors(jwtHandshakeInterceptor)
                 .withSockJS();
@@ -70,7 +76,9 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
                 .setAllowedOrigins(
                         "http://localhost:3000",
                         "http://localhost:8080",
-                        "https://re-fit.kr"
+                        "https://re-fit.kr",
+                        "https://dev.re-fit.kr",
+                        "https://prod-v2.re-fit.kr"
                 )
                 .addInterceptors(jwtHandshakeInterceptor);
     }
