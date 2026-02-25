@@ -185,7 +185,14 @@ public class ChatRoomService {
             }
         }
 
-        return ChatRes.RoomDetail.from(room, resumeInfo);
+        String requestType = null;
+        if (room.getChatRequestId() != null) {
+            requestType = chatRequestRepository.findById(room.getChatRequestId())
+                    .map(request -> request.getRequestType().name())
+                    .orElse(null);
+        }
+
+        return ChatRes.RoomDetail.from(room, resumeInfo, requestType);
     }
 
     /**
