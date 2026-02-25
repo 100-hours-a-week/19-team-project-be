@@ -15,6 +15,7 @@ import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.refit.refitbackend.global.sse.SseService;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +31,7 @@ public class ChatMessageService {
     private final UserRepository userRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final NotificationService notificationService;
+    private final SseService sseService;
 
     /**
      * 메시지 전송
@@ -83,6 +85,7 @@ public class ChatMessageService {
             User receiver = chatRoom.getRequester().getId().equals(senderId)
                     ? chatRoom.getReceiver()
                     : chatRoom.getRequester();
+            sseService.sendChatEvent(receiver.getId(), request.chatId(), savedMessage.getId());
             notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), request.content());
         }
 
