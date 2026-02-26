@@ -4,7 +4,10 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
+import org.refit.refitbackend.domain.chat.entity.ChatFeedback;
+import org.refit.refitbackend.domain.chat.entity.ChatFeedbackAnswer;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
+import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.user.entity.User;
 import tools.jackson.databind.JsonNode;
@@ -35,6 +38,9 @@ public class ChatRes {
             @Schema(description = "채팅방 상태", example = "ACTIVE")
             String status,
 
+            @Schema(description = "채팅 요청 타입(요청 기반 채팅인 경우)", example = "FEEDBACK", nullable = true)
+            String requestType,
+
             @Schema(description = "생성 시각")
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime createdAt,
@@ -43,7 +49,7 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime updatedAt
     ) {
-        public static RoomListItem from(ChatRoom room, Long unreadCount) {
+        public static RoomListItem from(ChatRoom room, Long unreadCount, String requestType) {
 
             UserInfo requester = UserInfo.from(room.getRequester());
             UserInfo receiver = UserInfo.from(room.getReceiver());
@@ -59,6 +65,7 @@ public class ChatRes {
                     lastMessageInfo,
                     unreadCount,
                     room.getStatus().name(),
+                    requestType,
                     room.getCreatedAt(),
                     room.getUpdatedAt()
             );
@@ -86,6 +93,9 @@ public class ChatRes {
             @Schema(description = "공고 URL", example = "https://example.com/job/123")
             String jobPostUrl,
 
+            @Schema(description = "채팅 요청 타입 (요청 기반 채팅인 경우)", example = "FEEDBACK", nullable = true)
+            String requestType,
+
             @Schema(description = "채팅방 상태", example = "ACTIVE")
             String status,
 
@@ -97,7 +107,7 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime closedAt
     ) {
-        public static RoomDetail from(ChatRoom room, ResumeInfo resume) {
+        public static RoomDetail from(ChatRoom room, ResumeInfo resume, String requestType) {
             return new RoomDetail(
                     room.getId(),
                     UserInfo.from(room.getRequester()),
@@ -105,6 +115,7 @@ public class ChatRes {
                     room.getResumeId(),
                     resume,
                     room.getJobPostUrl(),
+                    requestType,
                     room.getStatus().name(),
                     room.getCreatedAt(),
                     room.getClosedAt()
@@ -212,6 +223,9 @@ public class ChatRes {
             @Schema(description = "메시지 ID", example = "1")
             Long messageId,
 
+            @Schema(description = "채팅방 내 메시지 시퀀스(읽음 처리 기준)", example = "100")
+            Long roomSequence,
+
             @Schema(description = "메시지 내용", example = "안녕하세요!")
             String content,
 
@@ -222,6 +236,7 @@ public class ChatRes {
         public static LastMessageInfo from(ChatMessage message) {
             return new LastMessageInfo(
                     message.getId(),
+                    message.getRoomSequence(),
                     message.getContent(),
                     message.getCreatedAt()
             );
@@ -253,4 +268,105 @@ public class ChatRes {
             String nextCursor,
             boolean hasMore
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestId(
+            Long chatRequestId
+    ) {
+        public static ChatRequestId from(ChatRequest request) {
+            return new ChatRequestId(request.getId());
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestItem(
+            Long chatRequestId,
+            UserInfo requester,
+            UserInfo receiver,
+            Long resumeId,
+            String requestType,
+            String status,
+            String jobPostUrl,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime respondedAt
+    ) {
+        public static ChatRequestItem from(ChatRequest request) {
+            return new ChatRequestItem(
+                    request.getId(),
+                    UserInfo.from(request.getRequester()),
+                    UserInfo.from(request.getReceiver()),
+                    request.getResumeId(),
+                    request.getRequestType().name(),
+                    request.getStatus().name(),
+                    request.getJobPostUrl(),
+                    request.getCreatedAt(),
+                    request.getRespondedAt()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatRequestCursorResponse(
+            List<ChatRequestItem> requests,
+            String nextCursor,
+            boolean hasMore
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record RespondRequestResult(
+            Long chatRequestId,
+            String status,
+            Long chatId
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackId(
+            Long chatFeedbackId,
+            Long chatId
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackAnswerItem(
+            Long questionId,
+            String questionKey,
+            String questionText,
+            String answerType,
+            Integer displayOrder,
+            String answerValue
+    ) {
+        public static ChatFeedbackAnswerItem from(ChatFeedbackAnswer answer) {
+            return new ChatFeedbackAnswerItem(
+                    answer.getQuestion().getId(),
+                    answer.getQuestion().getQuestionKey(),
+                    answer.getQuestion().getQuestionText(),
+                    answer.getQuestion().getAnswerType(),
+                    answer.getQuestion().getDisplayOrder(),
+                    answer.getAnswerValue()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatFeedbackDetail(
+            Long chatFeedbackId,
+            Long chatId,
+            UserInfo expert,
+            UserInfo user,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt,
+            List<ChatFeedbackAnswerItem> answers
+    ) {
+        public static ChatFeedbackDetail from(ChatFeedback feedback, List<ChatFeedbackAnswer> answers) {
+            return new ChatFeedbackDetail(
+                    feedback.getId(),
+                    feedback.getChatRoom().getId(),
+                    UserInfo.from(feedback.getExpert()),
+                    UserInfo.from(feedback.getUser()),
+                    feedback.getCreatedAt(),
+                    answers.stream().map(ChatFeedbackAnswerItem::from).toList()
+            );
+        }
+    }
 }

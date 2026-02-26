@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Chat V1 Test Console</title>
+    <title>Chat V1/V2 Test Console</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -164,8 +164,8 @@
   </head>
   <body>
     <header>
-      <h1>Chat V1 Test Console</h1>
-      <p>REST + WebSocket (STOMP) 테스트용 단일 페이지</p>
+      <h1>Chat V1/V2 Test Console</h1>
+      <p>REST + WebSocket (STOMP) 테스트용 단일 페이지 (요청/피드백 포함)</p>
     </header>
     <main>
       <section>
@@ -206,6 +206,11 @@
             <input id="resumeId" placeholder="예: 10" />
           </div>
         </div>
+        <label>Request Type</label>
+        <select id="requestType">
+          <option value="FEEDBACK">FEEDBACK</option>
+          <option value="COFFEE_CHAT">COFFEE_CHAT</option>
+        </select>
         <label>Job Post URL (optional)</label>
         <input id="jobPostUrl" placeholder="https://example.com/job/123" />
         <button id="btnCreateRoom">Create Room</button>
@@ -216,9 +221,19 @@
             <input id="chatId" placeholder="예: 1" />
           </div>
           <div>
-            <label>Message ID (read)</label>
-            <input id="messageId" placeholder="예: 100" />
+            <label>List Status</label>
+            <select id="listRoomStatus">
+              <option value="ACTIVE">ACTIVE</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
           </div>
+        </div>
+        <div class="row">
+          <div>
+            <label>Last Read Seq</label>
+            <input id="lastReadSeq" placeholder="예: 100" />
+          </div>
+          <div></div>
         </div>
         <div class="row">
           <button class="secondary" id="btnListRooms">List Rooms</button>
@@ -229,6 +244,93 @@
           <button class="warn" id="btnCloseRoom">Close Room</button>
         </div>
         <button class="secondary" id="btnMarkRead">Mark Read</button>
+      </section>
+
+      <section>
+        <h2>V2 Chat Request</h2>
+        <div class="row">
+          <div>
+            <label>Request ID</label>
+            <input id="chatRequestId" placeholder="예: 1" />
+          </div>
+          <div>
+            <label>Respond Status</label>
+            <select id="chatRequestStatus">
+              <option value="ACCEPTED">ACCEPTED</option>
+              <option value="REJECTED">REJECTED</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <button id="btnCreateV2Request">Create V2 Request</button>
+          <button class="secondary" id="btnListV2Requests">List V2 Requests</button>
+        </div>
+        <button class="secondary" id="btnRespondV2Request">Respond V2 Request</button>
+        <p class="muted">수락 시 응답의 <code>chat_id</code>가 자동으로 Chat ID/WS Chat ID에 채워집니다.</p>
+      </section>
+
+      <section>
+        <h2>V2 Feedback</h2>
+        <label>Feedback Chat ID</label>
+        <input id="feedbackChatId" placeholder="비우면 위 Chat ID 사용" />
+        <label>Answers JSON</label>
+        <textarea id="feedbackAnswers">[
+  { "question_id": 1, "answer_value": "communication,problem_solving,other:운영 경험" },
+  { "question_id": 2, "answer_value": "충족" },
+  { "question_id": 3, "answer_value": "근거 텍스트" }
+]</textarea>
+        <div class="row">
+          <button id="btnCreateFeedback">Create Feedback</button>
+          <button class="secondary" id="btnGetFeedback">Get Feedback</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>V2 Notifications</h2>
+        <div class="row">
+          <div>
+            <label>Cursor (optional)</label>
+            <input id="notiCursor" placeholder="예: 120" />
+          </div>
+          <div>
+            <label>Size</label>
+            <input id="notiSize" placeholder="20" value="20" />
+          </div>
+        </div>
+        <label>Notification ID</label>
+        <input id="notiId" placeholder="단일 읽음 처리할 notification_id" />
+        <label>FCM Token</label>
+        <textarea id="fcmToken" placeholder="디바이스에서 발급받은 FCM 토큰 입력"></textarea>
+        <div class="row">
+          <button class="secondary" id="btnListNotifications">List Notifications</button>
+          <button class="secondary" id="btnReadNotification">Read One</button>
+        </div>
+        <div class="row">
+          <button class="secondary" id="btnReadAllNotifications">Read All</button>
+          <button id="btnRegisterFcmToken">Register FCM Token</button>
+        </div>
+        <button class="warn" id="btnDeleteFcmToken">Delete FCM Token</button>
+      </section>
+
+      <section>
+        <h2>Web FCM Token</h2>
+        <label>Firebase API Key</label>
+        <input id="firebaseApiKey" placeholder="AIza..." />
+        <label>Firebase Auth Domain</label>
+        <input id="firebaseAuthDomain" placeholder="re-fit-cf52c.firebaseapp.com" />
+        <label>Firebase Project ID</label>
+        <input id="firebaseProjectId" placeholder="re-fit-cf52c" />
+        <label>Firebase Messaging Sender ID</label>
+        <input id="firebaseMessagingSenderId" placeholder="1234567890" />
+        <label>Firebase App ID</label>
+        <input id="firebaseAppId" placeholder="1:1234567890:web:abcdef123456" />
+        <label>Web Push VAPID Key</label>
+        <textarea id="firebaseVapidKey" placeholder="B..." ></textarea>
+        <div class="row">
+          <button class="secondary" id="btnSaveWebFcmConfig">Save Web FCM Config</button>
+          <button id="btnGetWebFcmToken">Get Web FCM Token</button>
+        </div>
+        <p class="muted">발급 성공 시 위 V2 Notifications의 FCM Token 입력창에 자동 반영됩니다.</p>
       </section>
 
       <section>
@@ -335,6 +437,7 @@
       const messageTypeEl = document.getElementById("messageType");
       let stompClient = null;
       let currentRoomSub = null;
+      let latestNotifications = [];
 
       function log(tag, message, kind = "ok") {
         const p = document.createElement("p");
@@ -404,7 +507,7 @@
       }
 
       function subscribeChat(chatId) {
-        if (!stompClient || !stompClient.connected) return;
+        if (!stompClient || !stompClient.isConnected()) return;
         if (currentRoomSub) currentRoomSub.unsubscribe();
         currentRoomSub = stompClient.subscribe(`/queue/chat.${chatId}`, (msg) => {
           log("WS", msg.body);
@@ -435,7 +538,7 @@
           receiver_id: receiverId,
           resume_id: resumeIdRaw ? Number(resumeIdRaw) : null,
           job_post_url: jobPostUrl || null,
-          request_type: "FEEDBACK",
+          request_type: document.getElementById("requestType").value,
         };
         log("REQ", JSON.stringify(body));
         const res = await request("POST", "/v1/chats", body);
@@ -453,10 +556,11 @@
       });
 
       document.getElementById("btnListRooms").addEventListener("click", async () => {
-        const res = await request("GET", "/v1/chats?status=ACTIVE&size=20");
+        const status = document.getElementById("listRoomStatus").value;
+        const res = await request("GET", `/v1/chats?status=${status}&size=20`);
         if (!res.ok) return log("ROOMS", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
         const chats = res.data?.data?.chats || [];
-        if (!chats.length) return log("ROOMS", "no chats");
+        if (!chats.length) return log("ROOMS", `no chats (status=${status})`);
         const lines = chats.map((c) => {
           const last = c.last_message?.content || "-";
           const opponent = c.opponent?.nickname || c.receiver?.nickname || c.requester?.nickname || "?";
@@ -486,13 +590,192 @@
         res.ok ? log("MSG", JSON.stringify(res.data)) : log("MSG", `Error ${res.status}`, "err");
       });
 
+      document.getElementById("btnCreateV2Request").addEventListener("click", async () => {
+        const receiverId = Number(document.getElementById("receiverId").value);
+        if (!receiverId) return log("V2-REQ", "receiverId required", "err");
+        const resumeIdRaw = document.getElementById("resumeId").value.trim();
+        const body = {
+          receiver_id: receiverId,
+          resume_id: resumeIdRaw ? Number(resumeIdRaw) : null,
+          request_type: document.getElementById("requestType").value,
+          job_post_url: document.getElementById("jobPostUrl").value.trim() || null,
+        };
+        const res = await request("POST", "/v2/chats/requests", body);
+        if (!res.ok) return log("V2-REQ", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+        const requestId = res.data?.data?.chat_request_id ?? res.data?.data?.chatRequestId;
+        if (requestId) document.getElementById("chatRequestId").value = requestId;
+        log("V2-REQ", JSON.stringify(res.data));
+      });
+
+      document.getElementById("btnListV2Requests").addEventListener("click", async () => {
+        const res = await request("GET", "/v2/chats/requests?direction=received&size=10");
+        if (!res.ok) return log("V2-REQ", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+        log("V2-REQ", JSON.stringify(res.data));
+      });
+
+      document.getElementById("btnRespondV2Request").addEventListener("click", async () => {
+        const requestId = document.getElementById("chatRequestId").value.trim();
+        if (!requestId) return log("V2-REQ", "requestId required", "err");
+        const body = { status: document.getElementById("chatRequestStatus").value };
+        const res = await request("PATCH", `/v2/chats/requests/${requestId}`, body);
+        if (!res.ok) return log("V2-REQ", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+
+        const chatId = res.data?.data?.chat_id ?? res.data?.data?.chatId;
+        if (chatId) {
+          document.getElementById("chatId").value = chatId;
+          document.getElementById("wsChatId").value = chatId;
+          document.getElementById("feedbackChatId").value = chatId;
+        }
+        log("V2-REQ", JSON.stringify(res.data));
+      });
+
+      document.getElementById("btnCreateFeedback").addEventListener("click", async () => {
+        const chatId = document.getElementById("feedbackChatId").value.trim() || document.getElementById("chatId").value.trim();
+        if (!chatId) return log("V2-FEEDBACK", "chatId required", "err");
+        let parsed;
+        try {
+          parsed = JSON.parse(document.getElementById("feedbackAnswers").value);
+        } catch (e) {
+          return log("V2-FEEDBACK", `invalid JSON: ${e.message}`, "err");
+        }
+        const answers = Array.isArray(parsed) ? parsed : parsed?.answers;
+        if (!Array.isArray(answers)) {
+          return log("V2-FEEDBACK", "answers must be array or {\"answers\":[...]}", "err");
+        }
+        const payload = { answers };
+        log("V2-FEEDBACK-REQ", JSON.stringify(payload));
+        const res = await request("POST", `/v2/chats/${chatId}/feedback`, payload);
+        res.ok ? log("V2-FEEDBACK", JSON.stringify(res.data)) : log("V2-FEEDBACK", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnGetFeedback").addEventListener("click", async () => {
+        const chatId = document.getElementById("feedbackChatId").value.trim() || document.getElementById("chatId").value.trim();
+        if (!chatId) return log("V2-FEEDBACK", "chatId required", "err");
+        const res = await request("GET", `/v2/chats/${chatId}/feedback`);
+        res.ok ? log("V2-FEEDBACK", JSON.stringify(res.data)) : log("V2-FEEDBACK", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnListNotifications").addEventListener("click", async () => {
+        const cursor = document.getElementById("notiCursor").value.trim();
+        const size = document.getElementById("notiSize").value.trim() || "20";
+        const query = new URLSearchParams();
+        if (cursor) query.set("cursor", cursor);
+        query.set("size", size);
+
+        const res = await request("GET", `/v2/notifications?${query.toString()}`);
+        if (!res.ok) return log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+
+        latestNotifications = res.data?.data?.notifications || [];
+        const unreadCount = res.data?.data?.unread_count ?? "?";
+        const nextCursor = res.data?.data?.next_cursor ?? null;
+        const hasMore = res.data?.data?.has_more ?? false;
+
+        if (latestNotifications.length > 0) {
+          const firstId = latestNotifications[0]?.notification_id;
+          if (firstId) document.getElementById("notiId").value = String(firstId);
+        }
+
+        log("NOTI", `count=${latestNotifications.length}, unread=${unreadCount}, nextCursor=${nextCursor}, hasMore=${hasMore}`);
+        log("NOTI", JSON.stringify(latestNotifications));
+      });
+
+      document.getElementById("btnReadNotification").addEventListener("click", async () => {
+        const notiId = document.getElementById("notiId").value.trim();
+        if (!notiId) return log("NOTI", "notification_id required", "err");
+
+        const res = await request("PATCH", `/v2/notifications/${notiId}`, { is_read: true });
+        res.ok ? log("NOTI", JSON.stringify(res.data)) : log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnReadAllNotifications").addEventListener("click", async () => {
+        const res = await request("PATCH", "/v2/notifications", { is_read: true });
+        res.ok ? log("NOTI", JSON.stringify(res.data)) : log("NOTI", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnRegisterFcmToken").addEventListener("click", async () => {
+        const token = document.getElementById("fcmToken").value.trim();
+        if (!token) return log("FCM", "token required", "err");
+
+        const res = await request("POST", "/v2/notifications/fcm-tokens", { token });
+        res.ok ? log("FCM", JSON.stringify(res.data)) : log("FCM", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnDeleteFcmToken").addEventListener("click", async () => {
+        const token = document.getElementById("fcmToken").value.trim();
+        if (!token) return log("FCM", "token required", "err");
+
+        const res = await request("DELETE", "/v2/notifications/fcm-tokens", { token });
+        res.ok ? log("FCM", JSON.stringify(res.data)) : log("FCM", `Error ${res.status}: ${JSON.stringify(res.data)}`, "err");
+      });
+
+      document.getElementById("btnGetWebFcmToken").addEventListener("click", async () => {
+        const apiKey = document.getElementById("firebaseApiKey").value.trim();
+        const authDomain = document.getElementById("firebaseAuthDomain").value.trim();
+        const projectId = document.getElementById("firebaseProjectId").value.trim();
+        const messagingSenderId = document.getElementById("firebaseMessagingSenderId").value.trim();
+        const appId = document.getElementById("firebaseAppId").value.trim();
+        const vapidKey = document.getElementById("firebaseVapidKey").value.trim();
+
+        if (!apiKey || !projectId || !messagingSenderId || !appId || !vapidKey) {
+          return log("WEB-FCM", "apiKey/projectId/messagingSenderId/appId/vapidKey required", "err");
+        }
+        if (!("serviceWorker" in navigator)) {
+          return log("WEB-FCM", "service worker not supported in this browser", "err");
+        }
+
+        try {
+          const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js");
+          const { getMessaging, getToken } = await import("https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging.js");
+
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            return log("WEB-FCM", `notification permission=${permission}`, "err");
+          }
+
+          const registration = await navigator.serviceWorker.register("/dev/firebase-messaging-sw.js");
+          const app = initializeApp({
+            apiKey,
+            authDomain: authDomain || undefined,
+            projectId,
+            messagingSenderId,
+            appId,
+          });
+          const messaging = getMessaging(app);
+          const token = await getToken(messaging, {
+            vapidKey,
+            serviceWorkerRegistration: registration,
+          });
+
+          if (!token) {
+            return log("WEB-FCM", "token is empty; check VAPID key and Firebase config", "err");
+          }
+
+          document.getElementById("fcmToken").value = token;
+          log("WEB-FCM", `token issued (len=${token.length})`);
+        } catch (e) {
+          log("WEB-FCM", `failed: ${e?.message || e}`, "err");
+        }
+      });
+
+      document.getElementById("btnSaveWebFcmConfig").addEventListener("click", () => {
+        const config = {
+          apiKey: document.getElementById("firebaseApiKey").value.trim(),
+          authDomain: document.getElementById("firebaseAuthDomain").value.trim(),
+          projectId: document.getElementById("firebaseProjectId").value.trim(),
+          messagingSenderId: document.getElementById("firebaseMessagingSenderId").value.trim(),
+          appId: document.getElementById("firebaseAppId").value.trim(),
+          vapidKey: document.getElementById("firebaseVapidKey").value.trim(),
+        };
+        localStorage.setItem("refit.dev.webFcmConfig", JSON.stringify(config));
+        log("WEB-FCM", "config saved in localStorage");
+      });
+
       document.getElementById("btnMarkRead").addEventListener("click", async () => {
         const chatId = document.getElementById("chatId").value.trim();
-        const messageId = document.getElementById("messageId").value.trim();
-        if (!chatId || !messageId) return log("READ", "chatId and messageId required", "err");
-        const res = await request("PATCH", "/v1/chats/messages/read", {
-          chat_id: Number(chatId),
-          message_id: Number(messageId),
+        const lastReadSeq = document.getElementById("lastReadSeq").value.trim();
+        if (!chatId || !lastReadSeq) return log("READ", "chatId and lastReadSeq required", "err");
+        const res = await request("PATCH", `/v1/chats/${chatId}/last-read-message`, {
+          last_read_seq: Number(lastReadSeq),
         });
         res.ok ? log("READ", JSON.stringify(res.data)) : log("READ", `Error ${res.status}`, "err");
       });
@@ -552,6 +835,19 @@
       });
 
       baseUrlEl.value = "http://localhost:8080/api";
+      document.getElementById("firebaseProjectId").value = "re-fit-cf52c";
+      document.getElementById("firebaseAuthDomain").value = "re-fit-cf52c.firebaseapp.com";
+      try {
+        const saved = JSON.parse(localStorage.getItem("refit.dev.webFcmConfig") || "{}");
+        if (saved.apiKey) document.getElementById("firebaseApiKey").value = saved.apiKey;
+        if (saved.authDomain) document.getElementById("firebaseAuthDomain").value = saved.authDomain;
+        if (saved.projectId) document.getElementById("firebaseProjectId").value = saved.projectId;
+        if (saved.messagingSenderId) document.getElementById("firebaseMessagingSenderId").value = saved.messagingSenderId;
+        if (saved.appId) document.getElementById("firebaseAppId").value = saved.appId;
+        if (saved.vapidKey) document.getElementById("firebaseVapidKey").value = saved.vapidKey;
+      } catch (_) {
+        // ignore malformed localStorage
+      }
       log("SYS", "page ready");
       log("SYS", "stomp-lite loaded");
     </script>

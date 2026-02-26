@@ -4,9 +4,12 @@ import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.chat.dto.ChatReq;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
+import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.ChatRoomStatus;
+import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
+import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
 import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
@@ -25,6 +28,9 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +39,7 @@ public class ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ChatRequestRepository chatRequestRepository;
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
     private final StorageService storageService;
@@ -43,6 +50,8 @@ public class ChatRoomService {
      */
     @Transactional
     public ChatRes.CreateChat createRoom(Long requesterId, ChatReq.CreateRoom request) {
+        validateResumeOwnership(requesterId, request.resumeId());
+
         // 요청자 조회
         User requester = userRepository.findById(requesterId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
@@ -75,6 +84,14 @@ public class ChatRoomService {
         return ChatRes.CreateChat.from(savedRoom);
     }
 
+    private void validateResumeOwnership(Long requesterId, Long resumeId) {
+        if (resumeId == null) {
+            return;
+        }
+        resumeRepository.findByIdAndUserId(resumeId, requesterId)
+                .orElseThrow(() -> new CustomException(ExceptionType.RESUME_NOT_FOUND));
+    }
+
     /**
      * 내 채팅방 목록 조회
      */
@@ -96,23 +113,43 @@ public class ChatRoomService {
             rooms = rooms.subList(0, size);
         }
 
+        Map<Long, String> requestTypeByRequestId = getRequestTypeByRequestId(rooms);
+
         List<ChatRes.RoomListItem> items = rooms.stream()
                 .map(r -> {
+                    String requestType = r.getChatRequestId() == null
+                            ? null
+                            : requestTypeByRequestId.get(r.getChatRequestId());
                     if (r.getLastMessageSeq() == null) {
-                        return ChatRes.RoomListItem.from(r, 0L);
+                        return ChatRes.RoomListItem.from(r, 0L, requestType);
                     }
                     Long lastReadSeq = r.getRequester().getId().equals(userId)
                             ? r.getRequesterLastReadSeq()
                             : r.getReceiverLastReadSeq();
                     long lastRead = lastReadSeq != null ? lastReadSeq : 0L;
                     long unread = Math.max(0L, r.getLastMessageSeq() - lastRead);
-                    return ChatRes.RoomListItem.from(r, unread);
+                    return ChatRes.RoomListItem.from(r, unread, requestType);
                 })
                 .toList();
 
         String nextCursor = rooms.isEmpty() ? null : String.valueOf(rooms.get(rooms.size() - 1).getId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
+    }
+
+    private Map<Long, String> getRequestTypeByRequestId(List<ChatRoom> rooms) {
+        List<Long> chatRequestIds = rooms.stream()
+                .map(ChatRoom::getChatRequestId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        if (chatRequestIds.isEmpty()) {
+            return Map.of();
+        }
+
+        return chatRequestRepository.findAllById(chatRequestIds).stream()
+                .collect(Collectors.toMap(ChatRequest::getId, request -> request.getRequestType().name()));
     }
 
     /**
@@ -148,7 +185,14 @@ public class ChatRoomService {
             }
         }
 
-        return ChatRes.RoomDetail.from(room, resumeInfo);
+        String requestType = null;
+        if (room.getChatRequestId() != null) {
+            requestType = chatRequestRepository.findById(room.getChatRequestId())
+                    .map(request -> request.getRequestType().name())
+                    .orElse(null);
+        }
+
+        return ChatRes.RoomDetail.from(room, resumeInfo, requestType);
     }
 
     /**
@@ -183,7 +227,20 @@ public class ChatRoomService {
         ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
+        if (room.getStatus() == ChatRoomStatus.CLOSED) {
+            throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
+        }
+
         room.close();
+
+        ChatMessage systemMessage = chatMessageRepository.save(ChatMessage.builder()
+                .chatRoom(room)
+                .sender(room.getReceiver())
+                .messageType(MessageType.SYSTEM)
+                .content("채팅이 종료되었습니다.")
+                .roomSequence(room.nextMessageSequence())
+                .build());
+        room.updateLastMessage(systemMessage);
     }
 
     /**
@@ -208,6 +265,7 @@ public class ChatRoomService {
     /**
      * 채팅방 메시지 목록 조회 (커서)
      */
+    @Transactional
     public CursorPage<ChatRes.MessageInfo> getMessages(
             Long userId,
             Long roomId,
@@ -224,9 +282,9 @@ public class ChatRoomService {
                 PageRequest.of(0, size + 1)
         );
 
-        if (!messages.isEmpty()) {
-            ChatMessage latest = messages.get(0); // id DESC 기준
-            room.updateLastReadMessage(userId, latest);
+        if (room.getLastMessageSeq() != null) {
+            // 메시지 페이지 커서와 무관하게, 방에 존재하는 최신 메시지까지 읽음 처리
+            room.updateLastReadSeq(userId, room.getLastMessageSeq());
         }
 
         boolean hasMore = messages.size() > size;

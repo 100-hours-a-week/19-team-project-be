@@ -38,28 +38,103 @@ spring:
         bucket: ${AWS_S3_BUCKET:refit-storage-prod}
         domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9093}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:refit-backend-prod}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+
 springdoc:
   swagger-ui:
-    url: /v3/api-docs
-    config-url: /v3/api-docs/swagger-config
-    disable-swagger-default-url: true
+    enabled: false
   api-docs:
-    enabled: true
+    enabled: false
 
+# ============================================
+# Actuator & Prometheus (운영 환경)
+# ============================================
 management:
   endpoints:
     web:
       exposure:
-        include: health,metrics,info
+        include: health,metrics,info,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    metrics:
+      enabled: true
   metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
     enable:
       hikari: true
+      jvm: true
+      logback: true
+      system: true
+    tags:
+      application: ${spring.application.name:refit-backend}
+      environment: prod
+    export:
+      prometheus:
+        enabled: true
+      otlp:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
 
+  otlp:
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-agent:4318}/v1/metrics
+        step: 30s
+        resource-attributes:
+          service.name: ${spring.application.name:refit-backend}
+          deployment.environment: prod
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-agent:4318}/v1/traces
+
+# ============================================
+# Structured JSON Logging (운영 환경)
+# ============================================
 logging:
+  structured:
+    format:
+      console: ecs
+    ecs:
+      service:
+        name: ${spring.application.name:refit-backend}
+        environment: prod
+
   level:
     root: info
     org.springframework: warn
     org.hibernate: warn
+    org.refit.refitbackend: info  # 운영 환경은 info 레벨
 
 server:
   forward-headers-strategy: framework
+
+fcm:
+  enabled: ${FCM_ENABLED:true}
+  credentials-path: ${FCM_CREDENTIALS_PATH:/app/firebase/refit-fcm.json}
+  webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
+
+app:
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topics:
+      resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
+      report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
+      resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
+      report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}

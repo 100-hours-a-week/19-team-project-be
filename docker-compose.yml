@@ -1,0 +1,80 @@
+services:
+  backend:
+    image: ${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}
+    container_name: refit-backend
+    hostname: refit-backend
+    restart: unless-stopped
+    
+    env_file:
+      - /etc/refit/.env
+    
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    
+    deploy:
+      resources:
+        limits:
+          cpus: '1.8'
+          memory: 3G
+        reservations:
+          cpus: '1.0'
+          memory: 2G
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    
+    volumes:
+      - /etc/refit/application-secret.yml:/app/application-secret.yml:ro
+      - /etc/refit/firebase/refit-fcm.json:/app/firebase/refit-fcm.json:ro
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    extra_hosts:
+      - "kafka:10.0.2.25"
+
+    depends_on:
+      - otel-agent
+
+    networks:
+      - refit-network
+
+  otel-agent:
+    image: otel/opentelemetry-collector-contrib:0.115.1
+    container_name: refit-backend-otel-agent
+    hostname: otel-agent
+    restart: unless-stopped
+    user: "0"
+    command: ["--config=/etc/refit/otel-agent-config.yaml"]
+    
+    env_file:
+      - /etc/refit/.env
+    
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    
+    volumes:
+      - /etc/refit/otel-agent-config.yaml:/etc/refit/otel-agent-config.yaml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    networks:
+      - refit-network
+
+networks:
+  refit-network:
+    driver: bridge

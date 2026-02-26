@@ -2,9 +2,12 @@ spring:
   config:
     import:
       - optional:classpath:application-secret.yml
-      
+
   application:
     name: refit-backend
+
+  jpa:
+    open-in-view: false
 
   profiles:
     active: prod

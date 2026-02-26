@@ -3,6 +3,7 @@ package org.refit.refitbackend.global.config;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.auth.jwt.JwtAuthFilter;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
+import org.refit.refitbackend.global.filter.InternalApiKeyFilter;
 import org.refit.refitbackend.global.util.JwtUtil;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,6 +24,7 @@ public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
     private final UserRepository userRepository;
+    private final InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
     public List<String> allowUrls() {
@@ -31,7 +33,9 @@ public class SecurityConfig {
         allow.add("/actuator/**");
         allow.add("/api/actuator/**");
         allow.add("/dev/**");
+        allow.add("/api/dev/**");
         allow.add("/api/api/**");
+        allow.add("/api/internal/**");
         allow.add("/api/ws/**");
         allow.add("/ws/**");
 
@@ -94,6 +98,7 @@ public class SecurityConfig {
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(basic -> basic.authenticationEntryPoint(entryPoint));
 
+        http.addFilterBefore(internalApiKeyFilter, UsernamePasswordAuthenticationFilter.class);
         http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

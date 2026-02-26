@@ -29,12 +29,17 @@ jobs:
       - name: Set Deployment Variables
         id: deploy-vars
         run: |
+          USE_LATEST="${{ inputs.use_latest }}"
+
           if [ -n "${{ inputs.image_tag }}" ]; then
             IMAGE_TAG="${{ inputs.image_tag }}"
-            echo "📦 Using specified image tag: ${IMAGE_TAG}"
-          else
+            echo "Using specified image tag: ${IMAGE_TAG}"
+          elif [ "${USE_LATEST}" = "true" ]; then
             IMAGE_TAG="develop-latest"
-            echo "📦 Using latest develop image"
+            echo "Using latest develop image"
+          else
+            echo "Error: image_tag is empty and use_latest is false."
+            exit 1
           fi
 
           SHA="${{ inputs.sha }}"
@@ -49,7 +54,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -63,12 +68,12 @@ jobs:
           aws ecr describe-images \
             --repository-name "${REPO}" \
             --image-ids imageTag="${IMAGE_TAG}" \
-            --region ap-northeast-2 > /dev/null 2>&1
+            --region "${{ secrets.AWS_REGION }}" > /dev/null 2>&1
 
           if [ $? -eq 0 ]; then
-            echo "✅ Image found: ${REPO}:${IMAGE_TAG}"
+            echo "Image found: ${REPO}:${IMAGE_TAG}"
           else
-            echo "❌ Image not found: ${REPO}:${IMAGE_TAG}"
+            echo "Image not found: ${REPO}:${IMAGE_TAG}"
             exit 1
           fi
 
@@ -76,12 +81,14 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           APPLICATION_SECRET_YML: ${{ secrets.APPLICATION_SECRET_YML_DEV }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           port: ${{ secrets.DEV_SSH_PORT }}
-          envs: APPLICATION_SECRET_YML
+          envs: APPLICATION_SECRET_YML,FIREBASE_SERVICE_ACCOUNT_JSON,AWS_REGION
           script: |
             set -euo pipefail
 
@@ -95,10 +102,10 @@ jobs:
             FULL_IMAGE="${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
             COMPOSE_DIR="${{ secrets.DEV_COMPOSE_DIR }}"
 
-            echo "🐳 Image: ${FULL_IMAGE}"
+            echo "Image: ${FULL_IMAGE}"
 
             # ECR 로그인
-            aws ecr get-login-password --region ap-northeast-2 | \
+            aws ecr get-login-password --region "${AWS_REGION}" | \
               docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 
             # docker-compose.yml이 있는 디렉토리로 이동
@@ -109,20 +116,32 @@ jobs:
             chmod 644 application-secret.yml
             echo "🔐 application-secret.yml 주입 완료"
 
-            # 이미지 태그를 환경 변수로 설정하여 compose pull & up
-            export BACKEND_TAG="${IMAGE_TAG}"
+            # Firebase 서비스 계정 키 주입
+            mkdir -p firebase
+            echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > firebase/refit-fcm.json
+            chmod 644 firebase/refit-fcm.json
+            echo "refit-fcm.json 주입 완료"
+
+            # 이미지 태그를 .env 파일에 영구 저장
+            ENV_FILE="${COMPOSE_DIR}/.env"
+            if grep -q '^BACKEND_TAG=' "${ENV_FILE}" 2>/dev/null; then
+              sed -i "s|^BACKEND_TAG=.*|BACKEND_TAG=${IMAGE_TAG}|" "${ENV_FILE}"
+            else
+              echo "BACKEND_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
+            fi
+            echo "📌 .env 파일에 BACKEND_TAG=${IMAGE_TAG} 저장 완료"
 
             echo "📥 Pulling new image..."
             docker compose pull backend
 
-            echo "🔄 Restarting backend service..."
+            echo "Restarting backend service..."
             docker compose up -d backend
 
             # 이전 이미지 정리
             docker image prune -f 2>/dev/null || true
 
             echo "============================================"
-            echo "✅ Re-Fit BE 개발 서버 배포 완료: $(date)"
+            echo "Re-Fit BE 개발 서버 배포 완료: $(date)"
             echo "   Image: ${FULL_IMAGE}"
             echo "============================================"
 
@@ -131,23 +150,23 @@ jobs:
           HEALTH_URL="${{ secrets.DEV_HEALTH_CHECK_URL_BACKEND }}"
 
           if [ -z "$HEALTH_URL" ]; then
-            echo "⚠️  DEV_HEALTH_CHECK_URL_BACKEND이 설정되지 않아 헬스체크를 건너뜁니다."
+            echo "DEV_HEALTH_CHECK_URL_BACKEND이 설정되지 않아 헬스체크를 건너뜁니다."
             exit 0
           fi
 
-          echo "🏥 헬스체크 시작: ${HEALTH_URL}"
+          echo "헬스체크 시작: ${HEALTH_URL}"
 
           for i in {1..10}; do
             HTTP_STATUS=$(timeout 5 curl -s -o /dev/null -w "%{http_code}" "${HEALTH_URL}" 2>/dev/null || echo "000")
             if [ "${HTTP_STATUS}" = "200" ]; then
-              echo "✅ 헬스체크 성공! (HTTP ${HTTP_STATUS})"
+              echo "헬스체크 성공! (HTTP ${HTTP_STATUS})"
               exit 0
             fi
-            echo "  ⏳ 시도 ${i}/10 - HTTP ${HTTP_STATUS}"
+            echo "  시도 ${i}/10 - HTTP ${HTTP_STATUS}"
             [ $i -lt 10 ] && sleep 5
           done
 
-          echo "❌ 헬스체크 실패"
+          echo "헬스체크 실패"
           exit 1
 
       - name: Notify Discord - Dev Deployment Complete
@@ -164,7 +183,7 @@ jobs:
           payload=$(cat <<EOF
           {
             "embeds": [{
-              "title": "🚀 BE 개발 서버 배포 완료",
+              "title": "BE 개발 서버 배포 완료",
               "description": "백엔드 개발 서버 배포가 성공적으로 완료되었습니다.",
               "color": 3447003,
               "fields": [
@@ -195,7 +214,7 @@ jobs:
           payload=$(cat <<EOF
           {
             "embeds": [{
-              "title": "🚨 BE 개발 서버 배포 실패",
+              "title": "BE 개발 서버 배포 실패",
               "description": "백엔드 개발 서버 배포가 실패했습니다. 워크플로우 로그를 확인하세요.",
               "color": 15158332,
               "fields": [

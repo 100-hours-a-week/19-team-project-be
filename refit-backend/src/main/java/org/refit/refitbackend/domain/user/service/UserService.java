@@ -3,6 +3,7 @@ package org.refit.refitbackend.domain.user.service;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.expert.repository.ExpertProfileRepository;
+import org.refit.refitbackend.domain.expert.service.ExpertService;
 import org.refit.refitbackend.domain.master.entity.CareerLevel;
 import org.refit.refitbackend.domain.master.entity.Job;
 import org.refit.refitbackend.domain.master.entity.Skill;
@@ -14,6 +15,7 @@ import org.refit.refitbackend.domain.user.dto.UserRes;
 import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.entity.UserJob;
 import org.refit.refitbackend.domain.user.entity.UserSkill;
+import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.auth.entity.RefreshTokenStatus;
 import org.refit.refitbackend.domain.auth.repository.RefreshTokenRepository;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
@@ -40,6 +42,7 @@ public class UserService {
     private final SkillRepository skillRepository;
     private final ExpertProfileRepository expertProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final ExpertService expertService;
 
     public UserRes.Detail getUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -86,6 +89,7 @@ public class UserService {
         if (user.isDeleted()) {
             throw new CustomException(ExceptionType.USER_DELETED);
         }
+        boolean shouldRefreshEmbedding = false;
 
         updateNicknameIfPresent(user, request.nickname());
 
@@ -107,6 +111,7 @@ public class UserService {
                 throw new CustomException(ExceptionType.JOB_IDS_EMPTY);
             }
             syncUserJobs(user, request.jobIds());
+            shouldRefreshEmbedding = true;
         }
 
         if (request.skills() != null) {
@@ -114,6 +119,13 @@ public class UserService {
                 throw new CustomException(ExceptionType.SKILL_IDS_EMPTY);
             }
             syncUserSkills(user, request.skills());
+            shouldRefreshEmbedding = true;
+        }
+
+        if (shouldRefreshEmbedding
+                && user.getUserType() == UserType.EXPERT
+                && user.getExpertProfile() != null) {
+            expertService.refreshMentorEmbeddingBestEffort(user.getId());
         }
 
         return UserRes.Me.from(user);

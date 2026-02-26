@@ -1,0 +1,96 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+  filelog/backend:
+    include:
+      - /var/lib/docker/containers/*/*-json.log
+    max_log_size: 16MiB
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      # 1) Docker json-file wrapper 파싱
+      - type: json_parser
+        id: parse_docker_json
+        on_error: send
+        timestamp:
+          parse_from: attributes.time
+          layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+      # 2) 실제 애플리케이션 로그 본문 추출
+      - type: move
+        from: attributes.log
+        to: body
+
+      # 3) refit-backend 로그만 선별
+      - type: filter
+        expr: 'not (body matches "\"service\"\\s*:\\s*\\{[^}]*\"name\"\\s*:\\s*\"refit-backend\"")'
+
+      # 4) ECS JSON 파싱
+      - type: json_parser
+        id: parse_ecs_json
+        if: 'body matches "^\\s*\\{"'
+        on_error: send
+        parse_to: attributes
+        severity:
+          parse_from: attributes["log"]["level"]
+          mapping:
+            fatal: FATAL
+            error: ERROR
+            warn:  WARN
+            info:  INFO
+            debug: DEBUG
+            trace: TRACE
+
+      # 5) Trace 연계용 필드만 정규화
+      - type: move
+        if: attributes.traceId != nil
+        from: attributes.traceId
+        to: attributes["trace_id"]
+      - type: move
+        if: attributes.spanId != nil
+        from: attributes.spanId
+        to: attributes["span_id"]
+
+      # 6) 고정 리소스 태그
+      - type: add
+        field: resource["service.name"]
+        value: refit-backend
+      - type: add
+        field: resource["deployment.environment"]
+        value: prod
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+  batch:
+    timeout: 10s
+    send_batch_size: 1024
+
+exporters:
+  otlp:
+    endpoint: ${env:PLG_OTLP_ENDPOINT}
+    tls:
+      insecure: true
+    headers: {}
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
+    logs:
+      receivers: [otlp, filelog/backend]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]
