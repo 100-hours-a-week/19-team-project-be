@@ -26,11 +26,10 @@ public final class ReportSwaggerSpec {
     @SwaggerApiSuccess(
             summary = "V2 리포트 생성",
             operationDescription = """
-                    채팅방 기준으로 AI 리포트를 생성합니다.
-                    내부 처리:
-                    1) chat_room의 job_post_url 기반 공고 파싱 호출
-                    2) 피드백/기술스택/채팅메시지 조합 후 AI 리포트 생성 호출
-                    3) 결과를 reports 테이블에 저장
+                    채팅방 기준으로 AI 리포트 생성을 요청합니다. (비동기 처리)
+                    요청 성공 시 report_id를 즉시 반환하며, 리포트 상태는 초기 PROCESSING입니다.
+                    실제 AI 리포트 생성은 Kafka consumer가 비동기로 수행하고 완료 시 reports 상태가 COMPLETED/FAILED로 변경됩니다.
+                    리포트 상세 조회 API로 상태 및 결과를 확인할 수 있습니다.
                     """,
             responseCode = "201",
             responseDescription = "created",
@@ -82,7 +81,7 @@ public final class ReportSwaggerSpec {
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
             summary = "V2 리포트 상세 조회",
-            operationDescription = "리포트 상세 결과(JSON 포함)를 조회합니다.",
+            operationDescription = "리포트 상세 결과(JSON 포함)를 조회합니다. 비동기 생성 직후에는 PROCESSING 상태일 수 있습니다.",
             implementation = ReportRes.ReportDetail.class
     )
     @SwaggerApiUnauthorizedError(types = {

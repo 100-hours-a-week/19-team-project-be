@@ -4,20 +4,17 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: 'Operation mode'
+        description: 'Operation Mode'
         required: true
         type: choice
         options:
           - list
-          - rollback
+          - restore
         default: 'list'
-      image_tag:
-        description: 'Image tag to rollback to (required if mode=rollback)'
+      backup_id:
+        description: 'Backup file name to restore (e.g., backend-20240127120000.jar)'
         required: false
         type: string
-
-permissions:
-  contents: read
 
 jobs:
   rollback:
@@ -26,46 +23,54 @@ jobs:
     environment: production
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-northeast-2
 
-      - name: List available image tags
-        if: inputs.mode == 'list'
-        id: list-images
+      - name: Execute Backend Rollback
+        env:
+          SERVER_BASE_PATH: ${{ secrets.SERVER_BASE_PATH }}
+          EC2_INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID }}
+          HEALTH_CHECK_URL: ${{ secrets.HEALTH_CHECK_URL }}
+          MODE: ${{ inputs.mode }}
+          BACKUP_ID: ${{ inputs.backup_id }}
         run: |
-          REPO="${{ secrets.ECR_REPOSITORY_BACKEND }}"
-          echo "Available backend images (latest 20):"
-          aws ecr describe-images \
-            --repository-name "$REPO" \
-            --query 'sort_by(imageDetails,&imagePushedAt)[-20:].[imageTags[0],imagePushedAt]' \
-            --output table \
-            --region ${{ secrets.AWS_REGION }} || echo "No images found"
+          set -euo pipefail
 
-      - name: Verify image exists
-        if: inputs.mode == 'rollback'
-        id: verify-image
-        run: |
-          REPO="${{ secrets.ECR_REPOSITORY_BACKEND }}"
-          TAG="${{ inputs.image_tag }}"
-          if [ -z "$TAG" ]; then
-            echo "Error: image_tag is required for rollback"
-            exit 1
+          BASE_PATH="$SERVER_BASE_PATH"
+          APP_DIR="${BASE_PATH}/app/backend/refit-backend"
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          JAR_PATH="${APP_DIR}/build/libs/${JAR_NAME}"
+          BACKUP_DIR="${BASE_PATH}/backups/backend"
+
+          SCRIPT=$(cat <<'SCRIPT_END'
+          set -euo pipefail
+          BASE_PATH="$1"
+          APP_DIR="$2"
+          JAR_PATH="$3"
+          BACKUP_DIR="$4"
+          MODE="$5"
+          BACKUP_ID="$6"
+          HEALTH_CHECK_URL="$7"
+
+          APP_NAME="backend"
+
+          echo "============================================"
+          echo "Re-Fit Backend Rollback Operation: ${MODE}"
+          echo "============================================"
+
+          if [ "${MODE}" = "list" ]; then
+            echo "Available Backend JAR Backups (Latest 10):"
+            if [ -d "${BACKUP_DIR}" ]; then
+              ls -lt "${BACKUP_DIR}"/backend-*.jar 2>/dev/null | head -n 10 | awk '{print $9, $6, $7, $8}' || echo "No backend-*.jar backups found."
+            else
+              echo "No backups directory found: ${BACKUP_DIR}"
+            fi
+            exit 0
           fi
-          aws ecr describe-images \
-            --repository-name "$REPO" \
-            --image-ids imageTag="$TAG" \
-            --region ${{ secrets.AWS_REGION }} > /dev/null 2>&1 || {
-            echo "Error: Image tag not found: $REPO:$TAG"
-            exit 1
-          }
-          echo "Image verified"
 
       - name: Create CodeDeploy revision and rollback
         if: inputs.mode == 'rollback'
@@ -150,13 +155,22 @@ jobs:
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
-          IMAGE_TAG: ${{ inputs.image_tag }}
-          DEPLOY_ID: ${{ steps.rollback-deploy.outputs.deployment_id }}
+          BACKUP_ID: ${{ inputs.backup_id }}
+          RUN_ID: ${{ github.run_id }}
         run: |
-          [ -z "$DISCORD_WEBHOOK" ] && exit 0
-          COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+            TITLE="Rollback Successful"
+          else
+            COLOR=15158332
+            TITLE="Rollback Failed"
+          fi
+
+          BACKUP_TEXT="${BACKUP_ID:-latest backend-*.jar}"
+
           payload=$(cat <<EOF
           {"embeds":[{"title":"BE 롤백: $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"CodeDeploy ID","value":"\`$DEPLOY_ID\`","inline":true},{"name":"워크플로우","value":"[상세](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
           EOF
           )
-          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
+
+          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"

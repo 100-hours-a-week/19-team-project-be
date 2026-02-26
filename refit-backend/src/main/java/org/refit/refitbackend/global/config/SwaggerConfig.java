@@ -51,4 +51,13 @@ public class SwaggerConfig {
                 .addOperationCustomizer(swaggerApiCustomizer)
                 .build();
     }
+
+    @Bean
+    public GroupedOpenApi apiInternal(OperationCustomizer swaggerApiCustomizer) {
+        return GroupedOpenApi.builder()
+                .group("internal")
+                .pathsToMatch("/api/internal/**")
+                .addOperationCustomizer(swaggerApiCustomizer)
+                .build();
+    }
 }

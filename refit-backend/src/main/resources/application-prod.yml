@@ -38,6 +38,19 @@ spring:
         bucket: ${AWS_S3_BUCKET:refit-storage-prod}
         domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9093}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:refit-backend-prod}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      auto-offset-reset: earliest
+      properties:
+        spring.json.trusted.packages: "*"
+
 springdoc:
   swagger-ui:
     enabled: false
@@ -58,6 +71,11 @@ management:
     metrics:
       enabled: true
   metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
     enable:
       hikari: true
       jvm: true
@@ -109,4 +127,14 @@ server:
 
 fcm:
   enabled: ${FCM_ENABLED:true}
-  credentials-path: ${FCM_CREDENTIALS_PATH:/app/firebase/refit-fcm.json}
+  credentials-path: ${FCM_CREDENTIALS_PATH:./src/main/resources/firebase/refit-fcm.json}
+  webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
+
+app:
+  kafka:
+    enabled: ${APP_KAFKA_ENABLED:false}
+    topics:
+      resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
+      report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
+      resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
+      report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}

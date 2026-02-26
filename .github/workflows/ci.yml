@@ -4,6 +4,8 @@ on:
   pull_request:
     branches: [develop, main]
     types: [opened, synchronize, reopened]
+    paths:
+      - 'refit-backend/**'
   push:
     branches: [develop, main]
   workflow_dispatch:
@@ -129,7 +131,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-northeast-2
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -206,6 +208,11 @@ jobs:
     timeout-minutes: 20
     environment: production
 
+    defaults:
+      run:
+        working-directory: refit-backend
+        shell: bash
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -248,14 +255,29 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: refit-backend
-          push: true
-          tags: |
-            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:production-latest
-          platforms: linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          name: backend-jar-${{ github.sha }}-${{ github.run_id }}
+          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
+          retention-days: 7
+          if-no-files-found: error
+          compression-level: 6
+      
+      - name: Verify Artifact Upload
+        if: success()
+        run: |
+          set -e
+          echo "아티팩트 업로드 검증 중..."
+          JAR_FILE="build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "$JAR_FILE" ]; then
+            echo "Error: JAR 파일이 존재하지 않습니다"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
+          echo "업로드된 JAR 파일 크기: ${FILE_SIZE} bytes"
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "Error: JAR 파일 크기가 비정상적으로 작습니다"
+            exit 1
+          fi
+          echo "아티팩트 업로드 검증 완료"
 
       - name: Create CodeDeploy revision and deploy
         id: codedeploy

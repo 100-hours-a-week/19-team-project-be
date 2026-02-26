@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SSE 테스트</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 24px;
+            background: #f5f7fb;
+            color: #222;
+        }
+        .wrap {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+            margin-bottom: 16px;
+        }
+        h1 {
+            margin: 0 0 16px;
+            font-size: 22px;
+        }
+        .row {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 10px;
+        }
+        label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 600;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d9dce3;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        textarea {
+            min-height: 96px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .btns {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-top: 8px;
+        }
+        button {
+            border: none;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-primary { background: #0d6efd; color: #fff; }
+        .btn-danger { background: #dc3545; color: #fff; }
+        .btn-secondary { background: #6c757d; color: #fff; }
+        .status {
+            font-size: 13px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #eef3ff;
+            color: #234;
+            margin-top: 8px;
+        }
+        .log {
+            background: #111827;
+            color: #e5e7eb;
+            border-radius: 10px;
+            padding: 12px;
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            min-height: 320px;
+            max-height: 60vh;
+            overflow: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .hint {
+            color: #666;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="card">
+        <h1>SSE 테스트 (채팅/알림 이벤트)</h1>
+        <div class="row">
+            <div>
+                <label for="baseUrl">Base URL</label>
+                <input id="baseUrl" value="" placeholder="예: http://localhost:8080">
+            </div>
+            <div>
+                <label for="token">Access Token (Bearer 제외)</label>
+                <textarea id="token" placeholder="JWT access token 붙여넣기"></textarea>
+            </div>
+        </div>
+
+        <div class="btns">
+            <button class="btn-primary" id="connectBtn">구독 시작</button>
+            <button class="btn-danger" id="disconnectBtn">연결 종료</button>
+            <button class="btn-secondary" id="clearBtn">로그 지우기</button>
+        </div>
+
+        <div class="status" id="status">상태: 대기중</div>
+        <div class="hint">
+            엔드포인트: <code>/api/v2/events/subscribe</code> (Authorization 헤더 사용)
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="log" id="log"></div>
+    </div>
+</div>
+
+<script>
+    const baseUrlInput = document.getElementById("baseUrl");
+    const tokenInput = document.getElementById("token");
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+
+    let controller = null;
+    let reader = null;
+
+    function defaultBaseUrl() {
+        if (location.origin.includes("localhost") || location.origin.includes("127.0.0.1")) {
+            return "http://localhost:8080";
+        }
+        return location.origin;
+    }
+
+    function setStatus(text) {
+        statusEl.textContent = "상태: " + text;
+    }
+
+    function log(message, data) {
+        const now = new Date().toLocaleTimeString();
+        const line = `[${now}] ${message}`;
+        logEl.textContent += line + "\n";
+        if (data !== undefined) {
+            const body = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+            logEl.textContent += body + "\n";
+        }
+        logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function parseSseChunk(raw) {
+        const blocks = raw.split("\n\n").filter(Boolean);
+        const events = [];
+
+        for (const block of blocks) {
+            const lines = block.split("\n");
+            let eventName = "message";
+            let id = null;
+            const dataLines = [];
+
+            for (const line of lines) {
+                if (line.startsWith("event:")) {
+                    eventName = line.slice(6).trim();
+                } else if (line.startsWith("id:")) {
+                    id = line.slice(3).trim();
+                } else if (line.startsWith("data:")) {
+                    dataLines.push(line.slice(5).trim());
+                }
+            }
+
+            const dataText = dataLines.join("\n");
+            let parsed = dataText;
+            try {
+                parsed = JSON.parse(dataText);
+            } catch (_) {
+                // plain text
+            }
+
+            events.push({ eventName, id, data: parsed });
+        }
+
+        return events;
+    }
+
+    async function connect() {
+        await disconnect();
+
+        const baseUrl = (baseUrlInput.value || "").trim() || defaultBaseUrl();
+        const token = tokenInput.value.trim();
+        if (!token) {
+            alert("Access Token을 입력하세요.");
+            return;
+        }
+
+        const url = `${baseUrl}/api/v2/events/subscribe`;
+        controller = new AbortController();
+        setStatus("연결 중...");
+        log("CONNECT", { url });
+
+        try {
+            const response = await fetch(url, {
+                method: "GET",
+                headers: {
+                    "Accept": "text/event-stream",
+                    "Authorization": `Bearer ${token}`
+                },
+                signal: controller.signal
+            });
+
+            if (!response.ok) {
+                const text = await response.text();
+                setStatus(`연결 실패 (${response.status})`);
+                log("CONNECT FAILED", text);
+                return;
+            }
+
+            if (!response.body) {
+                setStatus("연결 실패 (stream 없음)");
+                log("CONNECT FAILED", "ReadableStream not available");
+                return;
+            }
+
+            setStatus("연결됨");
+            reader = response.body.getReader();
+            const decoder = new TextDecoder("utf-8");
+            let buffer = "";
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) {
+                    break;
+                }
+
+                buffer += decoder.decode(value, { stream: true });
+                const parts = buffer.split("\n\n");
+                buffer = parts.pop() || "";
+
+                for (const part of parts) {
+                    if (!part.trim()) continue;
+                    for (const event of parseSseChunk(part + "\n\n")) {
+                        log(`EVENT: ${event.eventName}`, event);
+                    }
+                }
+            }
+
+            setStatus("연결 종료됨");
+            log("DISCONNECTED");
+        } catch (e) {
+            if (e.name === "AbortError") {
+                setStatus("사용자 종료");
+                log("ABORTED");
+            } else {
+                setStatus("오류");
+                log("STREAM ERROR", String(e));
+            }
+        } finally {
+            reader = null;
+            controller = null;
+        }
+    }
+
+    async function disconnect() {
+        try {
+            if (reader) {
+                await reader.cancel();
+            }
+        } catch (_) {}
+        if (controller) {
+            controller.abort();
+        }
+    }
+
+    document.getElementById("connectBtn").addEventListener("click", connect);
+    document.getElementById("disconnectBtn").addEventListener("click", disconnect);
+    document.getElementById("clearBtn").addEventListener("click", () => {
+        logEl.textContent = "";
+    });
+
+    baseUrlInput.value = defaultBaseUrl();
+    tokenInput.value = localStorage.getItem("dev_access_token") || "";
+    tokenInput.addEventListener("change", () => {
+        localStorage.setItem("dev_access_token", tokenInput.value.trim());
+    });
+    tokenInput.addEventListener("blur", () => {
+        localStorage.setItem("dev_access_token", tokenInput.value.trim());
+    });
+
+    log("READY", { baseUrl: baseUrlInput.value });
+</script>
+</body>
+</html>

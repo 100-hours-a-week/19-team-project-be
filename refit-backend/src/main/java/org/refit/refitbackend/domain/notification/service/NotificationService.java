@@ -12,6 +12,7 @@ import org.refit.refitbackend.domain.user.entity.User;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.refit.refitbackend.global.sse.SseService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,6 +33,7 @@ public class NotificationService {
     private final FcmTokenRepository fcmTokenRepository;
     private final UserRepository userRepository;
     private final FcmPushService fcmPushService;
+    private final SseService sseService;
 
     public NotificationRes.NotificationListResponse listMyNotifications(Long userId, Long cursor, Integer size) {
         User user = getActiveUser(userId);
@@ -171,6 +173,24 @@ public class NotificationService {
         });
     }
 
+    @Transactional
+    public void notifyReportGenerateCompleted(Long userId, Long reportId) {
+        userRepository.findById(userId).ifPresent(user -> {
+            String title = "AI 리포트 생성이 완료됐어요";
+            String content = "리포트가 준비되었습니다. (report_id: " + reportId + ")";
+            sendNotification(user, "REPORT_GENERATE_COMPLETED", title, content);
+        });
+    }
+
+    @Transactional
+    public void notifyReportGenerateFailed(Long userId, Long reportId) {
+        userRepository.findById(userId).ifPresent(user -> {
+            String title = "AI 리포트 생성에 실패했어요";
+            String content = "잠시 후 다시 시도해주세요. (report_id: " + reportId + ")";
+            sendNotification(user, "REPORT_GENERATE_FAILED", title, content);
+        });
+    }
+
     private User getActiveUser(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
@@ -195,13 +215,16 @@ public class NotificationService {
 
     private void sendNotification(User receiver, String type, String title, String content) {
         try {
-            notificationRepository.save(Notification.builder()
+            Notification savedNotification = notificationRepository.save(Notification.builder()
                     .user(receiver)
                     .type(type)
                     .title(title)
                     .content(content)
                     .isRead(false)
                     .build());
+
+            long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(receiver.getId());
+            sseService.sendNotificationEvent(receiver.getId(), type, savedNotification.getId(), unreadCount);
 
             List<String> tokens = fcmTokenRepository.findAllByUserId(receiver.getId()).stream()
                     .map(FcmToken::getToken)

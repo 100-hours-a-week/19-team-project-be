@@ -54,7 +54,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-northeast-2
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -114,7 +114,7 @@ jobs:
             # 시크릿 설정 파일 주입
             echo "$APPLICATION_SECRET_YML" > application-secret.yml
             chmod 644 application-secret.yml
-            echo "application-secret.yml 주입 완료"
+            echo "🔐 application-secret.yml 주입 완료"
 
             # Firebase 서비스 계정 키 주입
             mkdir -p firebase
@@ -129,9 +129,9 @@ jobs:
             else
               echo "BACKEND_TAG=${IMAGE_TAG}" >> "${ENV_FILE}"
             fi
-            echo ".env 파일에 BACKEND_TAG=${IMAGE_TAG} 저장 완료"
+            echo "📌 .env 파일에 BACKEND_TAG=${IMAGE_TAG} 저장 완료"
 
-            echo "Pulling new image..."
+            echo "📥 Pulling new image..."
             docker compose pull backend
 
             echo "Restarting backend service..."
@@ -142,7 +142,7 @@ jobs:
 
             echo "============================================"
             echo "Re-Fit BE 개발 서버 배포 완료: $(date)"
-            echo "Image: ${FULL_IMAGE}"
+            echo "   Image: ${FULL_IMAGE}"
             echo "============================================"
 
       - name: Health Check

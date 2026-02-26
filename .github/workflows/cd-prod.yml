@@ -1,35 +1,96 @@
-# 수동 재배포용: 이미 ECR에 있는 이미지 태그로 CodeDeploy만 실행 (CI 없이)
-# 용도: 특정 이미지로 재배포, 롤백, 또는 CI 없이 배포만 필요할 때
-name: Backend CD (Prod)
+name: Re-Fit Backend CD (Prod)
 
 on:
   workflow_dispatch:
     inputs:
-      image_tag:
-        description: 'Docker image tag (e.g. production-abc1234, or production-latest)'
+      run_id:
+        description: 'CI workflow run ID (자동 입력 또는 직접 입력)'
         required: false
         type: string
-      use_latest:
-        description: 'Use production-latest when image_tag is not set'
+      sha:
+        description: 'Commit SHA (자동 입력 또는 직접 입력)'
+        required: false
+        type: string
+      branch:
+        description: 'Branch name'
+        required: true
+        type: choice
+        default: 'main'
+        options:
+          - main
+      use_latest_artifact:
+        description: 'run_id/sha를 입력하지 않으면 선택한 브랜치의 최신 아티팩트 사용'
         required: true
         type: boolean
         default: true
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   deploy:
-    name: Deploy to Prod
+    name: Deploy to Server
     runs-on: ubuntu-latest
     timeout-minutes: 30
     concurrency:
-      group: deploy-prod
+      group: deploy-${{ inputs.branch }}
       cancel-in-progress: false
     environment: production
 
     steps:
-      - name: Set deployment variables
+      - name: Find Latest Artifact (if needed)
+        if: inputs.use_latest_artifact == true && (inputs.run_id == '' || inputs.sha == '')
+        id: find-artifact
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            const branch = '${{ inputs.branch }}';
+            console.log(`Finding latest artifact for branch: ${branch}`);
+
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'ci.yml',
+              branch: branch,
+              status: 'success',
+              per_page: 10
+            });
+
+            if (runs.data.workflow_runs.length === 0) {
+              core.setFailed(`No successful CI runs found for branch: ${branch}`);
+              return;
+            }
+
+            for (const run of runs.data.workflow_runs) {
+              const artifacts = await github.rest.actions.listWorkflowRunArtifacts({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: run.id
+              });
+
+              const buildArtifact = artifacts.data.artifacts.find(
+                a => a.name.startsWith('backend-jar-')
+              );
+
+              if (buildArtifact) {
+                const sha = run.head_sha;
+                console.log(`Found artifact from run #${run.run_number}`);
+                console.log(`   Run ID: ${run.id}`);
+                console.log(`   SHA: ${sha}`);
+                console.log(`   Created: ${run.created_at}`);
+
+                core.setOutput('run_id', run.id.toString());
+                core.setOutput('sha', sha);
+                core.setOutput('run_number', run.run_number.toString());
+                return;
+              }
+            }
+
+            core.setFailed(`No artifacts found in recent CI runs for branch: ${branch}`);
+
+      - name: Set Deployment Variables
         id: deploy-vars
         run: |
           USE_LATEST="${{ inputs.use_latest }}"
@@ -44,28 +105,55 @@ jobs:
             echo "Error: image_tag is empty and use_latest is false."
             exit 1
           fi
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
 
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.deploy-vars.outputs.branch }}
+
+      # CI 워크플로우에서 JAR 아티팩트 다운로드
+      - name: Download JAR Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-jar-${{ steps.deploy-vars.outputs.sha }}-${{ steps.deploy-vars.outputs.run_id }}
+          path: build-output
+          github-token: ${{ secrets.PAT }}
+          run-id: ${{ steps.deploy-vars.outputs.run_id }}
+
+      - name: Verify Downloaded JAR
+        run: |
+          set -euo pipefail
+          JAR_NAME="refit-backend-0.0.1-SNAPSHOT.jar"
+          if [ ! -f "build-output/${JAR_NAME}" ]; then
+            echo "JAR file not found"
+            exit 1
+          fi
+          FILE_SIZE=$(stat -f%z "build-output/${JAR_NAME}" 2>/dev/null || stat -c%s "build-output/${JAR_NAME}" 2>/dev/null || echo 0)
+          if [ "$FILE_SIZE" -lt 1000000 ]; then
+            echo "JAR file size is too small: ${FILE_SIZE} bytes"
+            exit 1
+          fi
+          echo "JAR file verified: ${FILE_SIZE} bytes"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ap-northeast-2
 
-      - name: Login to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Verify image exists in ECR
+      # JAR 압축 후 S3에 업로드
+      - name: Compress and Upload to S3
+        id: s3_upload
+        env:
+          JAR_NAME: refit-backend-0.0.1-SNAPSHOT.jar
         run: |
-          aws ecr describe-images \
-            --repository-name ${{ secrets.ECR_REPOSITORY_BACKEND }} \
-            --image-ids imageTag="${{ steps.deploy-vars.outputs.image_tag }}" \
-            --region ${{ secrets.AWS_REGION }}
+          set -euo pipefail
+          cd build-output
+          gzip -c ${JAR_NAME} > ${JAR_NAME}.gz
+          aws s3 cp ${JAR_NAME}.gz s3://${{ secrets.S3_ARTIFACTS_BUCKET }}/artifacts/backend/${JAR_NAME}.gz
+          echo "s3_key=artifacts/backend/${JAR_NAME}.gz" >> $GITHUB_OUTPUT
 
       - name: Create CodeDeploy revision and deploy
         id: codedeploy
@@ -148,10 +236,15 @@ jobs:
           IMAGE_TAG: ${{ steps.deploy-vars.outputs.image_tag }}
           DEPLOY_ID: ${{ steps.codedeploy.outputs.deploy_id }}
         run: |
-          [ -z "$DISCORD_WEBHOOK" ] && exit 0
-          COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
+          if [ "$STATUS" = "success" ]; then
+            COLOR=3066993
+          else
+            COLOR=15158332
+          fi
+
           payload=$(cat <<EOF
           {"embeds":[{"title":"BE 배포(수동): $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"CodeDeploy ID","value":"\`$DEPLOY_ID\`","inline":true},{"name":"워크플로우","value":"[상세](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
           EOF
           )
-          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
+
+          curl -H "Content-Type: application/json" -X POST -d "$payload" "$DISCORD_WEBHOOK"

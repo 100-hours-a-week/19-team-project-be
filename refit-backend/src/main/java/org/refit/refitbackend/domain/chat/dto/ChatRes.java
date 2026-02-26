@@ -38,6 +38,9 @@ public class ChatRes {
             @Schema(description = "채팅방 상태", example = "ACTIVE")
             String status,
 
+            @Schema(description = "채팅 요청 타입(요청 기반 채팅인 경우)", example = "FEEDBACK", nullable = true)
+            String requestType,
+
             @Schema(description = "생성 시각")
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime createdAt,
@@ -46,7 +49,7 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime updatedAt
     ) {
-        public static RoomListItem from(ChatRoom room, Long unreadCount) {
+        public static RoomListItem from(ChatRoom room, Long unreadCount, String requestType) {
 
             UserInfo requester = UserInfo.from(room.getRequester());
             UserInfo receiver = UserInfo.from(room.getReceiver());
@@ -62,6 +65,7 @@ public class ChatRes {
                     lastMessageInfo,
                     unreadCount,
                     room.getStatus().name(),
+                    requestType,
                     room.getCreatedAt(),
                     room.getUpdatedAt()
             );
@@ -89,6 +93,9 @@ public class ChatRes {
             @Schema(description = "공고 URL", example = "https://example.com/job/123")
             String jobPostUrl,
 
+            @Schema(description = "채팅 요청 타입 (요청 기반 채팅인 경우)", example = "FEEDBACK", nullable = true)
+            String requestType,
+
             @Schema(description = "채팅방 상태", example = "ACTIVE")
             String status,
 
@@ -100,7 +107,7 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime closedAt
     ) {
-        public static RoomDetail from(ChatRoom room, ResumeInfo resume) {
+        public static RoomDetail from(ChatRoom room, ResumeInfo resume, String requestType) {
             return new RoomDetail(
                     room.getId(),
                     UserInfo.from(room.getRequester()),
@@ -108,6 +115,7 @@ public class ChatRes {
                     room.getResumeId(),
                     resume,
                     room.getJobPostUrl(),
+                    requestType,
                     room.getStatus().name(),
                     room.getCreatedAt(),
                     room.getClosedAt()
