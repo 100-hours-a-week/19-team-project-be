@@ -8,8 +8,6 @@ on:
       - 'refit-backend/**'
   push:
     branches: [develop, main]
-    paths:
-      - 'refit-backend/**'
   workflow_dispatch:
     inputs:
       job_to_run:
@@ -31,8 +29,6 @@ permissions:
   contents: write
 
 jobs:
-  # PR 검증: 컴파일 체크
-  # 목적: 빠른 피드백을 통한 코드 품질 검증
   lint-and-test:
     if: |
       github.event_name == 'pull_request' ||
@@ -59,10 +55,10 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Compile Check
+      - name: Compile check
         run: ./gradlew compileJava --no-daemon
 
-      - name: Build Check
+      - name: Build check
         run: |
           set -e
           ./gradlew bootJar --no-daemon
@@ -72,12 +68,14 @@ jobs:
           fi
           ls -lh build/libs/*.jar | head -1
 
-  # 통합 검증: develop 브랜치 빌드 검증 및 보안 스캔
-  # 목적: develop 브랜치 병합 전 빌드 검증 및 보안 취약점 확인
   integration:
     if: |
-      (github.event_name == 'push' && github.ref_name == 'develop') ||
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.job_to_run == 'integration')
+      (github.event_name == 'push' && (github.ref_name == 'develop')) ||
+      (github.event_name == 'workflow_dispatch' && (
+        github.event.inputs.job_to_run == 'integration' ||
+        github.event.inputs.job_to_run == 'release-dev' ||
+        github.event.inputs.job_to_run == 'all'
+      ))
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -89,8 +87,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -102,19 +98,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Security Scan
+      - name: Security scan
         run: |
           ./gradlew dependencies --no-daemon > dependencies.txt 2>&1 || true
           if grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt 2>/dev/null; then
             echo "Warning: Potential security issues detected"
             grep -iE "(vulnerability|CVE|security|deprecated|unsafe)" dependencies.txt | head -20
-            echo "Please review dependencies.txt for details"
           else
             echo "No obvious security vulnerabilities detected"
           fi
         continue-on-error: true
 
-  # 개발 환경 릴리즈 (develop 브랜치 - Docker 기반)
   release-dev:
     needs: [integration]
     if: |
@@ -206,8 +200,6 @@ jobs:
             });
             console.log('CD-Dev workflow triggered successfully');
 
-  # 릴리즈: main 브랜치 프로덕션 빌드 및 아티팩트 생성
-  # 목적: 프로덕션 배포를 위한 최종 검증 및 아티팩트 준비
   release-prod:
     if: |
       (github.event_name == 'push' && github.ref_name == 'main') ||
@@ -224,10 +216,17 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
         with:
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: ${{ github.event_name == 'push' && 0 || 1 }}
-          token: ${{ secrets.PAT }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -236,38 +235,25 @@ jobs:
           java-version: ${{ env.JAVA_VERSION }}
           cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Inject Secret Configuration Files
+      - name: Inject production secrets
+        working-directory: refit-backend
         run: |
           mkdir -p src/main/resources
-          if [ -z "${{ secrets.APPLICATION_SECRET_YML }}" ]; then
-            echo "Error: APPLICATION_SECRET_YML secret not found"
-            exit 1
-          fi
-          echo "${{ secrets.APPLICATION_SECRET_YML }}" > src/main/resources/application-secret.yml
+          echo "${{ secrets.APPLICATION_SECRET_YML_PROD }}" > src/main/resources/application-secret.yml
 
-      - name: Production Build
-        run: ./gradlew clean bootJar --no-daemon
+      - name: Build JAR
+        working-directory: refit-backend
+        run: ./gradlew clean bootJar -x test --no-daemon
 
-      - name: Verify JAR
-        run: |
-          set -e
-          if [ ! -f "build/libs/refit-backend-0.0.1-SNAPSHOT.jar" ]; then
-            echo "Error: JAR file not found"
-            exit 1
-          fi
-          # JAR 파일 무결성 확인
-          if ! jar tf build/libs/refit-backend-0.0.1-SNAPSHOT.jar > /dev/null 2>&1; then
-            echo "Error: Invalid JAR file"
-            exit 1
-          fi
-          ls -lh build/libs/*.jar
+      - name: Generate image tag
+        id: image-tag
+        run: echo "tag=production-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
 
-      - name: Archive JAR Artifact
-        if: success()
-        uses: actions/upload-artifact@v4
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
         with:
           name: backend-jar-${{ github.sha }}-${{ github.run_id }}
           path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
@@ -293,34 +279,94 @@ jobs:
           fi
           echo "아티팩트 업로드 검증 완료"
 
-      - name: Create Release Tag
-        if: github.event_name == 'push'
+      - name: Create CodeDeploy revision and deploy
+        id: codedeploy
+        working-directory: ${{ github.workspace }}
         env:
-          GITHUB_TOKEN: ${{ secrets.PAT }}
+          S3_BUCKET: ${{ secrets.CODEDEPLOY_REVISION_BUCKET }}
+          APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
+          DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
+          RUNTIME_ENV: ${{ secrets.RUNTIME_ENV_FILE }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_BACKEND }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         run: |
-          TAG_NAME="v$(date +'%Y.%m.%d-%H%M%S')-${GITHUB_SHA::7}"
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$TAG_NAME" -m "Release $TAG_NAME"
-          git push origin "$TAG_NAME"
-          echo "Release tag created: $TAG_NAME"
-          echo "tag_name=${TAG_NAME}" >> $GITHUB_OUTPUT
+          set -e
+          REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
+          rm -rf "$REVISION_DIR" && mkdir -p "$REVISION_DIR"
+          cp appspec.yml "$REVISION_DIR/"
+          mkdir -p "$REVISION_DIR/scripts/codedeploy"
+          cp scripts/codedeploy/deploy.sh "$REVISION_DIR/scripts/codedeploy/"
 
-      - name: Trigger CD-Prod Workflow
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.PAT }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'cd-prod.yml',
-              ref: 'main',
-              inputs: {
-                run_id: '${{ github.run_id }}',
-                sha: '${{ github.sha }}',
-                branch: 'main'
-              }
-            });
-            console.log('CD-Prod workflow triggered successfully');
+          envsubst '${ECR_REGISTRY} ${ECR_REPOSITORY} ${IMAGE_TAG}' \
+            < docker-compose.yml > "$REVISION_DIR/docker-compose.yml"
+
+          printf 'ECR_REGISTRY=%s\nAWS_REGION=%s\n' "${ECR_REGISTRY}" "${AWS_REGION}" \
+            > "$REVISION_DIR/.env"
+
+          printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
+          cp otel-agent-config.yaml "$REVISION_DIR/otel-agent-config.yaml"
+
+          # Firebase 서비스 계정 키 주입
+          mkdir -p "$REVISION_DIR/firebase"
+          printf '%s' "${FIREBASE_SERVICE_ACCOUNT_JSON}" > "$REVISION_DIR/firebase/refit-fcm.json"
+
+          ZIP_KEY="backend/${GITHUB_SHA}.zip"
+          (cd "$REVISION_DIR" && zip -r -q "../${GITHUB_SHA}.zip" .)
+          aws s3 cp "${GITHUB_WORKSPACE}/${GITHUB_SHA}.zip" "s3://${S3_BUCKET}/${ZIP_KEY}"
+          DEPLOY_ID=$(aws deploy create-deployment \
+            --application-name "$APP_NAME" \
+            --deployment-group-name "$DG_NAME" \
+            --s3-location bucket="${S3_BUCKET}",key="${ZIP_KEY}",bundleType=zip \
+            --query 'deploymentId' --output text)
+          echo "Deployment started: $DEPLOY_ID"
+          echo "deploy_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
+
+      - name: Wait for CodeDeploy
+        id: wait-deploy
+        run: |
+          DEPLOY_ID="${{ steps.codedeploy.outputs.deploy_id }}"
+          echo "Deployment ID: $DEPLOY_ID — polling (max 10min)"
+          for i in $(seq 1 30); do
+            STATUS=$(aws deploy get-deployment \
+              --deployment-id "$DEPLOY_ID" \
+              --query 'deploymentInfo.status' \
+              --output text --region "${{ secrets.AWS_REGION }}")
+            echo "  [$i/30] status: $STATUS"
+            case "$STATUS" in
+              Succeeded)
+                echo "deploy_status=Succeeded" >> $GITHUB_OUTPUT
+                exit 0 ;;
+              Failed|Stopped)
+                ERROR=$(aws deploy get-deployment \
+                  --deployment-id "$DEPLOY_ID" \
+                  --query 'deploymentInfo.errorInformation.message' \
+                  --output text --region "${{ secrets.AWS_REGION }}" 2>/dev/null || echo "N/A")
+                echo "deploy_status=${STATUS}" >> $GITHUB_OUTPUT
+                echo "deploy_error=${ERROR}" >> $GITHUB_OUTPUT
+                exit 1 ;;
+            esac
+            sleep 15
+          done
+          echo "deploy_status=Timeout" >> $GITHUB_OUTPUT
+          echo "deploy_error=Timed out after 10 minutes" >> $GITHUB_OUTPUT
+          exit 1
+
+      - name: Discord notification
+        if: always()
+        env:
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          STATUS: ${{ job.status }}
+          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
+          DEPLOY_ID: ${{ steps.codedeploy.outputs.deploy_id }}
+        run: |
+          [ -z "$DISCORD_WEBHOOK" ] && exit 0
+          SHA_SHORT="${GITHUB_SHA::7}"
+          COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
+          payload=$(cat <<EOF
+          {"embeds":[{"title":"BE 배포(Prod): $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"커밋 SHA","value":"\`$SHA_SHORT\`","inline":true},{"name":"CodeDeploy ID","value":"\`$DEPLOY_ID\`","inline":true},{"name":"워크플로우","value":"[상세](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
+          EOF
+          )
+          curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true

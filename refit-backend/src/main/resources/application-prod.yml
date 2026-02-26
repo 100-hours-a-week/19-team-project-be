@@ -87,6 +87,22 @@ management:
     export:
       prometheus:
         enabled: true
+      otlp:
+        enabled: true
+  tracing:
+    sampling:
+      probability: 1.0
+
+  otlp:
+    metrics:
+      export:
+        url: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-agent:4318}/v1/metrics
+        step: 30s
+        resource-attributes:
+          service.name: ${spring.application.name:refit-backend}
+          deployment.environment: prod
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-agent:4318}/v1/traces
 
 # ============================================
 # Structured JSON Logging (운영 환경)
@@ -104,7 +120,7 @@ logging:
     root: info
     org.springframework: warn
     org.hibernate: warn
-    org.refit.backend: info  # 운영 환경은 info 레벨
+    org.refit.refitbackend: info  # 운영 환경은 info 레벨
 
 server:
   forward-headers-strategy: framework
