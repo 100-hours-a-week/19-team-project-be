@@ -148,7 +148,7 @@ jobs:
         working-directory: refit-backend
         run: chmod +x gradlew
 
-      - name: Build JAR (native amd64)
+      - name: Build JAR (arm64)
         working-directory: refit-backend
         run: ./gradlew clean bootJar -x test --no-daemon
 
@@ -257,31 +257,19 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
+        env:
+          DOCKER_BUILD_SUMMARY: "false"
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
-          name: backend-jar-${{ github.sha }}-${{ github.run_id }}
-          path: refit-backend/build/libs/refit-backend-0.0.1-SNAPSHOT.jar
-          retention-days: 7
-          if-no-files-found: error
-          compression-level: 6
+          context: refit-backend
+          push: true
+          tags: |
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:production-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/arm64
       
-      - name: Verify Artifact Upload
-        if: success()
-        run: |
-          set -e
-          echo "아티팩트 업로드 검증 중..."
-          JAR_FILE="build/libs/refit-backend-0.0.1-SNAPSHOT.jar"
-          if [ ! -f "$JAR_FILE" ]; then
-            echo "Error: JAR 파일이 존재하지 않습니다"
-            exit 1
-          fi
-          FILE_SIZE=$(stat -f%z "$JAR_FILE" 2>/dev/null || stat -c%s "$JAR_FILE" 2>/dev/null || echo "0")
-          echo "업로드된 JAR 파일 크기: ${FILE_SIZE} bytes"
-          if [ "$FILE_SIZE" -lt 1000000 ]; then
-            echo "Error: JAR 파일 크기가 비정상적으로 작습니다"
-            exit 1
-          fi
-          echo "아티팩트 업로드 검증 완료"
-
       - name: Create CodeDeploy revision and deploy
         id: codedeploy
         working-directory: ${{ github.workspace }}
