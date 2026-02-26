@@ -106,6 +106,23 @@ public class AuthService {
         return user;
     }
 
+    @Transactional
+    public User restore(AuthReq.Restore request) {
+        User user = userRepository.findByOauthProviderAndOauthId(request.oauthProvider(), request.oauthId())
+                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+        if (!user.isDeleted()) {
+            throw new CustomException(ExceptionType.ACCOUNT_RESTORE_NOT_ALLOWED);
+        }
+
+        validateRestore(request);
+
+        user.restoreActive();
+        user.updateProfile(request.email(), request.nickname());
+        user.clearProfileImageUrl();
+
+        return user;
+    }
+
 
     private User createUser(AuthReq.SignUp signUp, CareerLevel careerLevel) {
         return User.builder()
