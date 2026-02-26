@@ -29,12 +29,17 @@ jobs:
       - name: Set Deployment Variables
         id: deploy-vars
         run: |
+          USE_LATEST="${{ inputs.use_latest }}"
+
           if [ -n "${{ inputs.image_tag }}" ]; then
             IMAGE_TAG="${{ inputs.image_tag }}"
             echo "Using specified image tag: ${IMAGE_TAG}"
-          else
+          elif [ "${USE_LATEST}" = "true" ]; then
             IMAGE_TAG="develop-latest"
             echo "Using latest develop image"
+          else
+            echo "Error: image_tag is empty and use_latest is false."
+            exit 1
           fi
 
           SHA="${{ inputs.sha }}"
@@ -63,7 +68,7 @@ jobs:
           aws ecr describe-images \
             --repository-name "${REPO}" \
             --image-ids imageTag="${IMAGE_TAG}" \
-            --region ap-northeast-2 > /dev/null 2>&1
+            --region "${{ secrets.AWS_REGION }}" > /dev/null 2>&1
 
           if [ $? -eq 0 ]; then
             echo "Image found: ${REPO}:${IMAGE_TAG}"
@@ -77,12 +82,13 @@ jobs:
         env:
           APPLICATION_SECRET_YML: ${{ secrets.APPLICATION_SECRET_YML_DEV }}
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
         with:
           host: ${{ secrets.DEV_SSH_HOST }}
           username: ${{ secrets.DEV_SSH_USER }}
           key: ${{ secrets.DEV_SSH_KEY }}
           port: ${{ secrets.DEV_SSH_PORT }}
-          envs: APPLICATION_SECRET_YML,FIREBASE_SERVICE_ACCOUNT_JSON
+          envs: APPLICATION_SECRET_YML,FIREBASE_SERVICE_ACCOUNT_JSON,AWS_REGION
           script: |
             set -euo pipefail
 
@@ -99,7 +105,7 @@ jobs:
             echo "Image: ${FULL_IMAGE}"
 
             # ECR 로그인
-            aws ecr get-login-password --region ap-northeast-2 | \
+            aws ecr get-login-password --region "${AWS_REGION}" | \
               docker login --username AWS --password-stdin "${ECR_REGISTRY}"
 
             # docker-compose.yml이 있는 디렉토리로 이동
@@ -114,13 +120,7 @@ jobs:
             mkdir -p firebase
             echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > firebase/refit-fcm.json
             chmod 644 firebase/refit-fcm.json
-            echo "🔐 refit-fcm.json 주입 완료"
-
-            # Firebase 서비스 계정 키 주입
-            mkdir -p firebase
-            echo "$FIREBASE_SERVICE_ACCOUNT_JSON" > firebase/refit-fcm.json
-            chmod 644 firebase/refit-fcm.json
-            echo "🔐 refit-fcm.json 주입 완료"
+            echo "refit-fcm.json 주입 완료"
 
             # 이미지 태그를 .env 파일에 영구 저장
             ENV_FILE="${COMPOSE_DIR}/.env"

@@ -32,12 +32,17 @@ jobs:
       - name: Set deployment variables
         id: deploy-vars
         run: |
+          USE_LATEST="${{ inputs.use_latest }}"
+
           if [ -n "${{ inputs.image_tag }}" ]; then
             IMAGE_TAG="${{ inputs.image_tag }}"
             echo "Using specified image tag: ${IMAGE_TAG}"
-          else
+          elif [ "${USE_LATEST}" = "true" ]; then
             IMAGE_TAG="production-latest"
             echo "Using production-latest"
+          else
+            echo "Error: image_tag is empty and use_latest is false."
+            exit 1
           fi
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
 

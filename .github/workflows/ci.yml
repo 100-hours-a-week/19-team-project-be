@@ -2,10 +2,10 @@ name: Re-Fit Backend CI
 
 on:
   pull_request:
-    branches: [refactor/v2-ci-cd]
+    branches: [develop, main]
     types: [opened, synchronize, reopened]
   push:
-    branches: [refactor/v2-ci-cd]
+    branches: [develop, main]
   workflow_dispatch:
     inputs:
       job_to_run:
@@ -68,7 +68,7 @@ jobs:
 
   integration:
     if: |
-      (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
+      (github.event_name == 'push' && (github.ref_name == 'develop')) ||
       (github.event_name == 'workflow_dispatch' && (
         github.event.inputs.job_to_run == 'integration' ||
         github.event.inputs.job_to_run == 'release-dev' ||
@@ -109,12 +109,17 @@ jobs:
 
   release-dev:
     needs: [integration]
-    if: github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-dev' || github.event.inputs.job_to_run == 'all')
+    if: |
+      always() &&
+      needs.integration.result != 'failure' &&
+      (
+        (github.event_name == 'push' && github.ref_name == 'develop') ||
+        (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-dev' || github.event.inputs.job_to_run == 'all'))
+      )
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
       image_tag: ${{ steps.meta.outputs.image_tag }}
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -141,26 +146,28 @@ jobs:
         working-directory: refit-backend
         run: chmod +x gradlew
 
-      - name: Build JAR
+      - name: Build JAR (native amd64)
         working-directory: refit-backend
         run: ./gradlew clean bootJar -x test --no-daemon
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Generate image metadata
+      - name: Generate Image Metadata
         id: meta
         run: |
           SHA_SHORT="${GITHUB_SHA::7}"
           IMAGE_TAG="develop-${SHA_SHORT}"
           FULL_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:${IMAGE_TAG}"
           LATEST_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ secrets.ECR_REPOSITORY_BACKEND }}:develop-latest"
+
           echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "full_image=${FULL_IMAGE}" >> $GITHUB_OUTPUT
           echo "latest_image=${LATEST_IMAGE}" >> $GITHUB_OUTPUT
           echo "sha_short=${SHA_SHORT}" >> $GITHUB_OUTPUT
+          echo "Docker Image: ${FULL_IMAGE}"
 
-      - name: Build and push Docker image
+      - name: Build and Push Docker Image
         uses: docker/build-push-action@v6
         with:
           context: refit-backend
@@ -172,7 +179,7 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/arm64
 
-      - name: Trigger CD-Dev workflow
+      - name: Trigger CD-Dev Workflow
         if: success()
         uses: actions/github-script@v7
         with:
@@ -182,7 +189,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               workflow_id: 'cd-dev.yml',
-              ref: 'refactor/v2-ci-cd',
+              ref: 'develop',
               inputs: {
                 image_tag: '${{ steps.meta.outputs.image_tag }}',
                 sha: '${{ github.sha }}',
@@ -193,10 +200,10 @@ jobs:
 
   release-prod:
     if: |
-      (github.event_name == 'push' && github.ref_name == 'refactor/v2-ci-cd') ||
+      (github.event_name == 'push' && github.ref_name == 'main') ||
       (github.event_name == 'workflow_dispatch' && (github.event.inputs.job_to_run == 'release-prod' || github.event.inputs.job_to_run == 'all'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 20
     environment: production
 
     steps:
@@ -208,7 +215,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ap-northeast-2
+          aws-region: ${{ secrets.AWS_REGION }}
 
       - name: Login to Amazon ECR
         id: ecr

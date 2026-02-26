@@ -78,6 +78,7 @@ jobs:
           APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
           DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
           RUNTIME_ENV: ${{ secrets.RUNTIME_ENV_FILE }}
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           set -e
           ECR_REGISTRY=$(aws ecr describe-repositories \
@@ -99,6 +100,9 @@ jobs:
 
           printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
           cp otel-agent-config.yaml "$REVISION_DIR/otel-agent-config.yaml"
+
+          mkdir -p "$REVISION_DIR/firebase"
+          printf '%s' "${FIREBASE_SERVICE_ACCOUNT_JSON}" > "$REVISION_DIR/firebase/refit-fcm.json"
 
           ZIP_KEY="backend/rollback-$(date +%Y%m%d%H%M%S).zip"
           (cd "$REVISION_DIR" && zip -r -q "../rollback.zip" .)
