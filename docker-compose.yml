@@ -38,9 +38,12 @@ services:
         max-size: "10m"
         max-file: "3"
     
+    extra_hosts:
+      - "kafka:10.0.2.25"
+
     depends_on:
       - otel-agent
-    
+
     networks:
       - refit-network
 
