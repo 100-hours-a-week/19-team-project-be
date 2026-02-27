@@ -56,6 +56,7 @@ run_after_install() {
 
   # application-secret.yml 파일 설정
   if [ -f "$SECRET_CFG_SRC" ]; then
+    [ -d "$SECRET_CFG_DST" ] && rm -rf "$SECRET_CFG_DST"
     cp "$SECRET_CFG_SRC" "$SECRET_CFG_DST"
     chown root:docker "$SECRET_CFG_DST"
     chmod 640 "$SECRET_CFG_DST"
@@ -104,7 +105,7 @@ run_application_start() {
 
 run_validate_service() {
   log_info "ValidateService 시작"
-  local retries=18 delay=10
+  local retries=24 delay=5
   for i in $(seq 1 "$retries"); do
     status=$(curl -s -m 5 -o /dev/null -w "%{http_code}" "http://localhost:8080/actuator/health" 2>/dev/null) || true
     [ "$status" = "200" ] && { log_ok "서비스 정상"; return 0; }
