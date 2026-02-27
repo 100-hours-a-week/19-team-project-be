@@ -156,6 +156,22 @@ public class NotificationService {
     }
 
     @Transactional
+    public void notifyChatRequestAccepted(User requester, User receiver, Long chatRequestId, Long chatId) {
+        String title = "채팅 요청이 수락되었어요";
+        String content = receiver.getNickname() + "님이 채팅 요청을 수락했습니다.";
+        String type = "CHAT_REQUEST_ACCEPTED";
+        sendNotification(requester, type, title, content);
+    }
+
+    @Transactional
+    public void notifyChatRequestRejected(User requester, User receiver, Long chatRequestId) {
+        String title = "채팅 요청이 거절되었어요";
+        String content = receiver.getNickname() + "님이 채팅 요청을 거절했습니다.";
+        String type = "CHAT_REQUEST_REJECTED";
+        sendNotification(requester, type, title, content);
+    }
+
+    @Transactional
     public void notifyResumeParseCompleted(Long userId, String taskId) {
         userRepository.findById(userId).ifPresent(user -> {
             String title = "이력서 분석이 완료됐어요";
