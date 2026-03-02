@@ -57,27 +57,9 @@ public class AuthService {
         CareerLevel careerLevel = getCareerLevel(signUpDto.careerLevelId());
 
         if (existing != null && existing.isDeleted()) {
-            existing.restoreActive();
-            existing.updateUserType(signUpDto.userType());
-            existing.updateCareerLevel(careerLevel);
-            existing.updateProfile(signUpDto.email(), signUpDto.nickname());
-            existing.updateIntroduction(signUpDto.introduction());
-            existing.updateTermsAgreed(signUpDto.termsAgreed());
-            existing.clearProfileImageUrl();
-
-            mapJobs(existing, signUpDto.jobIds());
-            mapSkills(existing, signUpDto.skills());
-
-            if (existing.getUserType() != UserType.EXPERT) {
-                if (existing.getExpertProfile() != null) {
-                    expertProfileRepository.deleteById(existing.getId());
-                    existing.clearExpertProfile();
-                }
-            } else {
-                createExpertProfileIfNeeded(existing, signUpDto);
-            }
-            refreshMentorEmbeddingIfNeeded(existing);
-            return existing;
+            // 신규가입 선택 시에는 탈퇴 계정과 OAuth 연결을 분리해 기존 ID 재사용을 방지한다.
+            existing.detachOAuthIdentity(buildDetachedOauthId(existing.getId()));
+            userRepository.saveAndFlush(existing);
         }
 
         User user = userRepository.save(createUser(signUpDto, careerLevel));
@@ -87,6 +69,10 @@ public class AuthService {
         createExpertProfileIfNeeded(user, signUpDto);
         refreshMentorEmbeddingIfNeeded(user);
         return user;
+    }
+
+    private String buildDetachedOauthId(Long userId) {
+        return "deleted_" + userId + "_" + System.currentTimeMillis();
     }
 
     @Transactional
