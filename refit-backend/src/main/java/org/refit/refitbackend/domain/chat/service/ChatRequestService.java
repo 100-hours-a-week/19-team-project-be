@@ -43,13 +43,14 @@ public class ChatRequestService {
         if (requesterId.equals(request.receiverId())) {
             throw new CustomException(ExceptionType.INVALID_REQUEST);
         }
+        ChatRequestType requestType = parseRequestType(request.requestType());
+
         if (chatRequestRepository.existsByRequesterIdAndReceiverIdAndStatus(
                 requesterId, request.receiverId(), ChatRequestStatus.PENDING
         )) {
             throw new CustomException(ExceptionType.CHAT_REQUEST_ALREADY_EXISTS);
         }
 
-        ChatRequestType requestType = parseRequestType(request.requestType());
         validateRequestPayload(requestType, request.resumeId(), request.jobPostUrl());
         validateResumeOwnership(requesterId, request.resumeId());
 
@@ -124,8 +125,19 @@ public class ChatRequestService {
                     .build());
             chatRequest.accept();
             chatId = room.getId();
+            notificationService.notifyChatRequestAccepted(
+                    chatRequest.getRequester(),
+                    chatRequest.getReceiver(),
+                    chatRequest.getId(),
+                    chatId
+            );
         } else {
             chatRequest.reject();
+            notificationService.notifyChatRequestRejected(
+                    chatRequest.getRequester(),
+                    chatRequest.getReceiver(),
+                    chatRequest.getId()
+            );
         }
 
         return new ChatRes.RespondRequestResult(chatRequest.getId(), chatRequest.getStatus().name(), chatId);
