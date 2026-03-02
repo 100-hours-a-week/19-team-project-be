@@ -87,6 +87,9 @@ public class ChatRes {
             @Schema(description = "이력서 ID", example = "1")
             Long resumeId,
 
+            @Schema(description = "리포트 생성 여부", example = "true")
+            Boolean hasReport,
+
             @Schema(description = "이력서 정보")
             ResumeInfo resume,
 
@@ -107,12 +110,13 @@ public class ChatRes {
             @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
             LocalDateTime closedAt
     ) {
-        public static RoomDetail from(ChatRoom room, ResumeInfo resume, String requestType) {
+        public static RoomDetail from(ChatRoom room, ResumeInfo resume, String requestType, boolean hasReport) {
             return new RoomDetail(
                     room.getId(),
                     UserInfo.from(room.getRequester()),
                     UserInfo.from(room.getReceiver()),
                     room.getResumeId(),
+                    hasReport,
                     resume,
                     room.getJobPostUrl(),
                     requestType,
