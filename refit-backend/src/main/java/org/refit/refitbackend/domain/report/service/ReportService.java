@@ -558,9 +558,21 @@ public class ReportService {
     }
 
     @Transactional
-    public void markAsyncGenerateReportFailedFromDlq(String taskId, Long reportId, String reasonCode) {
+    public void markAsyncGenerateReportFailedFromDlq(String taskId, Long userId, Long reportId, String reasonCode) {
         Task task = taskRepository.findById(taskId).orElse(null);
-        if (task != null && task.getStatus() == TaskStatus.PROCESSING) {
+        if (task == null) {
+            Task failedTask = Task.builder()
+                    .id(taskId)
+                    .userId(userId)
+                    .type(TaskType.REPORT_GENERATION)
+                    .status(TaskStatus.FAILED)
+                    .progress(0)
+                    .targetType(TaskTargetType.REPORT)
+                    .targetId(reportId)
+                    .build();
+            failedTask.markFailed(reasonCode);
+            taskRepository.save(failedTask);
+        } else if (task.getStatus() == TaskStatus.PROCESSING) {
             task.markFailed(reasonCode);
             taskRepository.save(task);
         }
