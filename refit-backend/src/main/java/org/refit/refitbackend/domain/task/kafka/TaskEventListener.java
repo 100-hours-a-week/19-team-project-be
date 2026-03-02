@@ -62,7 +62,7 @@ public class TaskEventListener {
         String reasonCode = resolveReportDlqReasonCode(headers);
         log.error("Kafka DLQ consumed report generate request. reportId={}, userId={}, reasonCode={}",
                 event.reportId(), event.userId(), reasonCode);
-        reportService.markAsyncGenerateReportFailedFromDlq(event.taskId(), event.reportId(), reasonCode);
+        reportService.markAsyncGenerateReportFailedFromDlq(event.taskId(), event.userId(), event.reportId(), reasonCode);
     }
 
     private String resolveResumeDlqReasonCode(Map<String, Object> headers) {

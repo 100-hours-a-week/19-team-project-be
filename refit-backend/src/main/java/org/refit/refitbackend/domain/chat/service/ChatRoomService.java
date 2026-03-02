@@ -11,6 +11,8 @@ import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.report.entity.enums.ReportStatus;
+import org.refit.refitbackend.domain.report.repository.ReportRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
 import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
 import org.refit.refitbackend.domain.storage.dto.StorageReq;
@@ -42,6 +44,7 @@ public class ChatRoomService {
     private final ChatRequestRepository chatRequestRepository;
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
+    private final ReportRepository reportRepository;
     private final StorageService storageService;
     private final ObjectMapper objectMapper;
 
@@ -192,7 +195,12 @@ public class ChatRoomService {
                     .orElse(null);
         }
 
-        return ChatRes.RoomDetail.from(room, resumeInfo, requestType);
+        boolean hasReport = reportRepository.existsByChatRoomIdAndStatusIn(
+                room.getId(),
+                List.of(ReportStatus.PROCESSING, ReportStatus.COMPLETED, ReportStatus.FAILED)
+        );
+
+        return ChatRes.RoomDetail.from(room, resumeInfo, requestType, hasReport);
     }
 
     /**

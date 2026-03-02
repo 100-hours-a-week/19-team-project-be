@@ -170,6 +170,10 @@ public class User extends BaseEntity {
         this.status = UserStatus.ACTIVE;
     }
 
+    public void detachOAuthIdentity(String detachedOauthId) {
+        this.oauthId = detachedOauthId;
+    }
+
     public void replaceUserJobs(List<UserJob> jobs) {
         this.userJobs.clear();
         if (jobs != null) {
