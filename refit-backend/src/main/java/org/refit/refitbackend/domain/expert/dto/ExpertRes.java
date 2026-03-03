@@ -1,6 +1,7 @@
 package org.refit.refitbackend.domain.expert.dto;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
 import com.fasterxml.jackson.databind.annotation.JsonNaming;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -130,27 +131,38 @@ public class ExpertRes {
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RecommendationItem(
+            @JsonProperty("user_id")
             Long userId,
             String nickname,
+            @JsonProperty("company_name")
             String companyName,
             boolean verified,
+            @JsonProperty("rating_avg")
             Double ratingAvg,
+            @JsonProperty("rating_count")
             Integer ratingCount,
+            @JsonProperty("response_rate")
             Double responseRate,
             List<String> skills,
             List<String> jobs,
             String introduction,
+            @JsonProperty("similarity_score")
             Double similarityScore,
+            @JsonProperty("filter_type")
             String filterType,
+            @JsonProperty("ground_truth")
             String groundTruth,
+            @JsonProperty("last_active_at")
             @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
             LocalDateTime lastActiveAt
     ) {}
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record RecommendationResponse(
+            @JsonProperty("user_id")
             Long userId,
             List<RecommendationItem> recommendations,
+            @JsonProperty("total_count")
             Integer totalCount,
             Object evaluation
     ) {}
@@ -158,6 +170,7 @@ public class ExpertRes {
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record MentorEmbeddingUpdateResponse(
             boolean success,
+            @JsonProperty("user_id")
             Long userId,
             String message
     ) {}
