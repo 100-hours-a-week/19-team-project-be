@@ -10,6 +10,8 @@ import org.refit.refitbackend.domain.chat.repository.ChatFeedbackAnswerRepositor
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.jobposting.entity.JobPost;
+import org.refit.refitbackend.domain.jobposting.repository.JobPostRepository;
 import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.report.dto.ReportReq;
 import org.refit.refitbackend.domain.report.dto.ReportRes;
@@ -46,6 +48,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDateTime;
 
 @Service
 @Slf4j
@@ -59,6 +64,7 @@ public class ReportService {
     private final ChatFeedbackRepository chatFeedbackRepository;
     private final ChatFeedbackAnswerRepository chatFeedbackAnswerRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final JobPostRepository jobPostRepository;
     private final UserSkillRepository userSkillRepository;
     private final NotificationService notificationService;
     private final ObjectProvider<TaskEventPublisher> taskEventPublisherProvider;
@@ -310,8 +316,11 @@ public class ReportService {
 
     private Long requestJobPostParse(String jobPostUrl) {
         String normalizedUrl = normalizeJobPostUrl(jobPostUrl);
+        String source = detectSource(normalizedUrl);
         Map<String, Object> payload = buildJobPostParsePayload(normalizedUrl);
-        return requestJobPostParseFromEndpoint("/repo/job-post", payload);
+        Long jobPostId = requestJobPostParseFromEndpoint("/repo/job-post", payload);
+        mirrorJobPost(normalizedUrl, source, jobPostId);
+        return jobPostId;
     }
 
     private Map<String, Object> buildJobPostParsePayload(String jobPostUrl) {
@@ -361,6 +370,93 @@ public class ReportService {
         return null;
     }
 
+    private void mirrorJobPost(String url, String source, Long sourceJobId) {
+        if (url == null || url.isBlank() || sourceJobId == null) {
+            return;
+        }
+        try {
+            String resolvedSource = (source == null || source.isBlank()) ? "unknown" : source;
+            String resolvedSourceJobId = String.valueOf(sourceJobId);
+            String urlHash = sha256(url);
+
+            JobPost jobPost = jobPostRepository.findBySourceAndSourceJobId(resolvedSource, resolvedSourceJobId)
+                    .orElseGet(() -> jobPostRepository.findByUrlHash(urlHash).orElse(null));
+
+            if (jobPost == null) {
+                jobPostRepository.save(JobPost.builder()
+                        .source(resolvedSource)
+                        .sourceJobId(resolvedSourceJobId)
+                        .url(url)
+                        .urlHash(urlHash)
+                        .title("채용 공고")
+                        .company("알 수 없음")
+                        .department(null)
+                        .location(null)
+                        .employmentType(null)
+                        .experienceRequired(null)
+                        .educationRequired(null)
+                        .techStack("[]")
+                        .requirements("[]")
+                        .preferences("[]")
+                        .responsibilities("[]")
+                        .descriptionRaw(null)
+                        .descriptionClean(null)
+                        .postedAt(null)
+                        .deadlineAt(null)
+                        .isActive(true)
+                        .crawledAt(LocalDateTime.now())
+                        .build());
+                return;
+            }
+
+            jobPost.updateFromCrawler(
+                    defaultIfBlank(jobPost.getTitle(), "채용 공고"),
+                    defaultIfBlank(jobPost.getCompany(), "알 수 없음"),
+                    jobPost.getDepartment(),
+                    jobPost.getEmploymentType(),
+                    jobPost.getExperienceRequired(),
+                    jobPost.getEducationRequired(),
+                    defaultJson(jobPost.getRequirements()),
+                    defaultJson(jobPost.getPreferences()),
+                    defaultJson(jobPost.getTechStack()),
+                    defaultJson(jobPost.getResponsibilities()),
+                    jobPost.getDescriptionRaw()
+            );
+            jobPostRepository.save(jobPost);
+        } catch (Exception e) {
+            log.warn("[REPORT_ASYNC] job-post mirror save failed. source={}, sourceJobId={}, url={}",
+                    source, sourceJobId, url, e);
+        }
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
+    }
+
+    private String defaultJson(String value) {
+        if (value == null || value.isBlank()) {
+            return "[]";
+        }
+        return value;
+    }
+
+    private String sha256(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     private Long requestJobPostParseFromEndpoint(String path, Map<String, Object> payload) {
         String endpoint = UriComponentsBuilder.fromUriString(aiBaseUrl)
                 .path(path)
@@ -374,6 +470,9 @@ public class ReportService {
         } catch (HttpStatusCodeException e) {
             log.warn("AI job-post parse request failed. status={}, payload={}, response={}",
                     e.getStatusCode(), payload, e.getResponseBodyAsString());
+            if (e.getStatusCode().value() == 422) {
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         } catch (Exception e) {
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
