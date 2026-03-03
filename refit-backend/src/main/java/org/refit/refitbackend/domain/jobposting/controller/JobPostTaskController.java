@@ -7,6 +7,7 @@ import org.refit.refitbackend.domain.jobposting.dto.JobPostTaskReq;
 import org.refit.refitbackend.domain.jobposting.dto.JobPostTaskRes;
 import org.refit.refitbackend.domain.jobposting.service.JobPostTaskService;
 import org.refit.refitbackend.global.response.ApiResponse;
+import org.refit.refitbackend.global.swagger.spec.jobposting.JobPostTaskV2SwaggerSpec;
 import org.refit.refitbackend.global.util.ResponseUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -30,6 +31,15 @@ public class JobPostTaskController {
             @Valid @RequestBody JobPostTaskReq.CreateTask request
     ) {
         return ResponseUtil.created("task_created", jobPostTaskService.createTask(principal.getUserId(), request));
+    }
+
+    @JobPostTaskV2SwaggerSpec.ValidateCrawlV2
+    @PostMapping("/validate")
+    public ResponseEntity<ApiResponse<JobPostTaskRes.CrawlValidation>> validateCrawl(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @Valid @RequestBody JobPostTaskReq.ValidateCrawl request
+    ) {
+        return ResponseUtil.ok("success", jobPostTaskService.validateCrawl(principal.getUserId(), request));
     }
 
     @GetMapping("/tasks/{task_id}")
