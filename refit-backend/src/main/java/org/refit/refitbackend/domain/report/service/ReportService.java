@@ -112,18 +112,18 @@ public class ReportService {
                 report.markFailed();
                 task.markFailed("KAFKA_DISABLED");
                 taskRepository.save(task);
-                throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+                log.error("[REPORT_ASYNC] publisher unavailable. reportId={}, taskId={}", report.getId(), task.getId());
+                return new ReportRes.ReportId(report.getId());
             }
             publisher.publishReportGenerateRequested(
                     new ReportGenerateRequestedEvent(task.getId(), userId, report.getId(), room.getId())
             );
-        } catch (CustomException e) {
-            throw e;
         } catch (Exception e) {
             report.markFailed();
             task.markFailed("KAFKA_PUBLISH_FAILED");
             taskRepository.save(task);
-            throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+            log.error("[REPORT_ASYNC] publish failed. reportId={}, taskId={}", report.getId(), task.getId(), e);
+            return new ReportRes.ReportId(report.getId());
         }
 
         return new ReportRes.ReportId(report.getId());
@@ -152,13 +152,7 @@ public class ReportService {
 
         ChatFeedback feedback = chatFeedbackRepository.findDetailByChatRoomId(room.getId())
                 .orElseThrow(() -> new CustomException(ExceptionType.FEEDBACK_ANSWER_MISSING));
-        List<ChatFeedbackAnswer> feedbackAnswers =
-                chatFeedbackAnswerRepository.findByChatFeedbackIdOrderByQuestion(feedback.getId());
-
-        Long jobPostId = requestJobPostParse(jobPostUrl);
-        Map<String, Object> aiResultJson = requestReportGenerate(resumeId, jobPostId, room.getId(), feedbackAnswers, userId);
-
-        reportRepository.save(Report.builder()
+        Report report = reportRepository.save(Report.builder()
                 .userId(userId)
                 .expertId(room.getReceiver().getId())
                 .chatRoomId(room.getId())
@@ -166,10 +160,30 @@ public class ReportService {
                 .chatRequestId(chatRequestId)
                 .resumeId(resumeId)
                 .title("AI 리포트")
-                .status(ReportStatus.COMPLETED)
-                .resultJson(aiResultJson)
+                .status(ReportStatus.PROCESSING)
                 .jobPostUrl(jobPostUrl)
                 .build());
+        Task task = createReportTask(userId, report.getId());
+
+        try {
+            TaskEventPublisher publisher = taskEventPublisherProvider.getIfAvailable();
+            if (publisher == null) {
+                report.markFailed();
+                task.markFailed("KAFKA_DISABLED");
+                taskRepository.save(task);
+                log.error("[REPORT_ASYNC] auto publish skipped. publisher unavailable. reportId={}, taskId={}",
+                        report.getId(), task.getId());
+                return;
+            }
+            publisher.publishReportGenerateRequested(
+                    new ReportGenerateRequestedEvent(task.getId(), userId, report.getId(), room.getId())
+            );
+        } catch (Exception e) {
+            report.markFailed();
+            task.markFailed("KAFKA_PUBLISH_FAILED");
+            taskRepository.save(task);
+            log.error("[REPORT_ASYNC] auto publish failed. reportId={}, taskId={}", report.getId(), task.getId(), e);
+        }
     }
 
     public ReportRes.ReportListResponse listMyReports(Long userId) {
