@@ -302,7 +302,7 @@ public class ReportService {
             );
             report.markCompleted(aiResultJson);
             task.markCompleted(toJson(Map.of("report_id", report.getId())));
-            notifyReportCompletedSafely(report.getUserId(), report.getId());
+            notifyReportCompletedSafely(report.getUserId());
         } catch (CustomException e) {
             if (isReportAsyncRetryable(e)) {
                 log.warn("[REPORT_ASYNC] retryable failure. reportId={}, code={}",
@@ -311,7 +311,7 @@ public class ReportService {
             }
             report.markFailed();
             task.markFailed(e.getExceptionType().getCode());
-            notifyReportFailedSafely(report.getUserId(), report.getId());
+            notifyReportFailedSafely(report.getUserId(), e.getExceptionType().getCode());
         } catch (Exception e) {
             log.error("[REPORT_ASYNC] retryable unexpected failure. reportId={}", report.getId(), e);
             throw new RuntimeException(e);
@@ -771,22 +771,22 @@ public class ReportService {
             return;
         }
         report.markFailed();
-        notifyReportFailedSafely(report.getUserId(), report.getId());
+        notifyReportFailedSafely(report.getUserId(), reasonCode);
     }
 
-    private void notifyReportCompletedSafely(Long userId, Long reportId) {
+    private void notifyReportCompletedSafely(Long userId) {
         try {
-            notificationService.notifyReportGenerateCompleted(userId, reportId);
+            notificationService.notifyReportGenerateCompleted(userId);
         } catch (Exception e) {
-            log.warn("[REPORT] completion notification failed. reportId={}", reportId, e);
+            log.warn("[REPORT] completion notification failed. userId={}", userId, e);
         }
     }
 
-    private void notifyReportFailedSafely(Long userId, Long reportId) {
+    private void notifyReportFailedSafely(Long userId, String reasonCode) {
         try {
-            notificationService.notifyReportGenerateFailed(userId, reportId);
+            notificationService.notifyReportGenerateFailed(userId, reasonCode);
         } catch (Exception e) {
-            log.warn("[REPORT] failure notification failed. reportId={}", reportId, e);
+            log.warn("[REPORT] failure notification failed. userId={}, reasonCode={}", userId, reasonCode, e);
         }
     }
 

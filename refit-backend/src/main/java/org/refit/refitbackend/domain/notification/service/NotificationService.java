@@ -190,21 +190,33 @@ public class NotificationService {
     }
 
     @Transactional
-    public void notifyReportGenerateCompleted(Long userId, Long reportId) {
+    public void notifyReportGenerateCompleted(Long userId) {
         userRepository.findById(userId).ifPresent(user -> {
             String title = "AI 리포트 생성이 완료됐어요";
-            String content = "리포트가 준비되었습니다. (report_id: " + reportId + ")";
+            String content = "리포트가 준비되었습니다.";
             sendNotification(user, "REPORT_GENERATE_COMPLETED", title, content);
         });
     }
 
     @Transactional
-    public void notifyReportGenerateFailed(Long userId, Long reportId) {
+    public void notifyReportGenerateFailed(Long userId, String reasonCode) {
         userRepository.findById(userId).ifPresent(user -> {
             String title = "AI 리포트 생성에 실패했어요";
-            String content = "잠시 후 다시 시도해주세요. (report_id: " + reportId + ")";
+            String content = "요청을 처리하지 못했어요. " + toKoreanReason(reasonCode) + " 잠시 후 다시 시도해 주세요.";
             sendNotification(user, "REPORT_GENERATE_FAILED", title, content);
         });
+    }
+
+    private String toKoreanReason(String reasonCode) {
+        if (reasonCode == null || reasonCode.isBlank()) {
+            return "일시적인 오류가 발생했습니다.";
+        }
+        return switch (reasonCode) {
+            case "JOB_POST_PARSE_FAILED" -> "채용 공고 내용을 읽지 못했습니다.";
+            case "AI_SERVER_ERROR", "INTERNAL_SERVER_ERROR" -> "분석 서버 연결이 원활하지 않았습니다.";
+            case "KAFKA_DISABLED", "KAFKA_PUBLISH_FAILED" -> "요청 접수 처리 중 문제가 발생했습니다.";
+            default -> "일시적인 오류가 발생했습니다.";
+        };
     }
 
     private User getActiveUser(Long userId) {
