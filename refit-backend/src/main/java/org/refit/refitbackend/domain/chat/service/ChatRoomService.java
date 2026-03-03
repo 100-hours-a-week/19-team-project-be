@@ -197,7 +197,7 @@ public class ChatRoomService {
 
         boolean hasReport = reportRepository.existsByChatRoomIdAndStatusIn(
                 room.getId(),
-                List.of(ReportStatus.PROCESSING, ReportStatus.COMPLETED, ReportStatus.FAILED)
+                List.of(ReportStatus.PROCESSING, ReportStatus.COMPLETED)
         );
 
         return ChatRes.RoomDetail.from(room, resumeInfo, requestType, hasReport);
