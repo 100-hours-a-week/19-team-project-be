@@ -16,11 +16,21 @@ import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.util.UriComponentsBuilder;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +42,10 @@ public class ChatRequestService {
     private final UserRepository userRepository;
     private final ResumeRepository resumeRepository;
     private final NotificationService notificationService;
+    private final RestTemplate restTemplate;
+
+    @Value("${ai.base-url:https://dev.re-fit.kr/api/ai}")
+    private String aiBaseUrl;
 
     @Transactional
     public ChatRes.ChatRequestId createRequest(Long requesterId, ChatReq.CreateRequestV2 request) {
@@ -53,6 +67,7 @@ public class ChatRequestService {
 
         validateRequestPayload(requestType, request.resumeId(), request.jobPostUrl());
         validateResumeOwnership(requesterId, request.resumeId());
+        validateJobPostCrawlable(requestType, request.jobPostUrl());
 
         ChatRequest saved = chatRequestRepository.save(ChatRequest.builder()
                 .requester(requester)
@@ -192,6 +207,78 @@ public class ChatRequestService {
     private boolean isValidHttpUrl(String url) {
         String normalized = url.trim().toLowerCase();
         return normalized.startsWith("http://") || normalized.startsWith("https://");
+    }
+
+    private void validateJobPostCrawlable(ChatRequestType requestType, String jobPostUrl) {
+        if (requestType != ChatRequestType.FEEDBACK) {
+            return;
+        }
+
+        String normalizedUrl = jobPostUrl.trim();
+        String endpoint = UriComponentsBuilder.fromUriString(aiBaseUrl)
+                .path("/repo/job-post")
+                .toUriString();
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("source", detectSource(normalizedUrl));
+        payload.put("job_url", normalizedUrl);
+        payload.put("job_post_url", normalizedUrl);
+
+        try {
+            HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload);
+            ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
+                    endpoint, HttpMethod.POST, entity, new ParameterizedTypeReference<>() {}
+            );
+
+            Map<String, Object> body = response.getBody();
+            if (!isValidCrawlResponse(body)) {
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
+        } catch (HttpStatusCodeException e) {
+            if (e.getStatusCode().value() == 422) {
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
+            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        } catch (CustomException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        }
+    }
+
+    private boolean isValidCrawlResponse(Map<String, Object> body) {
+        if (body == null || !"OK".equals(String.valueOf(body.get("code")))) {
+            return false;
+        }
+        Object dataObj = body.get("data");
+        if (!(dataObj instanceof Map<?, ?> data)) {
+            return false;
+        }
+
+        // 200이어도 실질적으로 빈 파싱 결과면 실패로 간주한다.
+        boolean hasTitle = hasText(data.get("title"));
+        boolean hasCompany = hasText(data.get("company"));
+        boolean hasRequirements = hasNonEmptyList(data.get("requirements"));
+        boolean hasResponsibilities = hasNonEmptyList(data.get("responsibilities"));
+
+        return (hasTitle && hasCompany) || hasRequirements || hasResponsibilities;
+    }
+
+    private boolean hasText(Object value) {
+        return value != null && !String.valueOf(value).trim().isBlank();
+    }
+
+    private boolean hasNonEmptyList(Object value) {
+        return value instanceof List<?> list && !list.isEmpty();
+    }
+
+    private String detectSource(String url) {
+        String lower = url.toLowerCase();
+        if (lower.contains("wanted.co.kr")) return "wanted";
+        if (lower.contains("saramin.co.kr")) return "saramin";
+        if (lower.contains("jobkorea.co.kr")) return "jobkorea";
+        if (lower.contains("jumpit.saramin.co.kr")) return "jumpit";
+        return "unknown";
     }
 
     private ChatRequestStatus parseOptionalRequestStatus(String status) {
