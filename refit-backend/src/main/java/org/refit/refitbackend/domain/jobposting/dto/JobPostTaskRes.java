@@ -19,4 +19,16 @@ public class JobPostTaskRes {
             String company,
             String employmentType
     ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record CrawlValidation(
+            boolean crawlable,
+            String source,
+            Integer httpStatus,
+            String reasonCode,
+            String message,
+            Long jobPostId,
+            String title,
+            String company
+    ) {}
 }

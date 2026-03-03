@@ -20,6 +20,12 @@ public class JobPostTaskReq {
     ) {}
 
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ValidateCrawl(
+            @NotBlank(message = "요청 URL이 필요합니다.")
+            String url
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
     public record CompleteTask(
             @NotNull(message = "결과 데이터가 필요합니다.")
             @Valid

@@ -4,6 +4,9 @@ import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.jobposting.dto.JobPostTaskReq;
 import org.refit.refitbackend.domain.jobposting.dto.JobPostTaskRes;
 import org.refit.refitbackend.domain.jobposting.entity.JobPost;
+import org.refit.refitbackend.domain.jobposting.entity.JobPostCrawlLog;
+import org.refit.refitbackend.domain.jobposting.entity.enums.CrawlStatus;
+import org.refit.refitbackend.domain.jobposting.repository.JobPostCrawlLogRepository;
 import org.refit.refitbackend.domain.jobposting.repository.JobPostRepository;
 import org.refit.refitbackend.domain.task.entity.Task;
 import org.refit.refitbackend.domain.task.entity.enums.TaskStatus;
@@ -41,6 +44,7 @@ public class JobPostTaskService {
     private final RestTemplate restTemplate;
     private final TaskRepository taskRepository;
     private final JobPostRepository jobPostRepository;
+    private final JobPostCrawlLogRepository jobPostCrawlLogRepository;
     private final ObjectMapper objectMapper;
 
     @Value("${ai.base-url:https://dev.re-fit.kr/api/ai}")
@@ -112,6 +116,36 @@ public class JobPostTaskService {
         );
     }
 
+    @Transactional
+    public JobPostTaskRes.CrawlValidation validateCrawl(Long userId, JobPostTaskReq.ValidateCrawl request) {
+        String source = detectSource(request.url());
+        try {
+            JobPostTaskReq.ParsedData parsed = requestCrawler(request.url(), source);
+            boolean meaningful = isMeaningfulParsedData(parsed);
+            if (!meaningful) {
+                return new JobPostTaskRes.CrawlValidation(
+                        false, source, 200, ExceptionType.JOB_POST_PARSE_FAILED.getCode(),
+                        "크롤링 결과가 비어 있습니다.", parsed.jobPostId(), parsed.title(), parsed.company()
+                );
+            }
+            return new JobPostTaskRes.CrawlValidation(
+                    true, source, 200, null, "크롤링 가능",
+                    parsed.jobPostId(), parsed.title(), parsed.company()
+            );
+        } catch (CustomException e) {
+            if (e.getExceptionType() == ExceptionType.JOB_POST_PARSE_FAILED) {
+                return new JobPostTaskRes.CrawlValidation(
+                        false, source, 422, e.getExceptionType().getCode(), e.getExceptionType().getMessage(),
+                        null, null, null
+                );
+            }
+            return new JobPostTaskRes.CrawlValidation(
+                    false, source, 500, ExceptionType.AI_SERVER_ERROR.getCode(), ExceptionType.AI_SERVER_ERROR.getMessage(),
+                    null, null, null
+            );
+        }
+    }
+
     private String extractSourceFromPayload(String payload) {
         try {
             return objectMapper.readTree(payload).path("source").asText();
@@ -147,6 +181,13 @@ public class JobPostTaskService {
     }
 
     private JobPostTaskReq.ParsedData requestCrawler(String url, String source) {
+        String resolvedSource = (source == null || source.isBlank()) ? detectSource(url) : source;
+        JobPostCrawlLog crawlLog = jobPostCrawlLogRepository.save(JobPostCrawlLog.builder()
+                .source(resolvedSource == null || resolvedSource.isBlank() ? "unknown" : resolvedSource)
+                .targetUrl(url)
+                .status(CrawlStatus.FAILED)
+                .startedAt(LocalDateTime.now())
+                .build());
         try {
             String endpoint = UriComponentsBuilder
                     .fromUriString(aiBaseUrl)
@@ -154,6 +195,7 @@ public class JobPostTaskService {
                     .toUriString();
 
             Map<String, Object> payload = new HashMap<>();
+            payload.put("job_url", url);
             payload.put("job_post_url", url);
             if (source != null && !source.isBlank()) {
                 payload.put("source", source);
@@ -169,23 +211,29 @@ public class JobPostTaskService {
 
             Map<String, Object> body = response.getBody();
             if (body == null) {
+                crawlLog.markFailed(500, "AI body is null");
+                jobPostCrawlLogRepository.save(crawlLog);
                 throw new CustomException(ExceptionType.AI_SERVER_ERROR);
             }
             Object code = body.get("code");
             if (code == null || !"OK".equals(code.toString())) {
+                crawlLog.markFailed(500, "AI code is not OK");
+                jobPostCrawlLogRepository.save(crawlLog);
                 throw new CustomException(ExceptionType.AI_SERVER_ERROR);
             }
             Object data = body.get("data");
             if (!(data instanceof Map<?, ?> dataMapRaw)) {
+                crawlLog.markFailed(500, "AI data is invalid");
+                jobPostCrawlLogRepository.save(crawlLog);
                 throw new CustomException(ExceptionType.AI_SERVER_ERROR);
             }
 
             @SuppressWarnings("unchecked")
             Map<String, Object> dataMap = (Map<String, Object>) dataMapRaw;
-            return new JobPostTaskReq.ParsedData(
+            JobPostTaskReq.ParsedData parsed = new JobPostTaskReq.ParsedData(
                     extractJobPostId(dataMap),
-                    toText(dataMap.get("title")),
-                    toText(dataMap.get("company")),
+                    nullableText(dataMap.get("title")),
+                    nullableText(dataMap.get("company")),
                     nullableText(dataMap.get("department")),
                     nullableText(dataMap.get("employment_type")),
                     nullableText(dataMap.get("experience_required")),
@@ -195,19 +243,60 @@ public class JobPostTaskService {
                     toStringList(dataMap.get("tech_stack")),
                     toStringList(dataMap.get("responsibilities"))
             );
+
+            if (!isMeaningfulParsedData(parsed)) {
+                crawlLog.markFailed(422, "JOB_POST_PARSE_FAILED");
+                jobPostCrawlLogRepository.save(crawlLog);
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
+
+            crawlLog.markSuccess(response.getStatusCode().value());
+            jobPostCrawlLogRepository.save(crawlLog);
+            return parsed;
         } catch (HttpStatusCodeException e) {
+            crawlLog.markFailed(e.getStatusCode().value(), e.getResponseBodyAsString());
+            jobPostCrawlLogRepository.save(crawlLog);
+            if (e.getStatusCode().value() == 422) {
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         } catch (CustomException e) {
+            if (crawlLog.getFinishedAt() == null) {
+                crawlLog.markFailed(500, e.getExceptionType().getCode());
+                jobPostCrawlLogRepository.save(crawlLog);
+            }
             throw e;
         } catch (Exception e) {
+            crawlLog.markFailed(500, e.getMessage());
+            jobPostCrawlLogRepository.save(crawlLog);
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
+    }
+
+    private boolean isMeaningfulParsedData(JobPostTaskReq.ParsedData parsed) {
+        boolean hasTitleCompany = parsed.title() != null && !parsed.title().isBlank()
+                && parsed.company() != null && !parsed.company().isBlank();
+        boolean hasRequirements = parsed.requirements() != null && !parsed.requirements().isEmpty();
+        boolean hasResponsibilities = parsed.responsibilities() != null && !parsed.responsibilities().isEmpty();
+        return hasTitleCompany || hasRequirements || hasResponsibilities;
+    }
+
+    private String detectSource(String url) {
+        if (url == null) return "unknown";
+        String lower = url.toLowerCase();
+        if (lower.contains("saramin")) return "saramin";
+        if (lower.contains("jobkorea")) return "jobkorea";
+        if (lower.contains("wanted")) return "wanted";
+        if (lower.contains("jumpit")) return "jumpit";
+        return "unknown";
     }
 
     private Long upsertJobPostAndCompleteTask(Task task, JobPostTaskReq.ParsedData parsed) {
         String source = extractSourceFromPayload(task.getPayload());
         String url = extractUrlFromPayload(task.getPayload());
         String sourceJobId = String.valueOf(parsed.jobPostId());
+        String resolvedTitle = parsed.title() == null || parsed.title().isBlank() ? "채용 공고" : parsed.title();
+        String resolvedCompany = parsed.company() == null || parsed.company().isBlank() ? "알 수 없음" : parsed.company();
 
         JobPost jobPost = jobPostRepository.findBySourceAndSourceJobId(source, sourceJobId)
                 .orElseGet(() -> JobPost.builder()
@@ -215,8 +304,8 @@ public class JobPostTaskService {
                         .sourceJobId(sourceJobId)
                         .url(url)
                         .urlHash(sha256(url))
-                        .title(parsed.title())
-                        .company(parsed.company())
+                        .title(resolvedTitle)
+                        .company(resolvedCompany)
                         .department(parsed.department())
                         .employmentType(parsed.employmentType())
                         .experienceRequired(parsed.experienceRequired())
@@ -235,8 +324,8 @@ public class JobPostTaskService {
 
         if (jobPost.getId() != null) {
             jobPost.updateFromCrawler(
-                    parsed.title(),
-                    parsed.company(),
+                    resolvedTitle,
+                    resolvedCompany,
                     parsed.department(),
                     parsed.employmentType(),
                     parsed.experienceRequired(),
@@ -281,19 +370,10 @@ public class JobPostTaskService {
         }
     }
 
-    private String toText(Object value) {
-        if (value == null) {
-            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
-        }
-        String text = value.toString();
-        if (text.isBlank()) {
-            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
-        }
-        return text;
-    }
-
     private String nullableText(Object value) {
-        return value == null ? null : value.toString();
+        if (value == null) return null;
+        String text = value.toString().trim();
+        return text.isBlank() ? null : text;
     }
 
     private List<String> toStringList(Object value) {

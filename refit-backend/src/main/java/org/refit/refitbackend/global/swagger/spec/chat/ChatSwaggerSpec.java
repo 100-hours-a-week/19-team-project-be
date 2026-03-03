@@ -199,7 +199,11 @@ public final class ChatSwaggerSpec {
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
             summary = "V2 채팅 요청 생성",
-            operationDescription = "피드백(FEEDBACK) 또는 커피챗(COFFEE_CHAT) 요청을 생성합니다.",
+            operationDescription = """
+                    피드백(FEEDBACK) 또는 커피챗(COFFEE_CHAT) 요청을 생성합니다.
+                    - FEEDBACK 요청은 공고 URL 크롤링(파싱) 사전 검증 후 생성됩니다.
+                    - 파싱 불가 시 422(JOB_POST_PARSE_FAILED)를 반환합니다.
+                    """,
             responseCode = "201",
             responseDescription = "created",
             implementation = ChatRes.ChatRequestId.class
@@ -210,6 +214,9 @@ public final class ChatSwaggerSpec {
             ExceptionType.CHAT_REQUEST_TYPE_INVALID,
             ExceptionType.CHAT_FEEDBACK_CONTEXT_REQUIRED,
             ExceptionType.CHAT_JOB_POST_URL_INVALID
+    })
+    @SwaggerApiError(responseCode = "422", description = "job_post_parse_failed", types = {
+            ExceptionType.JOB_POST_PARSE_FAILED
     })
     @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
             ExceptionType.AUTH_UNAUTHORIZED,
