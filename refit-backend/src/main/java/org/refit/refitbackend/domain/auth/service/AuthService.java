@@ -23,6 +23,8 @@ import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -67,7 +69,7 @@ public class AuthService {
         mapJobs(user, signUpDto.jobIds());
         mapSkills(user, signUpDto.skills());
         createExpertProfileIfNeeded(user, signUpDto);
-        refreshMentorEmbeddingIfNeeded(user);
+        refreshMentorEmbeddingAfterCommitIfNeeded(user);
         return user;
     }
 
@@ -269,14 +271,24 @@ public class AuthService {
                 .orElseThrow(() -> new CustomException(ExceptionType.CAREER_LEVEL_NOT_FOUND));
     }
 
-    private void refreshMentorEmbeddingIfNeeded(User user) {
+    private void refreshMentorEmbeddingAfterCommitIfNeeded(User user) {
         if (user.getUserType() != UserType.EXPERT) {
             return;
         }
         if (user.getExpertProfile() == null) {
             return;
         }
-        expertService.refreshMentorEmbeddingBestEffort(user.getId());
+        Long userId = user.getId();
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    expertService.refreshMentorEmbeddingBestEffort(userId);
+                }
+            });
+            return;
+        }
+        expertService.refreshMentorEmbeddingBestEffort(userId);
     }
 
 
