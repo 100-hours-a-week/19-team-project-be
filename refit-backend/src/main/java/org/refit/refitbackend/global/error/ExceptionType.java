@@ -186,6 +186,7 @@ public enum ExceptionType {
     REPORT_ALREADY_EXISTS(HttpStatus.CONFLICT, "REPORT_ALREADY_EXISTS", "해당 채팅의 리포트가 이미 존재합니다."),
     REPORT_STATUS_NOT_FAILED(HttpStatus.BAD_REQUEST, "REPORT_STATUS_NOT_FAILED", "실패한 리포트만 재시도할 수 있습니다."),
     REPORT_DELETE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "REPORT_DELETE_NOT_ALLOWED", "현재 상태에서는 리포트를 삭제할 수 없습니다."),
+    JOB_POST_PARSE_FAILED(HttpStatus.UNPROCESSABLE_ENTITY, "JOB_POST_PARSE_FAILED", "채용 공고 파싱에 실패했습니다."),
 
     REPORT_IDS_EMPTY(HttpStatus.BAD_REQUEST, "REPORT_IDS_EMPTY", "리포트 ID가 필요합니다."),
     REPORT_IDS_TOO_MANY(HttpStatus.BAD_REQUEST, "REPORT_IDS_TOO_MANY", "리포트 ID가 너무 많습니다."),

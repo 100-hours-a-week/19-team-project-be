@@ -10,6 +10,11 @@ import org.refit.refitbackend.domain.chat.repository.ChatFeedbackAnswerRepositor
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.jobposting.entity.JobPost;
+import org.refit.refitbackend.domain.jobposting.entity.JobPostCrawlLog;
+import org.refit.refitbackend.domain.jobposting.entity.enums.CrawlStatus;
+import org.refit.refitbackend.domain.jobposting.repository.JobPostCrawlLogRepository;
+import org.refit.refitbackend.domain.jobposting.repository.JobPostRepository;
 import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.report.dto.ReportReq;
 import org.refit.refitbackend.domain.report.dto.ReportRes;
@@ -46,6 +51,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.time.LocalDateTime;
 
 @Service
 @Slf4j
@@ -59,6 +67,8 @@ public class ReportService {
     private final ChatFeedbackRepository chatFeedbackRepository;
     private final ChatFeedbackAnswerRepository chatFeedbackAnswerRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final JobPostRepository jobPostRepository;
+    private final JobPostCrawlLogRepository jobPostCrawlLogRepository;
     private final UserSkillRepository userSkillRepository;
     private final NotificationService notificationService;
     private final ObjectProvider<TaskEventPublisher> taskEventPublisherProvider;
@@ -112,18 +122,18 @@ public class ReportService {
                 report.markFailed();
                 task.markFailed("KAFKA_DISABLED");
                 taskRepository.save(task);
-                throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+                log.error("[REPORT_ASYNC] publisher unavailable. reportId={}, taskId={}", report.getId(), task.getId());
+                return new ReportRes.ReportId(report.getId());
             }
             publisher.publishReportGenerateRequested(
                     new ReportGenerateRequestedEvent(task.getId(), userId, report.getId(), room.getId())
             );
-        } catch (CustomException e) {
-            throw e;
         } catch (Exception e) {
             report.markFailed();
             task.markFailed("KAFKA_PUBLISH_FAILED");
             taskRepository.save(task);
-            throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+            log.error("[REPORT_ASYNC] publish failed. reportId={}, taskId={}", report.getId(), task.getId(), e);
+            return new ReportRes.ReportId(report.getId());
         }
 
         return new ReportRes.ReportId(report.getId());
@@ -152,13 +162,7 @@ public class ReportService {
 
         ChatFeedback feedback = chatFeedbackRepository.findDetailByChatRoomId(room.getId())
                 .orElseThrow(() -> new CustomException(ExceptionType.FEEDBACK_ANSWER_MISSING));
-        List<ChatFeedbackAnswer> feedbackAnswers =
-                chatFeedbackAnswerRepository.findByChatFeedbackIdOrderByQuestion(feedback.getId());
-
-        Long jobPostId = requestJobPostParse(jobPostUrl);
-        Map<String, Object> aiResultJson = requestReportGenerate(resumeId, jobPostId, room.getId(), feedbackAnswers, userId);
-
-        reportRepository.save(Report.builder()
+        Report report = reportRepository.save(Report.builder()
                 .userId(userId)
                 .expertId(room.getReceiver().getId())
                 .chatRoomId(room.getId())
@@ -166,10 +170,30 @@ public class ReportService {
                 .chatRequestId(chatRequestId)
                 .resumeId(resumeId)
                 .title("AI 리포트")
-                .status(ReportStatus.COMPLETED)
-                .resultJson(aiResultJson)
+                .status(ReportStatus.PROCESSING)
                 .jobPostUrl(jobPostUrl)
                 .build());
+        Task task = createReportTask(userId, report.getId());
+
+        try {
+            TaskEventPublisher publisher = taskEventPublisherProvider.getIfAvailable();
+            if (publisher == null) {
+                report.markFailed();
+                task.markFailed("KAFKA_DISABLED");
+                taskRepository.save(task);
+                log.error("[REPORT_ASYNC] auto publish skipped. publisher unavailable. reportId={}, taskId={}",
+                        report.getId(), task.getId());
+                return;
+            }
+            publisher.publishReportGenerateRequested(
+                    new ReportGenerateRequestedEvent(task.getId(), userId, report.getId(), room.getId())
+            );
+        } catch (Exception e) {
+            report.markFailed();
+            task.markFailed("KAFKA_PUBLISH_FAILED");
+            taskRepository.save(task);
+            log.error("[REPORT_ASYNC] auto publish failed. reportId={}, taskId={}", report.getId(), task.getId(), e);
+        }
     }
 
     public ReportRes.ReportListResponse listMyReports(Long userId) {
@@ -278,7 +302,7 @@ public class ReportService {
             );
             report.markCompleted(aiResultJson);
             task.markCompleted(toJson(Map.of("report_id", report.getId())));
-            notifyReportCompletedSafely(report.getUserId(), report.getId());
+            notifyReportCompletedSafely(report.getUserId());
         } catch (CustomException e) {
             if (isReportAsyncRetryable(e)) {
                 log.warn("[REPORT_ASYNC] retryable failure. reportId={}, code={}",
@@ -287,7 +311,7 @@ public class ReportService {
             }
             report.markFailed();
             task.markFailed(e.getExceptionType().getCode());
-            notifyReportFailedSafely(report.getUserId(), report.getId());
+            notifyReportFailedSafely(report.getUserId(), e.getExceptionType().getCode());
         } catch (Exception e) {
             log.error("[REPORT_ASYNC] retryable unexpected failure. reportId={}", report.getId(), e);
             throw new RuntimeException(e);
@@ -296,14 +320,19 @@ public class ReportService {
 
     private Long requestJobPostParse(String jobPostUrl) {
         String normalizedUrl = normalizeJobPostUrl(jobPostUrl);
+        String source = detectSource(normalizedUrl);
         Map<String, Object> payload = buildJobPostParsePayload(normalizedUrl);
-        return requestJobPostParseFromEndpoint("/repo/job-post", payload);
+        Map<String, Object> parsed = requestJobPostParseFromEndpoint("/repo/job-post", payload);
+        Long jobPostId = extractJobPostIdFromParsed(parsed);
+        mirrorJobPost(normalizedUrl, source, jobPostId, parsed);
+        return jobPostId;
     }
 
     private Map<String, Object> buildJobPostParsePayload(String jobPostUrl) {
         String source = detectSource(jobPostUrl);
         Map<String, Object> payload = new HashMap<>();
         payload.put("job_url", jobPostUrl);
+        payload.put("job_post_url", jobPostUrl);
         if (source != null && !source.isBlank()) {
             payload.put("source", source);
         }
@@ -347,26 +376,149 @@ public class ReportService {
         return null;
     }
 
-    private Long requestJobPostParseFromEndpoint(String path, Map<String, Object> payload) {
+    private void mirrorJobPost(String url, String source, Long sourceJobId, Map<String, Object> parsed) {
+        if (url == null || url.isBlank() || sourceJobId == null) {
+            return;
+        }
+        try {
+            String resolvedSource = (source == null || source.isBlank()) ? "unknown" : source;
+            String resolvedSourceJobId = String.valueOf(sourceJobId);
+            String urlHash = sha256(url);
+
+            JobPost jobPost = jobPostRepository.findBySourceAndSourceJobId(resolvedSource, resolvedSourceJobId)
+                    .orElseGet(() -> jobPostRepository.findByUrlHash(urlHash).orElse(null));
+
+            String title = firstNonBlank(readText(parsed, "title"), "채용 공고");
+            String company = firstNonBlank(readText(parsed, "company"), "알 수 없음");
+            String department = readText(parsed, "department");
+            String employmentType = readText(parsed, "employment_type");
+            String experienceRequired = readText(parsed, "experience_required");
+            String educationRequired = readText(parsed, "education_required");
+            String requirements = toJsonArray(parsed, "requirements");
+            String preferences = toJsonArray(parsed, "preferences");
+            String techStack = toJsonArray(parsed, "tech_stack");
+            String responsibilities = toJsonArray(parsed, "responsibilities");
+            String descriptionRaw = readText(parsed, "description_raw");
+
+            if (jobPost == null) {
+                jobPostRepository.save(JobPost.builder()
+                        .source(resolvedSource)
+                        .sourceJobId(resolvedSourceJobId)
+                        .url(url)
+                        .urlHash(urlHash)
+                        .title(title)
+                        .company(company)
+                        .department(department)
+                        .location(null)
+                        .employmentType(employmentType)
+                        .experienceRequired(experienceRequired)
+                        .educationRequired(educationRequired)
+                        .techStack(techStack)
+                        .requirements(requirements)
+                        .preferences(preferences)
+                        .responsibilities(responsibilities)
+                        .descriptionRaw(descriptionRaw)
+                        .descriptionClean(null)
+                        .postedAt(null)
+                        .deadlineAt(null)
+                        .isActive(true)
+                        .crawledAt(LocalDateTime.now())
+                        .build());
+                return;
+            }
+
+            jobPost.updateFromCrawler(
+                    firstNonBlank(title, defaultIfBlank(jobPost.getTitle(), "채용 공고")),
+                    firstNonBlank(company, defaultIfBlank(jobPost.getCompany(), "알 수 없음")),
+                    firstNonBlank(department, jobPost.getDepartment()),
+                    firstNonBlank(employmentType, jobPost.getEmploymentType()),
+                    firstNonBlank(experienceRequired, jobPost.getExperienceRequired()),
+                    firstNonBlank(educationRequired, jobPost.getEducationRequired()),
+                    defaultJson(firstNonBlank(requirements, jobPost.getRequirements())),
+                    defaultJson(firstNonBlank(preferences, jobPost.getPreferences())),
+                    defaultJson(firstNonBlank(techStack, jobPost.getTechStack())),
+                    defaultJson(firstNonBlank(responsibilities, jobPost.getResponsibilities())),
+                    firstNonBlank(descriptionRaw, jobPost.getDescriptionRaw())
+            );
+            jobPostRepository.save(jobPost);
+        } catch (Exception e) {
+            log.warn("[REPORT_ASYNC] job-post mirror save failed. source={}, sourceJobId={}, url={}",
+                    source, sourceJobId, url, e);
+        }
+    }
+
+    private String defaultIfBlank(String value, String fallback) {
+        if (value == null || value.isBlank()) {
+            return fallback;
+        }
+        return value;
+    }
+
+    private String defaultJson(String value) {
+        if (value == null || value.isBlank()) {
+            return "[]";
+        }
+        return value;
+    }
+
+    private String sha256(String input) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(hash.length * 2);
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    private Map<String, Object> requestJobPostParseFromEndpoint(String path, Map<String, Object> payload) {
         String endpoint = UriComponentsBuilder.fromUriString(aiBaseUrl)
                 .path(path)
                 .toUriString();
+        String jobUrl = String.valueOf(payload.getOrDefault("job_url", payload.getOrDefault("job_post_url", "")));
+        String source = detectSource(jobUrl);
+        JobPostCrawlLog crawlLog = jobPostCrawlLogRepository.save(JobPostCrawlLog.builder()
+                .source(source == null || source.isBlank() ? "unknown" : source)
+                .targetUrl(jobUrl)
+                .status(CrawlStatus.FAILED)
+                .startedAt(LocalDateTime.now())
+                .build());
         try {
             HttpEntity<Map<String, Object>> entity = new HttpEntity<>(payload);
             ResponseEntity<Map<String, Object>> response = restTemplate.exchange(
                     endpoint, HttpMethod.POST, entity, new ParameterizedTypeReference<>() {}
             );
-            return extractJobPostId(response.getBody());
+            Map<String, Object> parsed = extractJobPostData(response.getBody());
+            crawlLog.markSuccess(response.getStatusCode().value());
+            jobPostCrawlLogRepository.save(crawlLog);
+            return parsed;
         } catch (HttpStatusCodeException e) {
             log.warn("AI job-post parse request failed. status={}, payload={}, response={}",
                     e.getStatusCode(), payload, e.getResponseBodyAsString());
+            crawlLog.markFailed(e.getStatusCode().value(), e.getResponseBodyAsString());
+            jobPostCrawlLogRepository.save(crawlLog);
+            if (e.getStatusCode().value() == 422) {
+                throw new CustomException(ExceptionType.JOB_POST_PARSE_FAILED);
+            }
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
+        } catch (CustomException e) {
+            if (crawlLog.getFinishedAt() == null) {
+                crawlLog.markFailed(500, e.getExceptionType().getCode());
+                jobPostCrawlLogRepository.save(crawlLog);
+            }
+            throw e;
         } catch (Exception e) {
+            crawlLog.markFailed(500, e.getMessage());
+            jobPostCrawlLogRepository.save(crawlLog);
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
     }
 
-    private Long extractJobPostId(Map<String, Object> body) {
+    private Map<String, Object> extractJobPostData(Map<String, Object> body) {
         if (body == null || !"OK".equals(String.valueOf(body.get("code")))) {
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
@@ -374,14 +526,49 @@ public class ReportService {
         if (!(data instanceof Map<?, ?> raw)) {
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
-        Object jobPostId = raw.get("job_post_id");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> parsed = (Map<String, Object>) raw;
+        Object jobPostId = parsed.get("job_post_id");
         if (jobPostId == null) {
-            jobPostId = raw.get("jobposting_id");
+            jobPostId = parsed.get("jobposting_id");
         }
-        if (jobPostId instanceof Number number) {
-            return number.longValue();
+        if (jobPostId == null) {
+            throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
+        return parsed;
+    }
+
+    private Long extractJobPostIdFromParsed(Map<String, Object> parsed) {
+        Object jobPostId = parsed.get("job_post_id");
+        if (jobPostId == null) {
+            jobPostId = parsed.get("jobposting_id");
+        }
+        if (jobPostId instanceof Number number) return number.longValue();
         return Long.parseLong(String.valueOf(jobPostId));
+    }
+
+    private String readText(Map<String, Object> parsed, String key) {
+        Object value = parsed.get(key);
+        if (value == null) return null;
+        String text = String.valueOf(value).trim();
+        return text.isBlank() ? null : text;
+    }
+
+    private String toJsonArray(Map<String, Object> parsed, String key) {
+        Object value = parsed.get(key);
+        if (value == null) return "[]";
+        if (value instanceof List<?> list) {
+            String json = toJson(list);
+            return (json == null || json.isBlank()) ? "[]" : json;
+        }
+        return "[]";
+    }
+
+    private String firstNonBlank(String primary, String fallback) {
+        if (primary == null || primary.isBlank()) {
+            return fallback;
+        }
+        return primary;
     }
 
     private Map<String, Object> requestReportGenerate(
@@ -584,22 +771,22 @@ public class ReportService {
             return;
         }
         report.markFailed();
-        notifyReportFailedSafely(report.getUserId(), report.getId());
+        notifyReportFailedSafely(report.getUserId(), reasonCode);
     }
 
-    private void notifyReportCompletedSafely(Long userId, Long reportId) {
+    private void notifyReportCompletedSafely(Long userId) {
         try {
-            notificationService.notifyReportGenerateCompleted(userId, reportId);
+            notificationService.notifyReportGenerateCompleted(userId);
         } catch (Exception e) {
-            log.warn("[REPORT] completion notification failed. reportId={}", reportId, e);
+            log.warn("[REPORT] completion notification failed. userId={}", userId, e);
         }
     }
 
-    private void notifyReportFailedSafely(Long userId, Long reportId) {
+    private void notifyReportFailedSafely(Long userId, String reasonCode) {
         try {
-            notificationService.notifyReportGenerateFailed(userId, reportId);
+            notificationService.notifyReportGenerateFailed(userId, reasonCode);
         } catch (Exception e) {
-            log.warn("[REPORT] failure notification failed. reportId={}", reportId, e);
+            log.warn("[REPORT] failure notification failed. userId={}, reasonCode={}", userId, reasonCode, e);
         }
     }
 
