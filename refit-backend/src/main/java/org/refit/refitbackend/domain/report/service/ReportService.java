@@ -388,14 +388,14 @@ public class ReportService {
             JobPost jobPost = jobPostRepository.findBySourceAndSourceJobId(resolvedSource, resolvedSourceJobId)
                     .orElseGet(() -> jobPostRepository.findByUrlHash(urlHash).orElse(null));
 
-            String title = firstNonBlank(readText(parsed, "title"), "채용 공고");
-            String company = firstNonBlank(readText(parsed, "company"), "알 수 없음");
-            String department = readText(parsed, "department");
+            String title = firstNonBlank(readTextByKeys(parsed, "title", "job_post_title"), "채용 공고");
+            String company = firstNonBlank(readTextByKeys(parsed, "company", "company_name"), "알 수 없음");
+            String department = readTextByKeys(parsed, "department", "job_post_position", "position");
             String employmentType = readText(parsed, "employment_type");
-            String experienceRequired = readText(parsed, "experience_required");
-            String educationRequired = readText(parsed, "education_required");
-            String requirements = toJsonArray(parsed, "requirements");
-            String preferences = toJsonArray(parsed, "preferences");
+            String experienceRequired = readTextByKeys(parsed, "experience_required", "experience_level");
+            String educationRequired = readTextByKeys(parsed, "education_required", "education");
+            String requirements = toJsonArrayByKeys(parsed, "requirements", "qualifications");
+            String preferences = toJsonArrayByKeys(parsed, "preferences", "preferred_qualifications");
             String techStack = toJsonArray(parsed, "tech_stack");
             String responsibilities = toJsonArray(parsed, "responsibilities");
             String descriptionRaw = readText(parsed, "description_raw");
@@ -533,6 +533,9 @@ public class ReportService {
             jobPostId = parsed.get("jobposting_id");
         }
         if (jobPostId == null) {
+            jobPostId = parsed.get("job_id");
+        }
+        if (jobPostId == null) {
             throw new CustomException(ExceptionType.AI_SERVER_ERROR);
         }
         return parsed;
@@ -542,6 +545,9 @@ public class ReportService {
         Object jobPostId = parsed.get("job_post_id");
         if (jobPostId == null) {
             jobPostId = parsed.get("jobposting_id");
+        }
+        if (jobPostId == null) {
+            jobPostId = parsed.get("job_id");
         }
         if (jobPostId instanceof Number number) return number.longValue();
         return Long.parseLong(String.valueOf(jobPostId));
@@ -554,12 +560,38 @@ public class ReportService {
         return text.isBlank() ? null : text;
     }
 
+    private String readTextByKeys(Map<String, Object> parsed, String... keys) {
+        if (keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String value = readText(parsed, key);
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
     private String toJsonArray(Map<String, Object> parsed, String key) {
         Object value = parsed.get(key);
         if (value == null) return "[]";
         if (value instanceof List<?> list) {
             String json = toJson(list);
             return (json == null || json.isBlank()) ? "[]" : json;
+        }
+        return "[]";
+    }
+
+    private String toJsonArrayByKeys(Map<String, Object> parsed, String... keys) {
+        if (keys == null) {
+            return "[]";
+        }
+        for (String key : keys) {
+            String json = toJsonArray(parsed, key);
+            if (!"[]".equals(json)) {
+                return json;
+            }
         }
         return "[]";
     }
