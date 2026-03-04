@@ -7,10 +7,6 @@ RUNTIME_ENV_DST="/etc/refit/.env"
 RUNTIME_ENV_SRC="$DEPLOY_DIR/refit.env"
 OTEL_CFG_DST="/etc/refit/otel-agent-config.yaml"
 OTEL_CFG_SRC="$DEPLOY_DIR/otel-agent-config.yaml"
-SECRET_CFG_DST="/etc/refit/application-secret.yml"
-SECRET_CFG_SRC="$DEPLOY_DIR/application-secret.yml"
-FIREBASE_DST="/etc/refit/firebase/refit-fcm.json"
-FIREBASE_SRC="$DEPLOY_DIR/firebase/refit-fcm.json"
 
 log_info() { echo "[INFO] $*"; }
 log_ok()   { echo "[OK] $*"; }
@@ -52,26 +48,6 @@ run_after_install() {
     chown root:docker "$OTEL_CFG_DST"
     chmod 644 "$OTEL_CFG_DST"
     rm -f "$OTEL_CFG_SRC"
-  fi
-
-  # application-secret.yml 파일 설정
-  if [ -f "$SECRET_CFG_SRC" ]; then
-    [ -d "$SECRET_CFG_DST" ] && rm -rf "$SECRET_CFG_DST"
-    cp "$SECRET_CFG_SRC" "$SECRET_CFG_DST"
-    chown root:docker "$SECRET_CFG_DST"
-    chmod 640 "$SECRET_CFG_DST"
-    rm -f "$SECRET_CFG_SRC"
-  fi
-
-  # Firebase 서비스 계정 키 설정
-  if [ -f "$FIREBASE_SRC" ]; then
-    # Docker가 디렉토리로 자동생성한 경우 제거
-    [ -d "$FIREBASE_DST" ] && rm -rf "$FIREBASE_DST"
-    mkdir -p "$(dirname "$FIREBASE_DST")"
-    cp "$FIREBASE_SRC" "$FIREBASE_DST"
-    chown root:docker "$FIREBASE_DST"
-    chmod 644 "$FIREBASE_DST"
-    rm -f "$FIREBASE_SRC"
   fi
 
   [ -f "$DEPLOY_ENV" ] && chmod 600 "$DEPLOY_ENV"

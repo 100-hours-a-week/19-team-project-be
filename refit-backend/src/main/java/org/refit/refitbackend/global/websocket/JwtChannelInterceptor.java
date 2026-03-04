@@ -5,17 +5,16 @@ import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.global.util.JwtUtil;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.MessageDeliveryException;
 import org.springframework.messaging.simp.stomp.StompCommand;
 import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
 import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
 
 import java.net.HttpCookie;
-import java.util.Collections;
 import java.util.List;
 
 @Component
@@ -37,6 +36,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
                 authenticateUser(accessor, token);
             } else {
                 log.warn("[WS] missing auth token on CONNECT");
+                throw new MessageDeliveryException("Missing auth token on CONNECT");
             }
         }
 
@@ -70,23 +70,26 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
     }
 
     private void authenticateUser(StompHeaderAccessor accessor, String token) {
+        if (!jwtUtil.validateToken(token)) {
+            log.warn("WebSocket 인증 실패: Invalid JWT token");
+            throw new MessageDeliveryException("Invalid JWT token");
+        }
+
+        Long userId;
         try {
-            if (!jwtUtil.validateToken(token)) {
-                throw new IllegalArgumentException("Invalid JWT token");
-            }
-            Long userId = jwtUtil.getUserId(token);
-
-            accessor.setUser(new UsernamePasswordAuthenticationToken(
-                    userId.toString(),
-                    null,
-                    List.of(new SimpleGrantedAuthority("ROLE_USER"))
-            ));
-
-            log.info("WebSocket 인증 성공 - userId: {}", userId);
-
+            userId = jwtUtil.getUserId(token);
         } catch (Exception e) {
             log.warn("WebSocket 인증 실패: {}", e.getMessage());
+            throw new MessageDeliveryException("Invalid JWT token: " + e.getMessage());
         }
+
+        accessor.setUser(new UsernamePasswordAuthenticationToken(
+                userId.toString(),
+                null,
+                List.of(new SimpleGrantedAuthority("ROLE_USER"))
+        ));
+
+        log.info("WebSocket 인증 성공 - userId: {}", userId);
     }
 
     private String getCookieHeader(StompHeaderAccessor accessor) {

@@ -18,13 +18,18 @@ import org.refit.refitbackend.domain.user.entity.UserSkill;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.auth.entity.RefreshTokenStatus;
 import org.refit.refitbackend.domain.auth.repository.RefreshTokenRepository;
+import org.refit.refitbackend.domain.task.kafka.TaskEventPublisher;
+import org.refit.refitbackend.domain.task.kafka.event.MentorEmbeddingRefreshRequestedEvent;
 import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
@@ -43,6 +48,7 @@ public class UserService {
     private final ExpertProfileRepository expertProfileRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final ExpertService expertService;
+    private final ObjectProvider<TaskEventPublisher> taskEventPublisherProvider;
 
     public UserRes.Detail getUser(Long userId) {
         User user = userRepository.findById(userId)
@@ -95,6 +101,7 @@ public class UserService {
 
         if (request.introduction() != null) {
             user.updateIntroduction(request.introduction());
+            shouldRefreshEmbedding = true;
         }
         if (request.profileImageUrl() != null) {
             validateProfileImageUrl(request.profileImageUrl());
@@ -125,7 +132,7 @@ public class UserService {
         if (shouldRefreshEmbedding
                 && user.getUserType() == UserType.EXPERT
                 && user.getExpertProfile() != null) {
-            expertService.refreshMentorEmbeddingBestEffort(user.getId());
+            refreshMentorEmbeddingAfterCommitIfNeeded(user.getId());
         }
 
         return UserRes.Me.from(user);
@@ -329,6 +336,34 @@ public class UserService {
         }
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             throw new CustomException(ExceptionType.IMAGE_URL_INVALID);
+        }
+    }
+
+    private void refreshMentorEmbeddingAfterCommitIfNeeded(Long userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    requestMentorEmbeddingRefreshAsync(userId);
+                }
+            });
+            return;
+        }
+        requestMentorEmbeddingRefreshAsync(userId);
+    }
+
+    private void requestMentorEmbeddingRefreshAsync(Long userId) {
+        TaskEventPublisher publisher = taskEventPublisherProvider.getIfAvailable();
+        if (publisher == null) {
+            expertService.refreshMentorEmbeddingBestEffort(userId);
+            return;
+        }
+        String taskId = "embedding_refresh_" + userId + "_" + System.currentTimeMillis();
+        try {
+            publisher.publishMentorEmbeddingRefreshRequested(new MentorEmbeddingRefreshRequestedEvent(taskId, userId));
+        } catch (Exception ignored) {
+            // Kafka 퍼블리시 실패 시 기능 저하를 줄이기 위해 기존 경로로 fallback
+            expertService.refreshMentorEmbeddingBestEffort(userId);
         }
     }
 }

@@ -81,6 +81,9 @@ public class KafkaClientConfig {
             if (topic.equals(topicProperties.getReportGenerateRequested())) {
                 return new TopicPartition(topicProperties.getReportGenerateRequestedDlq(), record.partition());
             }
+            if (topic.equals(topicProperties.getMentorEmbeddingRefreshRequested())) {
+                return new TopicPartition(topicProperties.getMentorEmbeddingRefreshRequestedDlq(), record.partition());
+            }
             return new TopicPartition(topic + ".dlq", record.partition());
         });
     }

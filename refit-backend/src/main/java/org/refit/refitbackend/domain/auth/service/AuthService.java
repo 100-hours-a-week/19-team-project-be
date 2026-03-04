@@ -19,8 +19,11 @@ import org.refit.refitbackend.domain.user.entity.*;
 import org.refit.refitbackend.domain.user.entity.enums.UserType;
 import org.refit.refitbackend.domain.user.entity.enums.UserStatus;
 import org.refit.refitbackend.domain.user.repository.*;
+import org.refit.refitbackend.domain.task.kafka.TaskEventPublisher;
+import org.refit.refitbackend.domain.task.kafka.event.MentorEmbeddingRefreshRequestedEvent;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -48,6 +51,7 @@ public class AuthService {
     private final ExpertProfileRepository expertProfileRepository;
     private final EmailVerificationRepository emailVerificationRepository;
     private final ExpertService expertService;
+    private final ObjectProvider<TaskEventPublisher> taskEventPublisherProvider;
 
     @Transactional
     public User signup(AuthReq.SignUp signUpDto) {
@@ -275,20 +279,32 @@ public class AuthService {
         if (user.getUserType() != UserType.EXPERT) {
             return;
         }
-        if (user.getExpertProfile() == null) {
-            return;
-        }
         Long userId = user.getId();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    expertService.refreshMentorEmbeddingBestEffort(userId);
+                    requestMentorEmbeddingRefreshAsync(userId);
                 }
             });
             return;
         }
-        expertService.refreshMentorEmbeddingBestEffort(userId);
+        requestMentorEmbeddingRefreshAsync(userId);
+    }
+
+    private void requestMentorEmbeddingRefreshAsync(Long userId) {
+        TaskEventPublisher publisher = taskEventPublisherProvider.getIfAvailable();
+        if (publisher == null) {
+            expertService.refreshMentorEmbeddingBestEffort(userId);
+            return;
+        }
+        String taskId = "embedding_refresh_" + userId + "_" + System.currentTimeMillis();
+        try {
+            publisher.publishMentorEmbeddingRefreshRequested(new MentorEmbeddingRefreshRequestedEvent(taskId, userId));
+        } catch (Exception e) {
+            // 인증 요청 응답 지연을 막기 위해 퍼블리시 실패는 로깅 후 스킵
+            expertService.refreshMentorEmbeddingBestEffort(userId);
+        }
     }
 
 

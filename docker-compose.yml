@@ -28,10 +28,6 @@ services:
       retries: 3
       start_period: 60s
     
-    volumes:
-      - /etc/refit/application-secret.yml:/app/application-secret.yml:ro
-      - /etc/refit/firebase/refit-fcm.json:/app/firebase/refit-fcm.json:ro
-    
     logging:
       driver: "json-file"
       options:
