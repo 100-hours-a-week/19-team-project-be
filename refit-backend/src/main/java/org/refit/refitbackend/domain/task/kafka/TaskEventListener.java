@@ -2,10 +2,14 @@ package org.refit.refitbackend.domain.task.kafka;
 
 import lombok.extern.slf4j.Slf4j;
 import lombok.RequiredArgsConstructor;
+import org.refit.refitbackend.domain.expert.service.ExpertService;
 import org.refit.refitbackend.domain.report.service.ReportService;
+import org.refit.refitbackend.domain.task.kafka.event.MentorEmbeddingRefreshRequestedEvent;
 import org.refit.refitbackend.domain.task.kafka.event.ReportGenerateRequestedEvent;
 import org.refit.refitbackend.domain.task.kafka.event.ResumeParseRequestedEvent;
 import org.refit.refitbackend.domain.resume.service.ResumeTaskService;
+import org.refit.refitbackend.global.error.CustomException;
+import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Headers;
@@ -22,6 +26,7 @@ public class TaskEventListener {
 
     private final ResumeTaskService resumeTaskService;
     private final ReportService reportService;
+    private final ExpertService expertService;
 
     @KafkaListener(
             topics = "${app.kafka.topics.resume-parse-requested:resume.parse.requested}",
@@ -44,6 +49,23 @@ public class TaskEventListener {
     }
 
     @KafkaListener(
+            topics = "${app.kafka.topics.mentor-embedding-refresh-requested:mentor.embedding.refresh.requested}",
+            groupId = "${spring.kafka.consumer.group-id:refit-backend}"
+    )
+    public void onMentorEmbeddingRefreshRequested(MentorEmbeddingRefreshRequestedEvent event) {
+        try {
+            expertService.refreshMentorEmbedding(event.userId());
+            log.info("Kafka consumed mentor embedding refresh request. taskId={}, userId={}",
+                    event.taskId(), event.userId());
+        } catch (CustomException e) {
+            if (e.getExceptionType() == ExceptionType.EXPERT_NOT_FOUND) {
+                throw new IllegalArgumentException("Expert not found for embedding refresh. userId=" + event.userId());
+            }
+            throw e;
+        }
+    }
+
+    @KafkaListener(
             topics = "${app.kafka.topics.resume-parse-requested-dlq:resume.parse.requested.dlq}",
             groupId = "${spring.kafka.consumer.group-id:refit-backend}-dlq"
     )
@@ -63,6 +85,16 @@ public class TaskEventListener {
         log.error("Kafka DLQ consumed report generate request. reportId={}, userId={}, reasonCode={}",
                 event.reportId(), event.userId(), reasonCode);
         reportService.markAsyncGenerateReportFailedFromDlq(event.taskId(), event.userId(), event.reportId(), reasonCode);
+    }
+
+    @KafkaListener(
+            topics = "${app.kafka.topics.mentor-embedding-refresh-requested-dlq:mentor.embedding.refresh.requested.dlq}",
+            groupId = "${spring.kafka.consumer.group-id:refit-backend}-dlq"
+    )
+    public void onMentorEmbeddingRefreshRequestedDlq(MentorEmbeddingRefreshRequestedEvent event, @Headers Map<String, Object> headers) {
+        String reasonCode = resolveMentorEmbeddingDlqReasonCode(headers);
+        log.error("Kafka DLQ consumed mentor embedding refresh request. taskId={}, userId={}, reasonCode={}",
+                event.taskId(), event.userId(), reasonCode);
     }
 
     private String resolveResumeDlqReasonCode(Map<String, Object> headers) {
@@ -113,6 +145,28 @@ public class TaskEventListener {
         }
         if (stacktrace.contains("GOOGLE_API_KEY environment variable is not set")) {
             return "AI_MISCONFIG";
+        }
+        if (exceptionMessage.contains("서버 오류가 발생했습니다")) {
+            return "INTERNAL_SERVER_ERROR";
+        }
+        return "KAFKA_RETRY_EXHAUSTED";
+    }
+
+    private String resolveMentorEmbeddingDlqReasonCode(Map<String, Object> headers) {
+        String exceptionMessage = headerAsString(headers, "kafka_dlt-exception-message");
+        String stacktrace = headerAsString(headers, "kafka_dlt-exception-stacktrace");
+
+        if (stacktrace.contains("UnknownHostException")) {
+            return "AI_UNKNOWN_HOST";
+        }
+        if (stacktrace.contains("SocketTimeoutException")) {
+            return "AI_TIMEOUT";
+        }
+        if (stacktrace.contains("ResourceAccessException")) {
+            return "AI_CONNECTION_ERROR";
+        }
+        if (stacktrace.contains("EXPERT_NOT_FOUND")) {
+            return "EXPERT_NOT_FOUND";
         }
         if (exceptionMessage.contains("서버 오류가 발생했습니다")) {
             return "INTERNAL_SERVER_ERROR";
