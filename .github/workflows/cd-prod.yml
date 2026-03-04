@@ -93,18 +93,25 @@ jobs:
       - name: Set Deployment Variables
         id: deploy-vars
         run: |
-          USE_LATEST="${{ inputs.use_latest }}"
-
-          if [ -n "${{ inputs.image_tag }}" ]; then
-            IMAGE_TAG="${{ inputs.image_tag }}"
-            echo "Using specified image tag: ${IMAGE_TAG}"
-          elif [ "${USE_LATEST}" = "true" ]; then
-            IMAGE_TAG="production-latest"
-            echo "Using production-latest"
+          if [ -n "${{ inputs.run_id }}" ]; then
+            RUN_ID="${{ inputs.run_id }}"
           else
-            echo "Error: image_tag is empty and use_latest is false."
-            exit 1
+            RUN_ID="${{ steps.find-artifact.outputs.run_id }}"
           fi
+
+          if [ -n "${{ inputs.sha }}" ]; then
+            SHA="${{ inputs.sha }}"
+          else
+            SHA="${{ steps.find-artifact.outputs.sha }}"
+          fi
+
+          IMAGE_TAG="production-latest"
+          [ -z "$RUN_ID" ] && { echo "run_id is empty"; exit 1; }
+          [ -z "$SHA" ] && { echo "sha is empty"; exit 1; }
+
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+          echo "image_tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "branch=${{ inputs.branch }}" >> $GITHUB_OUTPUT
 
       - name: Checkout code
@@ -143,6 +150,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
+      - name: Login to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
       # JAR 압축 후 S3에 업로드
       - name: Compress and Upload to S3
         id: s3_upload
@@ -166,7 +177,6 @@ jobs:
           APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
           DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
           RUNTIME_ENV: ${{ secrets.RUNTIME_ENV_FILE }}
-          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           set -e
           REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
@@ -183,9 +193,6 @@ jobs:
 
           printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
           cp otel-agent-config.yaml "$REVISION_DIR/otel-agent-config.yaml"
-
-          mkdir -p "$REVISION_DIR/firebase"
-          printf '%s' "${FIREBASE_SERVICE_ACCOUNT_JSON}" > "$REVISION_DIR/firebase/refit-fcm.json"
 
           ZIP_KEY="backend/manual-$(date +%Y%m%d%H%M%S).zip"
           (cd "$REVISION_DIR" && zip -r -q "../revision.zip" .)

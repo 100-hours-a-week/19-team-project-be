@@ -14,9 +14,10 @@ import com.google.firebase.messaging.WebpushNotification;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
-import java.io.FileInputStream;
+import java.io.InputStream;
 import java.util.List;
 
 @Service
@@ -57,7 +58,7 @@ public class FcmPushService {
             log.warn("FCM is enabled but credentials path is empty");
             return;
         }
-        try (FileInputStream serviceAccount = new FileInputStream(credentialsPath)) {
+        try (InputStream serviceAccount = openCredentialsStream(credentialsPath)) {
             FirebaseOptions.Builder builder = FirebaseOptions.builder()
                     .setCredentials(GoogleCredentials.fromStream(serviceAccount));
             if (projectId != null && !projectId.isBlank()) {
@@ -68,6 +69,14 @@ public class FcmPushService {
         } catch (Exception e) {
             log.error("Failed to initialize FCM", e);
         }
+    }
+
+    private InputStream openCredentialsStream(String path) throws Exception {
+        if (path.startsWith("classpath:")) {
+            String classpathLocation = path.substring("classpath:".length());
+            return new ClassPathResource(classpathLocation).getInputStream();
+        }
+        return new java.io.FileInputStream(path);
     }
 
     public SendResult sendToTokens(List<String> tokens, String title, String body) {
