@@ -275,9 +275,6 @@ public class AuthService {
         if (user.getUserType() != UserType.EXPERT) {
             return;
         }
-        if (user.getExpertProfile() == null) {
-            return;
-        }
         Long userId = user.getId();
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

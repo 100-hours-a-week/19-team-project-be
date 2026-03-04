@@ -25,6 +25,8 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 import java.util.Map;
@@ -95,6 +97,7 @@ public class UserService {
 
         if (request.introduction() != null) {
             user.updateIntroduction(request.introduction());
+            shouldRefreshEmbedding = true;
         }
         if (request.profileImageUrl() != null) {
             validateProfileImageUrl(request.profileImageUrl());
@@ -125,7 +128,7 @@ public class UserService {
         if (shouldRefreshEmbedding
                 && user.getUserType() == UserType.EXPERT
                 && user.getExpertProfile() != null) {
-            expertService.refreshMentorEmbeddingBestEffort(user.getId());
+            refreshMentorEmbeddingAfterCommitIfNeeded(user.getId());
         }
 
         return UserRes.Me.from(user);
@@ -330,5 +333,18 @@ public class UserService {
         if (!trimmed.startsWith("http://") && !trimmed.startsWith("https://")) {
             throw new CustomException(ExceptionType.IMAGE_URL_INVALID);
         }
+    }
+
+    private void refreshMentorEmbeddingAfterCommitIfNeeded(Long userId) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    expertService.refreshMentorEmbeddingBestEffort(userId);
+                }
+            });
+            return;
+        }
+        expertService.refreshMentorEmbeddingBestEffort(userId);
     }
 }
