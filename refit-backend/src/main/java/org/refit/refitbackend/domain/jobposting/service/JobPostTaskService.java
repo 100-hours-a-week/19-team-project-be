@@ -232,14 +232,36 @@ public class JobPostTaskService {
             Map<String, Object> dataMap = (Map<String, Object>) dataMapRaw;
             JobPostTaskReq.ParsedData parsed = new JobPostTaskReq.ParsedData(
                     extractJobPostId(dataMap),
-                    nullableText(dataMap.get("title")),
-                    nullableText(dataMap.get("company")),
-                    nullableText(dataMap.get("department")),
+                    firstNonBlank(
+                            nullableText(dataMap.get("title")),
+                            nullableText(dataMap.get("job_post_title"))
+                    ),
+                    firstNonBlank(
+                            nullableText(dataMap.get("company")),
+                            nullableText(dataMap.get("company_name"))
+                    ),
+                    firstNonBlank(
+                            nullableText(dataMap.get("department")),
+                            nullableText(dataMap.get("job_post_position")),
+                            nullableText(dataMap.get("position"))
+                    ),
                     nullableText(dataMap.get("employment_type")),
-                    nullableText(dataMap.get("experience_required")),
-                    nullableText(dataMap.get("education_required")),
-                    toStringList(dataMap.get("requirements")),
-                    toStringList(dataMap.get("preferences")),
+                    firstNonBlank(
+                            nullableText(dataMap.get("experience_required")),
+                            nullableText(dataMap.get("experience_level"))
+                    ),
+                    firstNonBlank(
+                            nullableText(dataMap.get("education_required")),
+                            nullableText(dataMap.get("education"))
+                    ),
+                    firstNonEmptyList(
+                            toStringList(dataMap.get("requirements")),
+                            toStringList(dataMap.get("qualifications"))
+                    ),
+                    firstNonEmptyList(
+                            toStringList(dataMap.get("preferences")),
+                            toStringList(dataMap.get("preferred_qualifications"))
+                    ),
                     toStringList(dataMap.get("tech_stack")),
                     toStringList(dataMap.get("responsibilities"))
             );
@@ -353,6 +375,9 @@ public class JobPostTaskService {
         if (id == null) {
             id = dataMap.get("jobposting_id");
         }
+        if (id == null) {
+            id = dataMap.get("job_id");
+        }
         return toLong(id);
     }
 
@@ -382,6 +407,30 @@ public class JobPostTaskService {
         }
         if (value instanceof List<?> list) {
             return list.stream().map(String::valueOf).toList();
+        }
+        return List.of();
+    }
+
+    private String firstNonBlank(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            if (value != null && !value.isBlank()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private List<String> firstNonEmptyList(List<String>... candidates) {
+        if (candidates == null) {
+            return List.of();
+        }
+        for (List<String> candidate : candidates) {
+            if (candidate != null && !candidate.isEmpty()) {
+                return candidate;
+            }
         }
         return List.of();
     }

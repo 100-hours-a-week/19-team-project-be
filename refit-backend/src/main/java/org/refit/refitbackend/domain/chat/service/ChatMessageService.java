@@ -85,10 +85,27 @@ public class ChatMessageService {
             User receiver = chatRoom.getRequester().getId().equals(senderId)
                     ? chatRoom.getReceiver()
                     : chatRoom.getRequester();
-            sseService.sendChatEvent(receiver.getId(), request.chatId(), savedMessage.getId());
+            long unreadCount = calculateUnreadCount(chatRoom, receiver.getId());
+            sseService.sendChatEvent(receiver.getId(), request.chatId(), savedMessage.getId(), unreadCount);
             notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), request.content());
         }
 
         return payload;
+    }
+
+    private long calculateUnreadCount(ChatRoom chatRoom, Long userId) {
+        long lastMessageSeq = chatRoom.getLastMessageSeq() != null ? chatRoom.getLastMessageSeq() : 0L;
+        long lastReadSeq = resolveLastReadSeq(chatRoom, userId);
+        return Math.max(0L, lastMessageSeq - lastReadSeq);
+    }
+
+    private long resolveLastReadSeq(ChatRoom chatRoom, Long userId) {
+        if (chatRoom.getRequester().getId().equals(userId)) {
+            return chatRoom.getRequesterLastReadSeq() != null ? chatRoom.getRequesterLastReadSeq() : 0L;
+        }
+        if (chatRoom.getReceiver().getId().equals(userId)) {
+            return chatRoom.getReceiverLastReadSeq() != null ? chatRoom.getReceiverLastReadSeq() : 0L;
+        }
+        return 0L;
     }
 }
