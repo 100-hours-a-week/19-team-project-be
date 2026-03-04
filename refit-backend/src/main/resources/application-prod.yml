@@ -136,5 +136,7 @@ app:
     topics:
       resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
       report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
+      mentor-embedding-refresh-requested: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED:mentor.embedding.refresh.requested}
       resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
       report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}
+      mentor-embedding-refresh-requested-dlq: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED_DLQ:mentor.embedding.refresh.requested.dlq}

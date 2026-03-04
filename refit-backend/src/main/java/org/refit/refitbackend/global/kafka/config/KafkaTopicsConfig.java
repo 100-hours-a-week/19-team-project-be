@@ -31,6 +31,14 @@ public class KafkaTopicsConfig {
     }
 
     @Bean
+    public NewTopic mentorEmbeddingRefreshRequestedTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getMentorEmbeddingRefreshRequested())
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
     public NewTopic resumeParseRequestedDlqTopic(KafkaTopicProperties topicProperties) {
         return TopicBuilder.name(topicProperties.getResumeParseRequestedDlq())
                 .partitions(1)
@@ -41,6 +49,14 @@ public class KafkaTopicsConfig {
     @Bean
     public NewTopic reportGenerateRequestedDlqTopic(KafkaTopicProperties topicProperties) {
         return TopicBuilder.name(topicProperties.getReportGenerateRequestedDlq())
+                .partitions(1)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic mentorEmbeddingRefreshRequestedDlqTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getMentorEmbeddingRefreshRequestedDlq())
                 .partitions(1)
                 .replicas(1)
                 .build();
