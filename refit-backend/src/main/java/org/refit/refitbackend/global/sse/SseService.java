@@ -54,11 +54,12 @@ public class SseService {
         sendToUser(userId, "notification", payload);
     }
 
-    public void sendChatEvent(Long userId, Long chatId, Long messageId) {
+    public void sendChatEvent(Long userId, Long chatId, Long messageId, long unreadCount) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "CHAT_MESSAGE");
         payload.put("chat_id", chatId);
         payload.put("message_id", messageId);
+        payload.put("unread_count", unreadCount);
         sendToUser(userId, "chat", payload);
     }
 
