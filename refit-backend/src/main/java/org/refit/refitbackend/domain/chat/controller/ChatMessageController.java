@@ -26,6 +26,10 @@ public class ChatMessageController {
             Principal principal
     ) {
         try {
+            if (principal == null || principal.getName() == null || principal.getName().isBlank()) {
+                log.warn("메시지 전송 거부: 인증 정보가 없습니다.");
+                return;
+            }
             // 인증된 사용자 ID 추출 (JWT에서)
             Long senderId = Long.parseLong(principal.getName());
 
