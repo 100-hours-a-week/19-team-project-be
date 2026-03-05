@@ -13,7 +13,7 @@ spring:
 
   jwt:
     issuer: re-fit
-    access-exp-ms: 10000 # 10분
+    access-exp-ms: 10000 # 10초
     refresh-exp-ms: 1209600000 # 2주
 
   jackson:
@@ -54,6 +54,12 @@ spring:
       auto-offset-reset: earliest
       properties:
         spring.json.trusted.packages: "*"
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
 
 springdoc:
   swagger-ui:
@@ -142,3 +148,16 @@ app:
       resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
       report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}
       mentor-embedding-refresh-requested-dlq: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED_DLQ:mentor.embedding.refresh.requested.dlq}
+      chat-message-sent: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_SENT:chat.message.sent}
+      chat-message-persist-requested: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_PERSIST_REQUESTED:chat.message.persist.requested}
+      chat-message-persist-requested-dlq: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_PERSIST_REQUESTED_DLQ:chat.message.persist.requested.dlq}
+  chat:
+    realtime:
+      redis:
+        enabled: ${APP_CHAT_REALTIME_REDIS_ENABLED:false}
+        channel: ${APP_CHAT_REALTIME_REDIS_CHANNEL:chat.message.broadcast}
+    persistence:
+      async:
+        enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:true}
+        batch-size: ${APP_CHAT_PERSISTENCE_ASYNC_BATCH_SIZE:100}
+        flush-interval-ms: ${APP_CHAT_PERSISTENCE_ASYNC_FLUSH_INTERVAL_MS:200}
