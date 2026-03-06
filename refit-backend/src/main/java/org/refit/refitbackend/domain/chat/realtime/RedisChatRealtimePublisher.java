@@ -1,7 +1,6 @@
 package org.refit.refitbackend.domain.chat.realtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.domain.chat.dto.ChatRes;
@@ -26,11 +25,8 @@ public class RedisChatRealtimePublisher implements ChatRealtimePublisher {
         try {
             String body = objectMapper.writeValueAsString(new RedisChatRealtimeEvent(chatId, payload));
             stringRedisTemplate.convertAndSend(channel, body);
-        } catch (JsonProcessingException e) {
-            log.error("Redis chat publish serialization failed. chatId={}", chatId, e);
         } catch (Exception e) {
             log.error("Redis chat publish failed. chatId={}", chatId, e);
         }
     }
 }
-

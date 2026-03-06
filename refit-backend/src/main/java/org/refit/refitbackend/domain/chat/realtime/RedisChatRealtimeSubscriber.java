@@ -1,6 +1,6 @@
 package org.refit.refitbackend.domain.chat.realtime;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,4 +31,3 @@ public class RedisChatRealtimeSubscriber implements MessageListener {
         }
     }
 }
-
