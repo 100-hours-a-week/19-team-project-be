@@ -113,6 +113,10 @@ management:
     export:
       prometheus:
         enabled: true
+      otlp:
+        enabled: false
+  tracing:
+    enabled: false
 
 # ============================================
 # Structured JSON Logging (개발 환경)
@@ -130,7 +134,10 @@ logging:
     root: info
     org.springframework: info
     org.hibernate: info
-    org.refit.backend: debug  # 개발 환경은 debug 레벨
+    org.refit.refitbackend: info  # 개발 환경 기본 로그 레벨
+    org.apache.kafka: warn
+    org.springframework.kafka: warn
+    io.opentelemetry: off
 
 server:
   forward-headers-strategy: framework
@@ -161,3 +168,7 @@ app:
         enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:true}
         batch-size: ${APP_CHAT_PERSISTENCE_ASYNC_BATCH_SIZE:100}
         flush-interval-ms: ${APP_CHAT_PERSISTENCE_ASYNC_FLUSH_INTERVAL_MS:200}
+  metrics:
+    aop:
+      enabled: true
+      slow-threshold-ms: 500

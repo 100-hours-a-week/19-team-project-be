@@ -126,7 +126,9 @@ logging:
     root: info
     org.springframework: warn
     org.hibernate: warn
-    org.refit.refitbackend: info  # 운영 환경은 info 레벨
+    org.refit.refitbackend: info  # 운영 환경 기본 로그 레벨
+    org.apache.kafka: warn
+    org.springframework.kafka: warn
 
 server:
   forward-headers-strategy: framework
@@ -159,3 +161,7 @@ app:
         enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:false}
         batch-size: ${APP_CHAT_PERSISTENCE_ASYNC_BATCH_SIZE:100}
         flush-interval-ms: ${APP_CHAT_PERSISTENCE_ASYNC_FLUSH_INTERVAL_MS:200}
+  metrics:
+    aop:
+      enabled: false
+      slow-threshold-ms: 1000

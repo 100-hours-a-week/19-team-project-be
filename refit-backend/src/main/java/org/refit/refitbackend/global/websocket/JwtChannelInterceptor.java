@@ -35,7 +35,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             if (token != null && !token.isBlank()) {
                 authenticateUser(accessor, token);
             } else {
-                log.warn("[WS] missing auth token on CONNECT");
+                log.debug("[WS] missing auth token on CONNECT");
                 throw new MessageDeliveryException("Missing auth token on CONNECT");
             }
         }
@@ -71,7 +71,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
 
     private void authenticateUser(StompHeaderAccessor accessor, String token) {
         if (!jwtUtil.validateToken(token)) {
-            log.warn("WebSocket 인증 실패: Invalid JWT token");
+            log.debug("WebSocket 인증 실패: Invalid JWT token");
             throw new MessageDeliveryException("Invalid JWT token");
         }
 
@@ -79,7 +79,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
         try {
             userId = jwtUtil.getUserId(token);
         } catch (Exception e) {
-            log.warn("WebSocket 인증 실패: {}", e.getMessage());
+            log.debug("WebSocket 인증 실패: {}", e.getMessage());
             throw new MessageDeliveryException("Invalid JWT token: " + e.getMessage());
         }
 
