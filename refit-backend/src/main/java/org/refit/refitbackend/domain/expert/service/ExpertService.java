@@ -422,6 +422,7 @@ public class ExpertService {
                               user.getId(),
                               user.getNickname(),
                               profile != null ? profile.getCompanyName() : null,
+                              user.getProfileImageUrl(),
                               profile != null && profile.isVerified(),
                               profile != null ? profile.getRatingAvg() : 0.0,
                               profile != null ? profile.getRatingCount() : 0,

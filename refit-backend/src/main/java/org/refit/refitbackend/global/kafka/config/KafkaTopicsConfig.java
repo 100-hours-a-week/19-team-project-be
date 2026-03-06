@@ -61,4 +61,28 @@ public class KafkaTopicsConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic chatMessageSentTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessageSent())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic chatMessagePersistRequestedTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessagePersistRequested())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic chatMessagePersistRequestedDlqTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessagePersistRequestedDlq())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

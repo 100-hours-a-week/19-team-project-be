@@ -6,6 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
+
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
     // (CURSOR) 채팅방 메시지 목록 조회 (최신순)
@@ -27,5 +30,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
           ORDER BY cm.roomSequence ASC
       """)
     java.util.List<ChatMessage> findAllByChatIdOrderBySequence(@Param("chatId") Long chatId);
+
+    List<ChatMessage> findAllByChatRoom_IdAndClientMessageIdIn(Long chatRoomId, Collection<String> clientMessageIds);
+
+    List<ChatMessage> findAllByChatRoom_IdAndRoomSequenceIn(Long chatRoomId, Collection<Long> roomSequences);
 
 }

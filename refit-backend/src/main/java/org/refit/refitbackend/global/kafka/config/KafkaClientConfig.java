@@ -84,6 +84,9 @@ public class KafkaClientConfig {
             if (topic.equals(topicProperties.getMentorEmbeddingRefreshRequested())) {
                 return new TopicPartition(topicProperties.getMentorEmbeddingRefreshRequestedDlq(), record.partition());
             }
+            if (topic.equals(topicProperties.getChatMessagePersistRequested())) {
+                return new TopicPartition(topicProperties.getChatMessagePersistRequestedDlq(), record.partition());
+            }
             return new TopicPartition(topic + ".dlq", record.partition());
         });
     }
