@@ -53,7 +53,7 @@ spring:
 
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      host: ${SPRING_DATA_REDIS_HOST:refit-redis}
       port: ${SPRING_DATA_REDIS_PORT:6379}
       password: ${SPRING_DATA_REDIS_PASSWORD:}
 
@@ -138,7 +138,7 @@ fcm:
 
 app:
   kafka:
-    enabled: ${APP_KAFKA_ENABLED:false}
+    enabled: ${APP_KAFKA_ENABLED:true}
     topics:
       resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
       report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
@@ -156,6 +156,6 @@ app:
         channel: ${APP_CHAT_REALTIME_REDIS_CHANNEL:chat.message.broadcast}
     persistence:
       async:
-        enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:true}
+        enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:false}
         batch-size: ${APP_CHAT_PERSISTENCE_ASYNC_BATCH_SIZE:100}
         flush-interval-ms: ${APP_CHAT_PERSISTENCE_ASYNC_FLUSH_INTERVAL_MS:200}
