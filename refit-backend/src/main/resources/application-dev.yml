@@ -2,6 +2,17 @@
 # Development Environment Configuration
 # ============================================
 spring:
+  datasource:
+    hikari:
+      minimum-idle: 30
+      maximum-pool-size: 120
+      connection-timeout: 5000
+      validation-timeout: 1500
+      idle-timeout: 600000
+      max-lifetime: 1500000
+      keepalive-time: 180000
+      leak-detection-threshold: 15000
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -43,12 +54,12 @@ spring:
         domain: ${AWS_S3_DOMAIN:https://refit-storage-dev.s3.ap-northeast-2.amazonaws.com/}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9093}
+    bootstrap-servers: kafka:9093
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:refit-backend-dev}
+      group-id: refit-backend-dev
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: earliest
@@ -57,9 +68,9 @@ spring:
 
   data:
     redis:
-      host: ${SPRING_DATA_REDIS_HOST:refit-redis}
-      port: ${SPRING_DATA_REDIS_PORT:6379}
-      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      host: refit-redis
+      port: 6379
+      password:
 
 springdoc:
   swagger-ui:
@@ -113,6 +124,10 @@ management:
     export:
       prometheus:
         enabled: true
+      otlp:
+        enabled: false
+  tracing:
+    enabled: false
 
 # ============================================
 # Structured JSON Logging (개발 환경)
@@ -130,34 +145,65 @@ logging:
     root: info
     org.springframework: info
     org.hibernate: info
-    org.refit.backend: debug  # 개발 환경은 debug 레벨
+    org.refit.refitbackend: info  # 개발 환경 기본 로그 레벨
+    org.apache.kafka: warn
+    org.springframework.kafka: warn
+    io.opentelemetry: off
 
 server:
   forward-headers-strategy: framework
+  tomcat:
+    connection-timeout: 8s
+    threads:
+      max: 400
+      min-spare: 40
+    accept-count: 500
+    max-connections: 10000
 
 ai:
   base-url: https://dev.re-fit.kr/api/ai
 
 app:
+  rate-limit:
+    enabled: false
   kafka:
-    enabled: ${APP_KAFKA_ENABLED:true}
+    enabled: true
     topics:
-      resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
-      report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
-      mentor-embedding-refresh-requested: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED:mentor.embedding.refresh.requested}
-      resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
-      report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}
-      mentor-embedding-refresh-requested-dlq: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED_DLQ:mentor.embedding.refresh.requested.dlq}
-      chat-message-sent: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_SENT:chat.message.sent}
-      chat-message-persist-requested: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_PERSIST_REQUESTED:chat.message.persist.requested}
-      chat-message-persist-requested-dlq: ${APP_KAFKA_TOPICS_CHAT_MESSAGE_PERSIST_REQUESTED_DLQ:chat.message.persist.requested.dlq}
+      resume-parse-requested: resume.parse.requested
+      report-generate-requested: report.generate.requested
+      mentor-embedding-refresh-requested: mentor.embedding.refresh.requested
+      resume-parse-requested-dlq: resume.parse.requested.dlq
+      report-generate-requested-dlq: report.generate.requested.dlq
+      mentor-embedding-refresh-requested-dlq: mentor.embedding.refresh.requested.dlq
+      chat-message-sent: chat.message.sent
+      notification-requested: notification.requested
+      notification-requested-dlq: notification.requested.dlq
+      chat-message-persist-requested: chat.message.persist.requested
+      chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
   chat:
     realtime:
       redis:
-        enabled: ${APP_CHAT_REALTIME_REDIS_ENABLED:true}
-        channel: ${APP_CHAT_REALTIME_REDIS_CHANNEL:chat.message.broadcast}
+        enabled: true
+        channel: chat.message.broadcast
     persistence:
       async:
-        enabled: ${APP_CHAT_PERSISTENCE_ASYNC_ENABLED:true}
-        batch-size: ${APP_CHAT_PERSISTENCE_ASYNC_BATCH_SIZE:100}
-        flush-interval-ms: ${APP_CHAT_PERSISTENCE_ASYNC_FLUSH_INTERVAL_MS:200}
+        enabled: true
+        batch-size: 250
+        flush-interval-ms: 120
+  metrics:
+    aop:
+      enabled: true
+      slow-threshold-ms: 500
+  websocket:
+    inbound:
+      core-pool-size: 24
+      max-pool-size: 96
+      queue-capacity: 10000
+    outbound:
+      core-pool-size: 24
+      max-pool-size: 96
+      queue-capacity: 10000
+    transport:
+      send-time-limit-ms: 15000
+      send-buffer-size-limit-bytes: 4194304
+      message-size-limit-bytes: 262144

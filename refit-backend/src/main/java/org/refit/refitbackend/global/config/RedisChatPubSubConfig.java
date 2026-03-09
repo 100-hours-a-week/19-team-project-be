@@ -2,6 +2,7 @@ package org.refit.refitbackend.global.config;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.chat.realtime.RedisChatRealtimeSubscriber;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -16,7 +17,7 @@ public class RedisChatPubSubConfig {
 
     @Bean
     public ChannelTopic chatRealtimeTopic(
-            @org.springframework.beans.factory.annotation.Value("${app.chat.realtime.redis.channel:chat.message.broadcast}")
+            @Value("${app.chat.realtime.redis.channel:chat.message.broadcast}")
             String channel
     ) {
         return new ChannelTopic(channel);

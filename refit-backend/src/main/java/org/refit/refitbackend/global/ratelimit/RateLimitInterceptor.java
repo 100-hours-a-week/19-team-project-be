@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 
@@ -19,9 +20,14 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private final LocalRateLimiter rateLimiter;
     private final RateLimitMatcher matcher;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    @Value("${app.rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
 
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) throws IOException {
+        if (!rateLimitEnabled) {
+            return true;
+        }
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }

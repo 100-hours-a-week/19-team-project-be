@@ -20,13 +20,13 @@ public class ChatMessageEventPublisher {
 
     public void publishMessageSent(ChatMessageSentEvent event) {
         kafkaTemplate.send(topicProperties.getChatMessageSent(), String.valueOf(event.chatId()), event);
-        log.info("Kafka published chat message. chatId={}, messageId={}, senderId={}",
+        log.debug("Kafka published chat message. chatId={}, messageId={}, senderId={}",
                 event.chatId(), event.messageId(), event.senderId());
     }
 
     public void publishPersistRequested(ChatMessagePersistRequestedEvent event) {
         kafkaTemplate.send(topicProperties.getChatMessagePersistRequested(), String.valueOf(event.chatId()), event);
-        log.info("Kafka published chat persist request. chatId={}, senderId={}, roomSequence={}",
+        log.debug("Kafka published chat persist request. chatId={}, senderId={}, roomSequence={}",
                 event.chatId(), event.senderId(), event.roomSequence());
     }
 }

@@ -159,7 +159,7 @@ public class ChatMessagePersistenceListener {
         if (!toSave.isEmpty()) {
             List<ChatMessage> savedMessages = chatMessageRepository.saveAll(toSave);
             updateChatRoomState(savedMessages);
-            log.info("Kafka consumed chat persist batch. requested={}, accepted={}, inserted={}",
+            log.debug("Kafka consumed chat persist batch. requested={}, accepted={}, inserted={}",
                     batch.size(), deduped.size(), savedMessages.size());
         }
     }

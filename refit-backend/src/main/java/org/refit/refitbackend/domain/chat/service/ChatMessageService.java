@@ -123,9 +123,9 @@ public class ChatMessageService {
 
         // 실시간 fan-out은 Redis Pub/Sub(활성화 시) 또는 로컬 브로커(비활성화 시)로 전송
         chatRealtimePublisher.publish(request.chatId(), payload);
-        log.info("메시지 전송 성공 - roomId: {}, senderId: {}", request.chatId(), senderId);
+        log.debug("메시지 전송 성공 - roomId: {}, senderId: {}", request.chatId(), senderId);
 
-        // 상대방에게 새 메시지 푸시 알림 (시스템 메시지 제외)
+        // 상대방 알림/SSE는 Kafka 이벤트 소비 경로에서 비동기 처리
         if (messageType != MessageType.SYSTEM) {
             User receiver = chatRoom.getRequester().getId().equals(senderId)
                     ? chatRoom.getReceiver()
@@ -145,11 +145,12 @@ public class ChatMessageService {
                                 clientMessageId
                         )
                 );
+            } else {
+                // Kafka 비활성화 환경에서는 기존 동기 흐름 유지
+                long unreadCount = calculateUnreadCount(chatRoom, receiver.getId());
+                sseService.sendChatEvent(receiver.getId(), request.chatId(), messageIdForSse, unreadCount);
+                notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), content);
             }
-
-            long unreadCount = calculateUnreadCount(chatRoom, receiver.getId());
-            sseService.sendChatEvent(receiver.getId(), request.chatId(), messageIdForSse, unreadCount);
-            notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), content);
         }
 
         return payload;
