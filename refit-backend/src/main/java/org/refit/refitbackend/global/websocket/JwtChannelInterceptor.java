@@ -35,7 +35,6 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
             if (token != null && !token.isBlank()) {
                 authenticateUser(accessor, token);
             } else {
-                log.debug("[WS] missing auth token on CONNECT");
                 throw new MessageDeliveryException("Missing auth token on CONNECT");
             }
         }
