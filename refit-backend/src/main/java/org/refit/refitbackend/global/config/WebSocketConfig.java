@@ -3,6 +3,7 @@ package org.refit.refitbackend.global.config;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.global.websocket.JwtChannelInterceptor;
 import org.refit.refitbackend.global.websocket.JwtHandshakeInterceptor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.converter.JacksonJsonMessageConverter;
 import org.springframework.messaging.converter.MessageConverter;
@@ -10,6 +11,7 @@ import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
+import org.springframework.web.socket.config.annotation.WebSocketTransportRegistration;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
 import tools.jackson.databind.json.JsonMapper;
@@ -23,6 +25,33 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final JwtChannelInterceptor jwtChannelInterceptor;
     private final JwtHandshakeInterceptor jwtHandshakeInterceptor;
+
+    @Value("${app.websocket.inbound.core-pool-size:8}")
+    private int inboundCorePoolSize;
+
+    @Value("${app.websocket.inbound.max-pool-size:32}")
+    private int inboundMaxPoolSize;
+
+    @Value("${app.websocket.inbound.queue-capacity:2000}")
+    private int inboundQueueCapacity;
+
+    @Value("${app.websocket.outbound.core-pool-size:8}")
+    private int outboundCorePoolSize;
+
+    @Value("${app.websocket.outbound.max-pool-size:32}")
+    private int outboundMaxPoolSize;
+
+    @Value("${app.websocket.outbound.queue-capacity:2000}")
+    private int outboundQueueCapacity;
+
+    @Value("${app.websocket.transport.send-time-limit-ms:20000}")
+    private int sendTimeLimitMs;
+
+    @Value("${app.websocket.transport.send-buffer-size-limit-bytes:1048576}")
+    private int sendBufferSizeLimitBytes;
+
+    @Value("${app.websocket.transport.message-size-limit-bytes:131072}")
+    private int messageSizeLimitBytes;
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
@@ -85,8 +114,28 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        // JWT 인증 인터셉터 등록
+        // JWT 인증 인터셉터 등록 + inbound worker 튜닝
         registration.interceptors(jwtChannelInterceptor);
+        registration.taskExecutor()
+                .corePoolSize(inboundCorePoolSize)
+                .maxPoolSize(inboundMaxPoolSize)
+                .queueCapacity(inboundQueueCapacity);
+    }
+
+    @Override
+    public void configureClientOutboundChannel(ChannelRegistration registration) {
+        // outbound worker 튜닝
+        registration.taskExecutor()
+                .corePoolSize(outboundCorePoolSize)
+                .maxPoolSize(outboundMaxPoolSize)
+                .queueCapacity(outboundQueueCapacity);
+    }
+
+    @Override
+    public void configureWebSocketTransport(WebSocketTransportRegistration registry) {
+        registry.setSendTimeLimit(sendTimeLimitMs);
+        registry.setSendBufferSizeLimit(sendBufferSizeLimitBytes);
+        registry.setMessageSizeLimit(messageSizeLimitBytes);
     }
 
     @Override
