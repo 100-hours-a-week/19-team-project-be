@@ -124,10 +124,14 @@ management:
     export:
       prometheus:
         enabled: true
-      otlp:
-        enabled: false
-  tracing:
-    enabled: false
+
+sentry:
+  enabled: true
+  environment: dev
+  traces-sample-rate: 0.2
+  profiles-sample-rate: 0.0
+  send-default-pii: false
+  debug: false
 
 # ============================================
 # Structured JSON Logging (개발 환경)
@@ -148,7 +152,6 @@ logging:
     org.refit.refitbackend: info  # 개발 환경 기본 로그 레벨
     org.apache.kafka: warn
     org.springframework.kafka: warn
-    io.opentelemetry: off
 
 server:
   forward-headers-strategy: framework
@@ -164,6 +167,9 @@ ai:
   base-url: https://dev.re-fit.kr/api/ai
 
 app:
+  notification:
+    async:
+      enabled: false
   rate-limit:
     enabled: false
   kafka:
@@ -178,6 +184,8 @@ app:
       chat-message-sent: chat.message.sent
       notification-requested: notification.requested
       notification-requested-dlq: notification.requested.dlq
+      notification-push-requested: notification.push.requested
+      notification-push-requested-dlq: notification.push.requested.dlq
       chat-message-persist-requested: chat.message.persist.requested
       chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
   chat:

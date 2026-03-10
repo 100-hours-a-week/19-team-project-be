@@ -1,5 +1,6 @@
 package org.refit.refitbackend.global.kafka.config;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -10,6 +11,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.MicrometerConsumerListener;
+import org.springframework.kafka.core.MicrometerProducerListener;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.core.*;
@@ -26,13 +29,16 @@ public class KafkaClientConfig {
 
     @Bean
     public ProducerFactory<Object, Object> producerFactory(
-            @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers}") String bootstrapServers
+            @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
+            MeterRegistry meterRegistry
     ) {
         Map<String, Object> props = new HashMap<>();
         props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
-        return new DefaultKafkaProducerFactory<>(props);
+        DefaultKafkaProducerFactory<Object, Object> factory = new DefaultKafkaProducerFactory<>(props);
+        factory.addListener(new MicrometerProducerListener<>(meterRegistry));
+        return factory;
     }
 
     @Bean
@@ -43,7 +49,8 @@ public class KafkaClientConfig {
     @Bean
     public ConsumerFactory<Object, Object> consumerFactory(
             @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers}") String bootstrapServers,
-            @org.springframework.beans.factory.annotation.Value("${spring.kafka.consumer.group-id:refit-backend}") String groupId
+            @org.springframework.beans.factory.annotation.Value("${spring.kafka.consumer.group-id:refit-backend}") String groupId,
+            MeterRegistry meterRegistry
     ) {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -53,7 +60,9 @@ public class KafkaClientConfig {
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         props.put(JsonDeserializer.TRUSTED_PACKAGES, "*");
         props.put(JsonDeserializer.USE_TYPE_INFO_HEADERS, true);
-        return new DefaultKafkaConsumerFactory<>(props);
+        DefaultKafkaConsumerFactory<Object, Object> factory = new DefaultKafkaConsumerFactory<>(props);
+        factory.addListener(new MicrometerConsumerListener<>(meterRegistry));
+        return factory;
     }
 
     @Bean
@@ -86,6 +95,12 @@ public class KafkaClientConfig {
             }
             if (topic.equals(topicProperties.getChatMessagePersistRequested())) {
                 return new TopicPartition(topicProperties.getChatMessagePersistRequestedDlq(), record.partition());
+            }
+            if (topic.equals(topicProperties.getNotificationRequested())) {
+                return new TopicPartition(topicProperties.getNotificationRequestedDlq(), record.partition());
+            }
+            if (topic.equals(topicProperties.getNotificationPushRequested())) {
+                return new TopicPartition(topicProperties.getNotificationPushRequestedDlq(), record.partition());
             }
             return new TopicPartition(topic + ".dlq", record.partition());
         });

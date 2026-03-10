@@ -88,7 +88,7 @@ public class JwtChannelInterceptor implements ChannelInterceptor {
                 List.of(new SimpleGrantedAuthority("ROLE_USER"))
         ));
 
-        log.info("WebSocket 인증 성공 - userId: {}", userId);
+        log.debug("WebSocket 인증 성공 - userId: {}", userId);
     }
 
     private String getCookieHeader(StompHeaderAccessor accessor) {

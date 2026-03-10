@@ -157,6 +157,9 @@ fcm:
   webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
 
 app:
+  notification:
+    async:
+      enabled: false
   kafka:
     enabled: true
     topics:
@@ -169,6 +172,8 @@ app:
       chat-message-sent: chat.message.sent
       notification-requested: notification.requested
       notification-requested-dlq: notification.requested.dlq
+      notification-push-requested: notification.push.requested
+      notification-push-requested-dlq: notification.push.requested.dlq
       chat-message-persist-requested: chat.message.persist.requested
       chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
   chat:
