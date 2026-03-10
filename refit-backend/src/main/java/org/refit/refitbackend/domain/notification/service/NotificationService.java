@@ -35,6 +35,14 @@ public class NotificationService {
     private final FcmPushService fcmPushService;
     private final SseService sseService;
 
+    public record NotificationDispatchPayload(
+            Long receiverId,
+            Long notificationId,
+            String type,
+            String title,
+            String content
+    ) {}
+
     public NotificationRes.NotificationListResponse listMyNotifications(Long userId, Long cursor, Integer size) {
         User user = getActiveUser(userId);
 
@@ -145,6 +153,32 @@ public class NotificationService {
 
     @Transactional
     public void notifyChatMessageReceived(User sender, User receiver, Long chatId, String messageContent) {
+        NotificationDispatchPayload payload = createChatMessageNotification(sender, receiver, chatId, messageContent);
+        sendPushOnly(payload.receiverId(), payload.title(), payload.content(), payload.type());
+    }
+
+    @Transactional
+    public NotificationDispatchPayload createChatMessageNotification(
+            Long senderId,
+            Long receiverId,
+            Long chatId,
+            String messageContent
+    ) {
+        User sender = userRepository.findById(senderId).orElse(null);
+        User receiver = userRepository.findById(receiverId).orElse(null);
+        if (sender == null || receiver == null) {
+            return null;
+        }
+        return createChatMessageNotification(sender, receiver, chatId, messageContent);
+    }
+
+    @Transactional
+    public NotificationDispatchPayload createChatMessageNotification(
+            User sender,
+            User receiver,
+            Long chatId,
+            String messageContent
+    ) {
         String title = "새 메시지가 도착했어요";
         String preview = messageContent == null ? "" : messageContent.trim();
         if (preview.length() > 80) {
@@ -152,7 +186,23 @@ public class NotificationService {
         }
         String content = sender.getNickname() + ": " + preview;
         String type = "CHAT_MESSAGE_RECEIVED";
-        sendNotification(receiver, type, title, content);
+
+        return saveNotificationAndEmitSse(receiver, type, title, content);
+    }
+
+    public void sendPushOnly(Long receiverId, String title, String content, String type) {
+        if (receiverId == null) {
+            return;
+        }
+        try {
+            List<String> tokens = fcmTokenRepository.findAllByUserId(receiverId).stream()
+                    .map(FcmToken::getToken)
+                    .distinct()
+                    .toList();
+            fcmPushService.sendToTokens(tokens, title, content);
+        } catch (Exception e) {
+            log.warn("Notification push failed. receiverId={}, type={}", receiverId, type, e);
+        }
     }
 
     @Transactional
@@ -243,24 +293,31 @@ public class NotificationService {
 
     private void sendNotification(User receiver, String type, String title, String content) {
         try {
-            Notification savedNotification = notificationRepository.save(Notification.builder()
-                    .user(receiver)
-                    .type(type)
-                    .title(title)
-                    .content(content)
-                    .isRead(false)
-                    .build());
-
-            long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(receiver.getId());
-            sseService.sendNotificationEvent(receiver.getId(), type, savedNotification.getId(), unreadCount);
-
-            List<String> tokens = fcmTokenRepository.findAllByUserId(receiver.getId()).stream()
-                    .map(FcmToken::getToken)
-                    .distinct()
-                    .toList();
-            fcmPushService.sendToTokens(tokens, title, content);
+            NotificationDispatchPayload payload = saveNotificationAndEmitSse(receiver, type, title, content);
+            sendPushOnly(payload.receiverId(), payload.title(), payload.content(), payload.type());
         } catch (Exception e) {
             log.warn("Notification send failed. receiverId={}, type={}", receiver.getId(), type, e);
         }
+    }
+
+    private NotificationDispatchPayload saveNotificationAndEmitSse(User receiver, String type, String title, String content) {
+        Notification savedNotification = notificationRepository.save(Notification.builder()
+                .user(receiver)
+                .type(type)
+                .title(title)
+                .content(content)
+                .isRead(false)
+                .build());
+
+        long unreadCount = notificationRepository.countByUserIdAndIsReadFalse(receiver.getId());
+        sseService.sendNotificationEvent(receiver.getId(), type, savedNotification.getId(), unreadCount);
+
+        return new NotificationDispatchPayload(
+                receiver.getId(),
+                savedNotification.getId(),
+                type,
+                title,
+                content
+        );
     }
 }
