@@ -2,6 +2,7 @@ package org.refit.refitbackend.domain.chat.kafka;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.persistence.EntityManager;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.entity.MessageType;
@@ -9,7 +10,6 @@ import org.refit.refitbackend.domain.chat.kafka.event.ChatMessagePersistRequeste
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.user.entity.User;
-import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -36,7 +36,7 @@ public class ChatMessagePersistenceListener {
 
     private final ChatMessageRepository chatMessageRepository;
     private final ChatRoomRepository chatRoomRepository;
-    private final UserRepository userRepository;
+    private final EntityManager entityManager;
 
     @Value("${app.chat.persistence.async.batch-size:100}")
     private int batchSize;
@@ -53,21 +53,29 @@ public class ChatMessagePersistenceListener {
     )
     @Transactional
     public void onPersistRequested(ChatMessagePersistRequestedEvent event) {
+        List<ChatMessagePersistRequestedEvent> batchToFlush = null;
         synchronized (buffer) {
             buffer.add(event);
             if (buffer.size() >= batchSize || shouldFlushByTime()) {
-                flushBufferLocked();
+                batchToFlush = drainBufferLocked();
             }
+        }
+        if (batchToFlush != null) {
+            persistBatch(batchToFlush);
         }
     }
 
     @Scheduled(fixedDelayString = "${app.chat.persistence.async.flush-interval-ms:200}")
     @Transactional
     public void flushIfNeeded() {
+        List<ChatMessagePersistRequestedEvent> batchToFlush = null;
         synchronized (buffer) {
             if (!buffer.isEmpty() && shouldFlushByTime()) {
-                flushBufferLocked();
+                batchToFlush = drainBufferLocked();
             }
+        }
+        if (batchToFlush != null) {
+            persistBatch(batchToFlush);
         }
     }
 
@@ -75,15 +83,18 @@ public class ChatMessagePersistenceListener {
         return Duration.between(lastFlushAt, Instant.now()).toMillis() >= flushIntervalMs;
     }
 
-    void flushBufferLocked() {
+    private List<ChatMessagePersistRequestedEvent> drainBufferLocked() {
         if (buffer.isEmpty()) {
-            return;
+            return null;
         }
 
         List<ChatMessagePersistRequestedEvent> batch = new ArrayList<>(buffer);
         buffer.clear();
         lastFlushAt = Instant.now();
+        return batch;
+    }
 
+    void persistBatch(List<ChatMessagePersistRequestedEvent> batch) {
         List<ChatMessagePersistRequestedEvent> candidates = batch.stream()
                 .filter(e -> e.chatId() != null && e.senderId() != null && e.roomSequence() != null)
                 .toList();
@@ -129,15 +140,12 @@ public class ChatMessagePersistenceListener {
 
             ChatRoom room = roomMap.computeIfAbsent(
                     event.chatId(),
-                    id -> chatRoomRepository.findById(id).orElse(null)
+                    id -> chatRoomRepository.getReferenceById(id)
             );
             User sender = userMap.computeIfAbsent(
                     event.senderId(),
-                    id -> userRepository.findById(id).orElse(null)
+                    id -> entityManager.getReference(User.class, id)
             );
-            if (room == null || sender == null) {
-                continue;
-            }
 
             MessageType messageType;
             try {

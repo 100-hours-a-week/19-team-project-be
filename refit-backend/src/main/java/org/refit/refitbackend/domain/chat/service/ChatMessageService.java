@@ -48,10 +48,6 @@ public class ChatMessageService {
      */
     @Transactional
     public ChatRes.MessageInfo sendMessage(Long senderId, ChatReq.SendMessage request) {
-        // 발신자 조회
-        User sender = userRepository.findById(senderId)
-                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
-
         // 채팅방 조회 및 권한 체크
         ChatRoom chatRoom = chatRoomRepository.findByIdAndUserId(request.chatId(), senderId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
@@ -59,6 +55,11 @@ public class ChatMessageService {
         if (chatRoom.getStatus() == ChatRoomStatus.CLOSED) {
             throw new CustomException(ExceptionType.CHAT_ALREADY_CLOSED);
         }
+
+        User senderRef = resolveSender(chatRoom, senderId);
+        Long receiverId = chatRoom.getRequester().getId().equals(senderId)
+                ? chatRoom.getReceiver().getId()
+                : chatRoom.getRequester().getId();
 
         long roomSequence = chatRoom.nextMessageSequence();
 
@@ -84,7 +85,8 @@ public class ChatMessageService {
                     null,
                     request.chatId(),
                     roomSequence,
-                    ChatRes.UserInfo.from(sender),
+                    // 비동기 경로는 sender id만 있으면 클라이언트 측 매핑 가능 (불필요한 DB user 조회 방지)
+                    new ChatRes.UserInfo(senderId, null, null, null),
                     messageType.name(),
                     content,
                     clientMessageId,
@@ -104,7 +106,7 @@ public class ChatMessageService {
             // fallback: Kafka 미사용/비활성 환경은 기존 동기 저장 유지
             ChatMessage message = ChatMessage.builder()
                     .chatRoom(chatRoom)
-                    .sender(sender)
+                    .sender(senderRef)
                     .messageType(messageType)
                     .content(content)
                     .roomSequence(roomSequence)
@@ -127,10 +129,6 @@ public class ChatMessageService {
 
         // 상대방 알림/SSE는 Kafka 이벤트 소비 경로에서 비동기 처리
         if (messageType != MessageType.SYSTEM) {
-            User receiver = chatRoom.getRequester().getId().equals(senderId)
-                    ? chatRoom.getReceiver()
-                    : chatRoom.getRequester();
-
             if (chatMessageEventPublisher.isPresent()) {
                 ChatMessageEventPublisher publisher = chatMessageEventPublisher.get();
                 publisher.publishMessageSent(
@@ -139,7 +137,7 @@ public class ChatMessageService {
                                 messageIdForEvent,
                                 roomSequence,
                                 senderId,
-                                receiver.getId(),
+                                receiverId,
                                 messageType.name(),
                                 content,
                                 clientMessageId
@@ -147,13 +145,27 @@ public class ChatMessageService {
                 );
             } else {
                 // Kafka 비활성화 환경에서는 기존 동기 흐름 유지
-                long unreadCount = calculateUnreadCount(chatRoom, receiver.getId());
-                sseService.sendChatEvent(receiver.getId(), request.chatId(), messageIdForSse, unreadCount);
-                notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), content);
+                User sender = userRepository.findById(senderId).orElse(null);
+                User receiver = userRepository.findById(receiverId).orElse(null);
+                if (sender != null && receiver != null) {
+                    long unreadCount = calculateUnreadCount(chatRoom, receiver.getId());
+                    sseService.sendChatEvent(receiver.getId(), request.chatId(), messageIdForSse, unreadCount);
+                    notificationService.notifyChatMessageReceived(sender, receiver, request.chatId(), content);
+                }
             }
         }
 
         return payload;
+    }
+
+    private User resolveSender(ChatRoom chatRoom, Long senderId) {
+        if (chatRoom.getRequester().getId().equals(senderId)) {
+            return chatRoom.getRequester();
+        }
+        if (chatRoom.getReceiver().getId().equals(senderId)) {
+            return chatRoom.getReceiver();
+        }
+        throw new CustomException(ExceptionType.AUTH_FORBIDDEN);
     }
 
     private long calculateUnreadCount(ChatRoom chatRoom, Long userId) {

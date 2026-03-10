@@ -9,8 +9,6 @@ import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
 import org.refit.refitbackend.domain.notification.kafka.NotificationEventPublisher;
 import org.refit.refitbackend.domain.notification.kafka.event.NotificationRequestedEvent;
 import org.refit.refitbackend.domain.notification.service.NotificationService;
-import org.refit.refitbackend.domain.user.entity.User;
-import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.sse.SseService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -29,7 +27,6 @@ public class ChatMessageSentListener {
     private final NotificationService notificationService;
     private final SseService sseService;
     private final ChatRoomRepository chatRoomRepository;
-    private final UserRepository userRepository;
 
     @Value("${app.notification.async.enabled:false}")
     private boolean notificationAsyncEnabled;
@@ -64,10 +61,14 @@ public class ChatMessageSentListener {
     }
 
     private void handleNotification(ChatMessageSentEvent event) {
+        String title = "새 메시지가 도착했어요";
+        String content = buildMessagePreview(event.content());
+        String type = "CHAT_MESSAGE_RECEIVED";
+
         if (notificationAsyncEnabled && notificationEventPublisher.isPresent()) {
             notificationEventPublisher.get().publishNotificationRequested(
                     new NotificationRequestedEvent(
-                            "CHAT_MESSAGE_RECEIVED",
+                            type,
                             event.senderId(),
                             event.receiverId(),
                             event.chatId(),
@@ -77,12 +78,16 @@ public class ChatMessageSentListener {
             return;
         }
 
-        User sender = userRepository.findById(event.senderId()).orElse(null);
-        User receiver = userRepository.findById(event.receiverId()).orElse(null);
-        if (sender == null || receiver == null) {
-            return;
+        // fallback도 DB 조회 없이 push-only로 처리해 메시지 경로 DB 부하를 줄인다.
+        notificationService.sendPushOnly(event.receiverId(), title, content, type);
+    }
+
+    private String buildMessagePreview(String messageContent) {
+        String preview = messageContent == null ? "" : messageContent.trim();
+        if (preview.length() > 80) {
+            preview = preview.substring(0, 80) + "...";
         }
-        notificationService.notifyChatMessageReceived(sender, receiver, event.chatId(), event.content());
+        return preview.isBlank() ? "새 채팅 메시지가 도착했습니다." : preview;
     }
 
     private long resolveUnreadCount(Long chatId, Long receiverId, Long roomSequence) {
