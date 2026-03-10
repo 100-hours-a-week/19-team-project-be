@@ -4,8 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.refit.refitbackend.domain.chat.entity.ChatFeedback;
 import org.refit.refitbackend.domain.chat.entity.ChatFeedbackAnswer;
-import org.refit.refitbackend.domain.chat.entity.ChatMessage;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
+import org.refit.refitbackend.domain.chat.repository.projection.ReportChatMessageProjection;
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackAnswerRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatFeedbackRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
@@ -661,22 +661,22 @@ public class ReportService {
     }
 
     private List<Map<String, Object>> loadChatMessages(Long chatRoomId) {
-        List<ChatMessage> messages = chatMessageRepository.findAllByChatIdOrderBySequence(chatRoomId);
+        List<ReportChatMessageProjection> messages = chatMessageRepository.findReportMessagesByChatIdOrderBySequence(chatRoomId);
         List<Map<String, Object>> mapped = new ArrayList<>();
-        for (ChatMessage message : messages) {
+        for (ReportChatMessageProjection message : messages) {
             if (message == null || message.getContent() == null || message.getContent().isBlank()) {
                 continue;
             }
             Map<String, Object> row = new HashMap<>();
-            row.put("message_id", message.getId());
-            row.put("chat_id", message.getChatRoom().getId());
+            row.put("message_id", message.getMessageId());
+            row.put("chat_id", message.getChatId());
             row.put("room_sequence", message.getRoomSequence());
 
             Map<String, Object> sender = new HashMap<>();
-            sender.put("user_id", message.getSender().getId());
-            sender.put("nickname", message.getSender().getNickname());
-            sender.put("profile_image_url", message.getSender().getProfileImageUrl());
-            sender.put("user_type", message.getSender().getUserType().name());
+            sender.put("user_id", message.getSenderId());
+            sender.put("nickname", message.getSenderNickname());
+            sender.put("profile_image_url", message.getSenderProfileImageUrl());
+            sender.put("user_type", message.getSenderUserType().name());
             row.put("sender", sender);
 
             row.put("message_type", message.getMessageType().name());
