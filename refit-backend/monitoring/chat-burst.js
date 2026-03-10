@@ -49,6 +49,7 @@ const DEV_TOKEN_DELAY_MS = Number(__ENV.DEV_TOKEN_DELAY_MS || 20);
 const DEV_TOKEN_MAX_BACKOFF_MS = Number(__ENV.DEV_TOKEN_MAX_BACKOFF_MS || 5000);
 const DEV_TOKEN_SKIP_ON_FAIL = String(__ENV.DEV_TOKEN_SKIP_ON_FAIL || 'true') === 'true';
 const MIN_ISSUED_TOKENS = Number(__ENV.MIN_ISSUED_TOKENS || 10);
+const TOKEN_POOL_SIZE = Number(__ENV.TOKEN_POOL_SIZE || PEAK_VUS || MIN_ISSUED_TOKENS);
 
 const wsConnectSuccess = new Rate('ws_connect_success');
 const stompConnected = new Rate('stomp_connected');
@@ -145,6 +146,9 @@ function issueDevTokens() {
   const issuedUserIds = [];
   const failedUserIds = [];
   for (const userId of USER_IDS) {
+    if (issued.length >= TOKEN_POOL_SIZE) {
+      break;
+    }
     let res = null;
     for (let attempt = 0; attempt <= DEV_TOKEN_RETRIES; attempt += 1) {
       res = http.post(
@@ -232,6 +236,7 @@ export function setup() {
     }
     const issued = issueDevTokens();
     runtimeTokens = issued.tokens;
+    console.log(`[setup] issued dev tokens: ${runtimeTokens.length} (target pool size: ${TOKEN_POOL_SIZE})`);
     if (issued.userIds && issued.userIds.length > 0) {
       for (let i = 0; i < issued.userIds.length; i += 1) {
         USER_IDS[i] = issued.userIds[i];
