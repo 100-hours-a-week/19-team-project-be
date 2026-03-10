@@ -2,7 +2,6 @@ package org.refit.refitbackend.global.config;
 
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.auth.jwt.JwtAuthFilter;
-import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.filter.InternalApiKeyFilter;
 import org.refit.refitbackend.global.util.JwtUtil;
 import org.springframework.context.annotation.Bean;
@@ -23,7 +22,6 @@ import java.util.List;
 public class SecurityConfig {
 
     private final JwtUtil jwtUtil;
-    private final UserRepository userRepository;
     private final InternalApiKeyFilter internalApiKeyFilter;
 
     @Bean
@@ -79,7 +77,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, CorsConfigurationSource corsConfigurationSource, List<String> allowUrls) throws Exception {
-        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil, userRepository, allowUrls);
+        JwtAuthFilter jwtAuthFilter = new JwtAuthFilter(jwtUtil, allowUrls);
         BasicAuthenticationEntryPoint entryPoint = new BasicAuthenticationEntryPoint();
         entryPoint.setRealmName("Swagger");
         entryPoint.afterPropertiesSet();
