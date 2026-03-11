@@ -9,6 +9,8 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 
 import java.util.List;
 
@@ -148,5 +150,20 @@ public class ChatReq {
             @NotBlank(message = "답변 값이 필요합니다.")
             @Size(max = 500, message = "답변 값이 너무 깁니다.")
             String answerValue
+    ) {}
+
+    @Schema(description = "V3 리뷰 작성/수정")
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record CreateReviewV3(
+            @Schema(description = "별점(1~5)", example = "5")
+            @NotNull(message = "평점이 필요합니다.")
+            @Min(value = 1, message = "평점은 1 이상이어야 합니다.")
+            @Max(value = 5, message = "평점은 5 이하여야 합니다.")
+            Integer rating,
+
+            @Schema(description = "리뷰 텍스트(최대 300자)", example = "실무 관점에서 상세하게 피드백해주셔서 도움이 많이 됐어요.")
+            @NotBlank(message = "리뷰 내용을 입력해 주세요.")
+            @Size(max = 300, message = "리뷰 내용이 너무 깁니다.")
+            String comment
     ) {}
 }
