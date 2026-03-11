@@ -282,14 +282,9 @@
           "expr": "sum(increase(hikaricp_connections_timeout_total{instance=~\"$instance\"}[5m]))",
           "legendFormat": "timeouts (5m)",
           "refId": "A"
-        },
-        {
-          "expr": "sum(increase(hikaricp_connections_acquire_seconds_count{instance=~\"$instance\"}[5m]))",
-          "legendFormat": "acquire count (5m)",
-          "refId": "B"
         }
       ],
-      "title": "Hikari Timeout / Acquire",
+      "title": "Hikari Timeouts (5m)",
       "type": "timeseries"
     },
     {
@@ -459,12 +454,53 @@
       },
       "targets": [
         {
-          "expr": "max(kafka_consumer_records_lag_max{instance=~\"$instance\"})",
+          "expr": "max((kafka_consumer_records_lag_max{instance=~\"$instance\"} or kafka_consumer_fetch_manager_records_lag_max{instance=~\"$instance\"}) or vector(0))",
           "legendFormat": "max lag",
           "refId": "A"
         }
       ],
       "title": "Kafka Consumer Lag Max",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "Prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "unit": "short",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 40
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(increase(hikaricp_connections_acquire_seconds_count{instance=~\"$instance\"}[5m]))",
+          "legendFormat": "acquire count (5m)",
+          "refId": "A"
+        }
+      ],
+      "title": "Hikari Acquire Count (5m)",
       "type": "timeseries"
     }
   ],

@@ -163,6 +163,7 @@ public enum ExceptionType {
      * Review / Feedback
      * ======================= */
     REVIEW_ALREADY_EXISTS(HttpStatus.BAD_REQUEST, "REVIEW_ALREADY_EXISTS", "이미 리뷰가 제출되었습니다."),
+    REVIEW_NOT_FOUND(HttpStatus.NOT_FOUND, "REVIEW_NOT_FOUND", "리뷰를 찾을 수 없습니다."),
     REVIEW_RATING_INVALID(HttpStatus.BAD_REQUEST, "REVIEW_RATING_INVALID", "평점은 1~5 사이여야 합니다."),
     REVIEW_COMMENT_TOO_LONG(HttpStatus.BAD_REQUEST, "REVIEW_COMMENT_TOO_LONG", "리뷰 내용이 너무 깁니다."),
     CHAT_NOT_CLOSED(HttpStatus.BAD_REQUEST, "CHAT_NOT_CLOSED", "채팅 종료 후에만 리뷰할 수 있습니다."),
