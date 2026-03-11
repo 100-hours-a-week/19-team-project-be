@@ -33,7 +33,8 @@ public class RateLimitPolicy {
             new RateLimitRule("agent_sessions_create", HttpMethod.POST, "/api/v3/agent/sessions", 20, Duration.ofMinutes(1), RateLimitTarget.USER),
             new RateLimitRule("agent_sessions_list", HttpMethod.GET, "/api/v3/agent/sessions", 30, Duration.ofMinutes(1), RateLimitTarget.USER),
             new RateLimitRule("agent_sessions_get", HttpMethod.GET, "/api/v3/agent/sessions/*", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
-            new RateLimitRule("agent_messages_get", HttpMethod.GET, "/api/v3/agent/sessions/*/messages", 60, Duration.ofMinutes(1), RateLimitTarget.USER)
+            new RateLimitRule("agent_messages_get", HttpMethod.GET, "/api/v3/agent/sessions/*/messages", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
+            new RateLimitRule("agent_message_feedback", HttpMethod.PATCH, "/api/v3/agent/messages/*/feedback", 30, Duration.ofMinutes(1), RateLimitTarget.USER)
     );
 
     public List<RateLimitRule> rules() {
