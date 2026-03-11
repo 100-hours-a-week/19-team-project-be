@@ -16,6 +16,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tools.jackson.databind.JsonNode;
@@ -84,6 +85,23 @@ public class AgentService {
                 .stream()
                 .map(this::toMessageInfo)
                 .toList();
+    }
+
+    @Transactional
+    public AgentRes.MessageFeedbackInfo updateMessageFeedback(Long userId, Long messageId, AgentReq.MessageFeedbackRequest request) {
+        if (request == null) {
+            throw new CustomException(ExceptionType.INVALID_REQUEST);
+        }
+
+        AgentMessage message = agentMessageRepository.findByIdAndUserId(messageId, userId)
+                .orElseThrow(() -> new CustomException(ExceptionType.AI_CHAT_NOT_FOUND));
+
+        if (message.getRole() != AgentMessageRole.ASSISTANT) {
+            throw new CustomException(ExceptionType.INVALID_REQUEST);
+        }
+
+        message.updateFeedback(request.feedback());
+        return new AgentRes.MessageFeedbackInfo(message.getId(), message.getFeedback());
     }
 
     public SseEmitter replyStream(Long userId, AgentReq.ReplyRequest request) {
@@ -158,13 +176,17 @@ public class AgentService {
                     if (eventName != null) {
                         Object data = parseEventData(dataBuilder.toString());
                         captureState(eventName, data, assistantMessage, latestIntent);
-                        sendEvent(emitter, eventName, data);
+
                         if ("done".equals(eventName)) {
-                            persistAssistantMessage(sessionId, userId, assistantMessage.toString());
+                            AgentMessage saved = persistAssistantMessage(sessionId, userId, assistantMessage.toString());
                             updateSessionMetadata(sessionId, userId, latestIntent[0]);
+                            sendAssistantMessageSavedEvent(emitter, sessionId, saved);
+                            sendEvent(emitter, "done", data);
                             emitter.complete();
                             return;
                         }
+
+                        sendEvent(emitter, eventName, data);
                     }
                     eventName = null;
                     dataBuilder.setLength(0);
@@ -187,8 +209,11 @@ public class AgentService {
                 }
             }
         }
-        persistAssistantMessage(sessionId, userId, assistantMessage.toString());
+
+        AgentMessage saved = persistAssistantMessage(sessionId, userId, assistantMessage.toString());
         updateSessionMetadata(sessionId, userId, latestIntent[0]);
+        sendAssistantMessageSavedEvent(emitter, sessionId, saved);
+        sendEvent(emitter, "done", Map.of());
         emitter.complete();
     }
 
@@ -233,18 +258,29 @@ public class AgentService {
                 .build());
     }
 
-    private void persistAssistantMessage(String sessionId, Long userId, String message) {
+    private AgentMessage persistAssistantMessage(String sessionId, Long userId, String message) {
         if (message == null || message.isBlank()) {
-            return;
+            return null;
         }
 
-        agentMessageRepository.save(AgentMessage.builder()
+        AgentMessage saved = agentMessageRepository.save(AgentMessage.builder()
                 .sessionId(sessionId)
                 .userId(userId)
                 .role(AgentMessageRole.ASSISTANT)
                 .content(message)
                 .build());
         increaseMessageCount(sessionId, userId);
+        return saved;
+    }
+
+    private void sendAssistantMessageSavedEvent(SseEmitter emitter, String sessionId, AgentMessage saved) throws Exception {
+        if (saved == null) {
+            return;
+        }
+        sendEvent(emitter, "message_saved", Map.of(
+                "session_id", sessionId,
+                "message_id", saved.getId()
+        ));
     }
 
     private void updateSessionMetadata(String sessionId, Long userId, String lastIntent) {
@@ -309,6 +345,7 @@ public class AgentService {
                 message.getSessionId(),
                 message.getRole().name(),
                 message.getContent(),
+                message.getFeedback(),
                 message.getCreatedAt() == null ? null : message.getCreatedAt().toString()
         );
     }

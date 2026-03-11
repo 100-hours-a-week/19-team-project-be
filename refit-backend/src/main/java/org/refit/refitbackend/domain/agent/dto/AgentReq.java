@@ -25,4 +25,10 @@ public class AgentReq {
             return topK == null ? 3 : topK;
         }
     }
+
+    public record MessageFeedbackRequest(
+            @Schema(description = "추천/비추천 여부. true=추천, false=비추천, null=평가 취소", example = "true", nullable = true)
+            Boolean feedback
+    ) {
+    }
 }
