@@ -25,7 +25,15 @@ public class RateLimitPolicy {
             new RateLimitRule("presigned_get_root", HttpMethod.GET, "/api/v1/uploads/presigned-url", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
             new RateLimitRule("presigned_get_all", HttpMethod.GET, "/api/v1/uploads/presigned-url/**", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
             new RateLimitRule("chat_create", HttpMethod.POST, "/api/v1/chats", 20, Duration.ofMinutes(1), RateLimitTarget.USER),
-            new RateLimitRule("chat_read", HttpMethod.PATCH, "/api/v1/chats/messages/read", 60, Duration.ofMinutes(1), RateLimitTarget.USER)
+            new RateLimitRule("chat_read", HttpMethod.PATCH, "/api/v1/chats/messages/read", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
+
+            // Agent endpoints - strict for expensive AI streaming
+            new RateLimitRule("agent_reply_burst", HttpMethod.POST, "/api/v3/agent/reply", 3, Duration.ofSeconds(10), RateLimitTarget.USER),
+            new RateLimitRule("agent_reply_minute", HttpMethod.POST, "/api/v3/agent/reply", 10, Duration.ofMinutes(1), RateLimitTarget.USER),
+            new RateLimitRule("agent_sessions_create", HttpMethod.POST, "/api/v3/agent/sessions", 20, Duration.ofMinutes(1), RateLimitTarget.USER),
+            new RateLimitRule("agent_sessions_list", HttpMethod.GET, "/api/v3/agent/sessions", 30, Duration.ofMinutes(1), RateLimitTarget.USER),
+            new RateLimitRule("agent_sessions_get", HttpMethod.GET, "/api/v3/agent/sessions/*", 60, Duration.ofMinutes(1), RateLimitTarget.USER),
+            new RateLimitRule("agent_messages_get", HttpMethod.GET, "/api/v3/agent/sessions/*/messages", 60, Duration.ofMinutes(1), RateLimitTarget.USER)
     );
 
     public List<RateLimitRule> rules() {
