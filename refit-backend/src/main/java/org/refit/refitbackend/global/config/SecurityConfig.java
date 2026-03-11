@@ -61,6 +61,8 @@ public class SecurityConfig {
             }
         }
 
+        allow.add("/api/v3/experts/*/reviews");
+
         return allow;
     }
 
