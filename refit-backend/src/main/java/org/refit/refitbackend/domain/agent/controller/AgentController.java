@@ -14,6 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -67,6 +68,17 @@ public class AgentController {
     ) {
         List<AgentRes.MessageInfo> messages = agentService.getMessages(principal.getUserId(), sessionId);
         return ResponseUtil.ok("success", new AgentRes.MessageList(messages));
+    }
+
+    @AgentSwaggerSpec.UpdateMessageFeedback
+    @PatchMapping("/messages/{message_id}/feedback")
+    public ResponseEntity<ApiResponse<AgentRes.MessageFeedbackInfo>> updateMessageFeedback(
+            @AuthenticationPrincipal CustomUserDetails principal,
+            @PathVariable("message_id") Long messageId,
+            @RequestBody AgentReq.MessageFeedbackRequest request
+    ) {
+        AgentRes.MessageFeedbackInfo response = agentService.updateMessageFeedback(principal.getUserId(), messageId, request);
+        return ResponseUtil.ok("success", response);
     }
 
     @AgentSwaggerSpec.ReplyStream
