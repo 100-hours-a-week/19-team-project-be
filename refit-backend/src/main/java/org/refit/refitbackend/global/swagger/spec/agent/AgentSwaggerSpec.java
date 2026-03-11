@@ -6,6 +6,7 @@ import org.refit.refitbackend.global.swagger.annotation.SwaggerApiError;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiRequestBody;
 import org.refit.refitbackend.global.swagger.annotation.SwaggerApiSuccess;
 import org.refit.refitbackend.domain.agent.dto.AgentReq;
+import org.refit.refitbackend.domain.agent.dto.AgentRes;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -81,10 +82,39 @@ public final class AgentSwaggerSpec {
     @Target(ElementType.METHOD)
     @Retention(RetentionPolicy.RUNTIME)
     @SwaggerApiSuccess(
+            summary = "Agent 메시지 평가",
+            operationDescription = "assistant 메시지에 추천/비추천(true/false) 또는 평가 취소(null)를 저장합니다.",
+            implementation = AgentRes.MessageFeedbackInfo.class
+    )
+    @SwaggerApiRequestBody(
+            implementation = AgentReq.MessageFeedbackRequest.class,
+            examples = {
+                    "{ \"feedback\": true }",
+                    "{ \"feedback\": false }",
+                    "{ \"feedback\": null }"
+            },
+            exampleNames = {"like", "dislike", "clear"}
+    )
+    @SwaggerApiError(responseCode = "400", description = "invalid_request", types = {
+            ExceptionType.INVALID_REQUEST
+    })
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "404", description = "not found", types = {
+            ExceptionType.AI_CHAT_NOT_FOUND
+    })
+    public @interface UpdateMessageFeedback {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
             summary = "Agent 답변 스트리밍",
             operationDescription = """
                     사용자 메시지를 전달하고 SSE(text/event-stream)로 Agent 이벤트를 스트리밍합니다.
-                    - 이벤트: session, intent, conditions, cards, text, done, error
+                    - 이벤트: session, intent, conditions, cards, text, message_saved, done, error
                     - session_id 미전달 시 서버에서 새 세션을 생성합니다.
                     """,
             implementation = String.class,

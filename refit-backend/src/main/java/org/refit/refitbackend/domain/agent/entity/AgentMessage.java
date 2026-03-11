@@ -41,11 +41,19 @@ public class AgentMessage extends BaseEntity {
     @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
+    @Column(name = "feedback")
+    private Boolean feedback;
+
     @Builder
-    private AgentMessage(String sessionId, Long userId, AgentMessageRole role, String content) {
+    private AgentMessage(String sessionId, Long userId, AgentMessageRole role, String content, Boolean feedback) {
         this.sessionId = sessionId;
         this.userId = userId;
         this.role = role;
         this.content = content;
+        this.feedback = feedback;
+    }
+
+    public void updateFeedback(Boolean feedback) {
+        this.feedback = feedback;
     }
 }
