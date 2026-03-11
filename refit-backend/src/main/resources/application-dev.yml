@@ -81,6 +81,8 @@ springdoc:
         url: /v3/api-docs/v1
       - name: v2
         url: /v3/api-docs/v2
+      - name: v3
+        url: /v3/api-docs/v3
   api-docs:
     enabled: true
 
@@ -171,7 +173,7 @@ app:
     async:
       enabled: false
   rate-limit:
-    enabled: false
+    enabled: true
   kafka:
     enabled: true
     topics:

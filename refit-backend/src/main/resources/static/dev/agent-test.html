@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent SSE Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f4f6fb;
+      color: #1f2937;
+      padding: 20px;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+    }
+    h1 { margin: 0 0 12px; font-size: 22px; }
+    h2 { margin: 0 0 10px; font-size: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .row { display: grid; grid-template-columns: 1fr; gap: 8px; }
+    label { font-size: 12px; font-weight: 700; color: #4b5563; }
+    input, textarea {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 14px;
+    }
+    textarea { min-height: 88px; resize: vertical; font-family: inherit; }
+    .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    button {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .b1 { background: #2563eb; color: #fff; }
+    .b2 { background: #6b7280; color: #fff; }
+    .b3 { background: #dc2626; color: #fff; }
+    .status {
+      margin-top: 8px;
+      font-size: 12px;
+      padding: 8px;
+      border-radius: 8px;
+      background: #eef2ff;
+      color: #1e3a8a;
+    }
+    .log {
+      background: #111827;
+      color: #e5e7eb;
+      border-radius: 10px;
+      padding: 10px;
+      min-height: 360px;
+      max-height: 62vh;
+      overflow: auto;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .hint { font-size: 12px; color: #6b7280; margin-top: 6px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card">
+    <h1>Agent API 테스트</h1>
+    <div class="grid">
+      <div class="row">
+        <label for="baseUrl">Base URL</label>
+        <input id="baseUrl" placeholder="http://localhost:8080" />
+      </div>
+      <div class="row">
+        <label for="authToken">Authorization Bearer Token (선택)</label>
+        <input id="authToken" placeholder="JWT 토큰 값만 입력 (Bearer 제외)" />
+      </div>
+      <div class="row">
+        <label for="sessionId">Session ID (선택)</label>
+        <input id="sessionId" placeholder="없으면 /api/v3/agent/reply에서 자동 생성" />
+      </div>
+    </div>
+    <div class="status" id="status">상태: 대기</div>
+  </div>
+
+  <div class="card">
+    <h2>세션 API</h2>
+    <div class="btns">
+      <button class="b1" id="createSessionBtn">POST /api/v3/agent/sessions</button>
+      <button class="b2" id="listSessionsBtn">GET /api/v3/agent/sessions</button>
+      <button class="b2" id="getSessionBtn">GET /api/v3/agent/sessions/{id}</button>
+      <button class="b2" id="getMessagesBtn">GET /api/v3/agent/sessions/{id}/messages</button>
+    </div>
+    <div class="hint">생성 성공 시 Session ID 입력칸에 자동 반영</div>
+  </div>
+
+  <div class="card">
+    <h2>Dev Token 발급 (local/dev 전용)</h2>
+    <div class="grid">
+      <div class="row">
+        <label for="devUserId">user_id</label>
+        <input id="devUserId" type="number" min="1" placeholder="예: 201001" />
+      </div>
+    </div>
+    <div class="btns">
+      <button class="b1" id="issueDevTokenBtn">POST /api/v1/auth/dev/token</button>
+    </div>
+    <div class="hint">성공 시 access_token이 Authorization 입력칸에 자동 반영됩니다.</div>
+  </div>
+
+  <div class="card">
+    <h2>Reply SSE</h2>
+    <div class="grid">
+      <div class="row">
+        <label for="message">message</label>
+        <textarea id="message" placeholder="예: ML 직무에 PyTorch 멘토 추천해줘"></textarea>
+      </div>
+      <div class="row">
+        <label for="topK">top_k (1~20)</label>
+        <input id="topK" type="number" min="1" max="20" value="3" />
+      </div>
+    </div>
+    <div class="btns">
+      <button class="b1" id="replyBtn">POST /api/v3/agent/reply (SSE 시작)</button>
+      <button class="b3" id="stopBtn">SSE 중지</button>
+      <button class="b2" id="clearBtn">로그 지우기</button>
+    </div>
+    <div class="hint">이벤트: session, intent, conditions, cards, text, done, error</div>
+  </div>
+
+  <div class="card">
+    <div id="log" class="log"></div>
+  </div>
+</div>
+
+<script>
+  const baseUrlInput = document.getElementById('baseUrl');
+  const authTokenInput = document.getElementById('authToken');
+  const devUserIdInput = document.getElementById('devUserId');
+  const sessionIdInput = document.getElementById('sessionId');
+  const messageInput = document.getElementById('message');
+  const topKInput = document.getElementById('topK');
+  const statusEl = document.getElementById('status');
+  const logEl = document.getElementById('log');
+
+  const createSessionBtn = document.getElementById('createSessionBtn');
+  const listSessionsBtn = document.getElementById('listSessionsBtn');
+  const getSessionBtn = document.getElementById('getSessionBtn');
+  const getMessagesBtn = document.getElementById('getMessagesBtn');
+  const issueDevTokenBtn = document.getElementById('issueDevTokenBtn');
+  const replyBtn = document.getElementById('replyBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const clearBtn = document.getElementById('clearBtn');
+
+  let abortController = null;
+
+  function defaultBaseUrl() {
+    if (location.origin.includes('localhost') || location.origin.includes('127.0.0.1')) {
+      return 'http://localhost:8080';
+    }
+    return location.origin;
+  }
+
+  baseUrlInput.value = defaultBaseUrl();
+
+  function setStatus(text) {
+    statusEl.textContent = '상태: ' + text;
+  }
+
+  function fmt(data) {
+    if (typeof data === 'string') return data;
+    try { return JSON.stringify(data, null, 2); } catch (_) { return String(data); }
+  }
+
+  function log(title, data) {
+    const t = new Date().toLocaleTimeString();
+    logEl.textContent += `[${t}] ${title}\n`;
+    if (data !== undefined) logEl.textContent += fmt(data) + '\n';
+    logEl.textContent += '\n';
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function authHeaders() {
+    const token = (authTokenInput.value || '').trim();
+    if (!token) return {};
+    return { Authorization: 'Bearer ' + token };
+  }
+
+  async function callJson(path, method = 'GET', body = null) {
+    const baseUrl = (baseUrlInput.value || '').trim() || defaultBaseUrl();
+    const headers = Object.assign(
+      { 'Content-Type': 'application/json' },
+      authHeaders()
+    );
+    const res = await fetch(baseUrl + path, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined
+    });
+
+    const txt = await res.text();
+    let parsed = txt;
+    try { parsed = JSON.parse(txt); } catch (_) {}
+
+    if (!res.ok) {
+      throw { status: res.status, body: parsed };
+    }
+    return parsed;
+  }
+
+  function parseSseBlock(block) {
+    const lines = block.split('\n');
+    let eventName = 'message';
+    let dataLines = [];
+
+    for (const line of lines) {
+      if (line.startsWith('event:')) eventName = line.slice(6).trim();
+      if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+    }
+
+    const raw = dataLines.join('\n');
+    let data = raw;
+    try { data = JSON.parse(raw); } catch (_) {}
+
+    return { eventName, data };
+  }
+
+  async function startReplySse() {
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
+
+    const baseUrl = (baseUrlInput.value || '').trim() || defaultBaseUrl();
+    const message = messageInput.value.trim();
+    const topK = Number(topKInput.value || 3);
+    const sessionId = sessionIdInput.value.trim();
+
+    if (!message) {
+      alert('message를 입력하세요.');
+      return;
+    }
+
+    const payload = { message, top_k: topK };
+    if (sessionId) payload.session_id = sessionId;
+
+    abortController = new AbortController();
+    let doneReceived = false;
+    setStatus('SSE 연결 중');
+    log('REQUEST /api/v3/agent/reply', payload);
+
+    try {
+      const res = await fetch(baseUrl + '/api/v3/agent/reply', {
+        method: 'POST',
+        headers: Object.assign(
+          {
+            'Content-Type': 'application/json',
+            'Accept': 'text/event-stream'
+          },
+          authHeaders()
+        ),
+        body: JSON.stringify(payload),
+        signal: abortController.signal
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        setStatus('SSE 실패 (' + res.status + ')');
+        log('SSE HTTP ERROR', txt);
+        return;
+      }
+
+      if (!res.body) {
+        setStatus('SSE 실패 (stream 없음)');
+        log('SSE ERROR', 'ReadableStream not available');
+        return;
+      }
+
+      setStatus('SSE 수신 중');
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const blocks = buffer.split('\n\n');
+        buffer = blocks.pop() || '';
+
+        for (const block of blocks) {
+          if (!block.trim()) continue;
+          const evt = parseSseBlock(block);
+          log('EVENT: ' + evt.eventName, evt.data);
+
+          if (evt.eventName === 'session' && evt.data && evt.data.session_id) {
+            sessionIdInput.value = evt.data.session_id;
+          }
+          if (evt.eventName === 'done') {
+            doneReceived = true;
+            setStatus('SSE 완료');
+          }
+        }
+      }
+
+      setStatus('SSE 종료');
+      log('SSE CLOSED');
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        setStatus('사용자 중지');
+        log('SSE ABORTED');
+      } else if (doneReceived) {
+        setStatus('SSE 완료');
+        log('SSE CLOSED');
+      } else {
+        setStatus('SSE 오류');
+        log('SSE EXCEPTION', e.message || String(e));
+      }
+    } finally {
+      abortController = null;
+    }
+  }
+
+  createSessionBtn.addEventListener('click', async () => {
+    try {
+      const data = await callJson('/api/v3/agent/sessions', 'POST');
+      log('POST /api/v3/agent/sessions', data);
+      const sid = data?.data?.session_id;
+      if (sid) sessionIdInput.value = sid;
+    } catch (e) {
+      log('POST /api/v3/agent/sessions ERROR', e);
+    }
+  });
+
+  listSessionsBtn.addEventListener('click', async () => {
+    try {
+      const data = await callJson('/api/v3/agent/sessions');
+      log('GET /api/v3/agent/sessions', data);
+    } catch (e) {
+      log('GET /api/v3/agent/sessions ERROR', e);
+    }
+  });
+
+  getSessionBtn.addEventListener('click', async () => {
+    const sid = sessionIdInput.value.trim();
+    if (!sid) {
+      alert('session_id를 먼저 입력하세요.');
+      return;
+    }
+    try {
+      const data = await callJson('/api/v3/agent/sessions/' + encodeURIComponent(sid));
+      log('GET /api/v3/agent/sessions/{id}', data);
+    } catch (e) {
+      log('GET /api/v3/agent/sessions/{id} ERROR', e);
+    }
+  });
+
+  getMessagesBtn.addEventListener('click', async () => {
+    const sid = sessionIdInput.value.trim();
+    if (!sid) {
+      alert('session_id를 먼저 입력하세요.');
+      return;
+    }
+    try {
+      const data = await callJson('/api/v3/agent/sessions/' + encodeURIComponent(sid) + '/messages');
+      log('GET /api/v3/agent/sessions/{id}/messages', data);
+    } catch (e) {
+      log('GET /api/v3/agent/sessions/{id}/messages ERROR', e);
+    }
+  });
+
+  issueDevTokenBtn.addEventListener('click', async () => {
+    const userId = Number(devUserIdInput.value);
+    if (!userId || userId < 1) {
+      alert('유효한 user_id를 입력하세요.');
+      return;
+    }
+
+    try {
+      const data = await callJson('/api/v1/auth/dev/token', 'POST', { user_id: userId });
+      log('POST /api/v1/auth/dev/token', data);
+
+      const accessToken = data?.data?.access_token || data?.data?.accessToken;
+      if (accessToken) {
+        authTokenInput.value = accessToken;
+        log('DEV TOKEN', { message: 'access_token이 Authorization 입력칸에 설정되었습니다.' });
+      } else {
+        log('DEV TOKEN', { message: '응답에 access_token이 없습니다.' });
+      }
+    } catch (e) {
+      log('POST /api/v1/auth/dev/token ERROR', e);
+    }
+  });
+
+  replyBtn.addEventListener('click', startReplySse);
+
+  stopBtn.addEventListener('click', () => {
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    logEl.textContent = '';
+  });
+
+  setStatus('대기');
+  log('READY', { base_url: baseUrlInput.value });
+</script>
+</body>
+</html>
