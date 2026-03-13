@@ -114,6 +114,7 @@ public class AgentService {
                 increaseMessageCount(sessionId, userId);
                 StringBuilder assistantMessage = new StringBuilder();
                 String[] latestIntent = new String[1];
+                JsonNode[] latestCards = new JsonNode[1];
 
                 Map<String, Object> payload = new LinkedHashMap<>();
                 payload.put("session_id", sessionId);
@@ -143,7 +144,7 @@ public class AgentService {
                     return;
                 }
 
-                streamSse(sessionId, userId, response.body(), emitter, assistantMessage, latestIntent);
+                streamSse(sessionId, userId, response.body(), emitter, assistantMessage, latestIntent, latestCards);
             } catch (Exception e) {
                 log.warn("Agent SSE relay failed", e);
                 try {
@@ -164,7 +165,8 @@ public class AgentService {
             InputStream inputStream,
             SseEmitter emitter,
             StringBuilder assistantMessage,
-            String[] latestIntent
+            String[] latestIntent,
+            JsonNode[] latestCards
     ) throws Exception {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))) {
             String line;
@@ -175,10 +177,16 @@ public class AgentService {
                 if (line.isBlank()) {
                     if (eventName != null) {
                         Object data = parseEventData(dataBuilder.toString());
-                        captureState(eventName, data, assistantMessage, latestIntent);
+                        captureState(eventName, data, assistantMessage, latestIntent, latestCards);
 
                         if ("done".equals(eventName)) {
-                            AgentMessage saved = persistAssistantMessage(sessionId, userId, assistantMessage.toString());
+                            AgentMessage saved = persistAssistantMessage(
+                                    sessionId,
+                                    userId,
+                                    assistantMessage.toString(),
+                                    latestIntent[0],
+                                    latestCards[0]
+                            );
                             updateSessionMetadata(sessionId, userId, latestIntent[0]);
                             sendAssistantMessageSavedEvent(emitter, sessionId, saved);
                             sendEvent(emitter, "done", data);
@@ -210,14 +218,26 @@ public class AgentService {
             }
         }
 
-        AgentMessage saved = persistAssistantMessage(sessionId, userId, assistantMessage.toString());
+        AgentMessage saved = persistAssistantMessage(
+                sessionId,
+                userId,
+                assistantMessage.toString(),
+                latestIntent[0],
+                latestCards[0]
+        );
         updateSessionMetadata(sessionId, userId, latestIntent[0]);
         sendAssistantMessageSavedEvent(emitter, sessionId, saved);
         sendEvent(emitter, "done", Map.of());
         emitter.complete();
     }
 
-    private void captureState(String eventName, Object data, StringBuilder assistantMessage, String[] latestIntent) {
+    private void captureState(
+            String eventName,
+            Object data,
+            StringBuilder assistantMessage,
+            String[] latestIntent,
+            JsonNode[] latestCards
+    ) {
         if (data instanceof JsonNode node) {
             if ("intent".equals(eventName)) {
                 JsonNode intent = node.get("intent");
@@ -231,6 +251,10 @@ public class AgentService {
                 if (chunk != null && !chunk.isNull()) {
                     assistantMessage.append(chunk.asText());
                 }
+            }
+
+            if ("cards".equals(eventName)) {
+                latestCards[0] = node;
             }
         }
     }
@@ -258,7 +282,13 @@ public class AgentService {
                 .build());
     }
 
-    private AgentMessage persistAssistantMessage(String sessionId, Long userId, String message) {
+    private AgentMessage persistAssistantMessage(
+            String sessionId,
+            Long userId,
+            String message,
+            String latestIntent,
+            JsonNode latestCards
+    ) {
         if (message == null || message.isBlank()) {
             return null;
         }
@@ -268,9 +298,29 @@ public class AgentService {
                 .userId(userId)
                 .role(AgentMessageRole.ASSISTANT)
                 .content(message)
+                .metadataJson(buildAssistantMetadataJson(latestIntent, latestCards))
                 .build());
         increaseMessageCount(sessionId, userId);
         return saved;
+    }
+
+    private String buildAssistantMetadataJson(String latestIntent, JsonNode latestCards) {
+        try {
+            Map<String, Object> metadata = new LinkedHashMap<>();
+            if (latestIntent != null && !latestIntent.isBlank()) {
+                metadata.put("intent", latestIntent);
+            }
+            if (latestCards != null && !latestCards.isNull()) {
+                metadata.put("cards", latestCards.get("cards") != null ? latestCards.get("cards") : latestCards);
+            }
+            if (metadata.isEmpty()) {
+                return null;
+            }
+            return objectMapper.writeValueAsString(metadata);
+        } catch (Exception e) {
+            log.warn("Failed to serialize assistant metadata", e);
+            return null;
+        }
     }
 
     private void sendAssistantMessageSavedEvent(SseEmitter emitter, String sessionId, AgentMessage saved) throws Exception {
@@ -303,6 +353,18 @@ public class AgentService {
             return objectMapper.readTree(raw);
         } catch (Exception ignored) {
             return raw;
+        }
+    }
+
+    private JsonNode parseMetadataJson(String metadataJson) {
+        if (metadataJson == null || metadataJson.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(metadataJson);
+        } catch (Exception e) {
+            log.warn("Failed to parse agent message metadata", e);
+            return null;
         }
     }
 
@@ -346,6 +408,7 @@ public class AgentService {
                 message.getRole().name(),
                 message.getContent(),
                 message.getFeedback(),
+                parseMetadataJson(message.getMetadataJson()),
                 message.getCreatedAt() == null ? null : message.getCreatedAt().toString()
         );
     }

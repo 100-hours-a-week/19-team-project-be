@@ -44,13 +44,17 @@ public class AgentMessage extends BaseEntity {
     @Column(name = "feedback")
     private Boolean feedback;
 
+    @Column(name = "metadata_json", columnDefinition = "TEXT")
+    private String metadataJson;
+
     @Builder
-    private AgentMessage(String sessionId, Long userId, AgentMessageRole role, String content, Boolean feedback) {
+    private AgentMessage(String sessionId, Long userId, AgentMessageRole role, String content, Boolean feedback, String metadataJson) {
         this.sessionId = sessionId;
         this.userId = userId;
         this.role = role;
         this.content = content;
         this.feedback = feedback;
+        this.metadataJson = metadataJson;
     }
 
     public void updateFeedback(Boolean feedback) {

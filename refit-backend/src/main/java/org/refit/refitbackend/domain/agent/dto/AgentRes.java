@@ -2,6 +2,7 @@ package org.refit.refitbackend.domain.agent.dto;
 
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
@@ -39,6 +40,8 @@ public class AgentRes {
             String content,
             @Schema(description = "추천/비추천 여부. assistant 메시지에만 의미가 있으며 true=추천, false=비추천, null=미평가", example = "true", nullable = true)
             Boolean feedback,
+            @Schema(description = "assistant 메시지 부가 메타데이터. cards 등 구조화 응답 복원용", nullable = true)
+            JsonNode metadata,
             @Schema(description = "생성 시각(ISO-8601)", example = "2026-03-10T21:36:23.437389")
             String createdAt
     ) {
