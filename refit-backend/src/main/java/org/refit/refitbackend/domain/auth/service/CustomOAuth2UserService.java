@@ -20,9 +20,8 @@ import org.refit.refitbackend.global.util.KakaoUtil;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Date;
+import java.time.Duration;
 
 @Slf4j
 @Service
@@ -32,6 +31,7 @@ public class CustomOAuth2UserService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final RedisRefreshTokenStore redisRefreshTokenStore;
     private final KakaoUtil kakaoUtil;
     private final AuthService authService;
     private final JwtUtil jwtUtil;
@@ -164,10 +164,9 @@ public class CustomOAuth2UserService {
     @Transactional
     public AuthRes.TokenDto refreshTokens(String refreshToken) {
         validateRefreshToken(refreshToken);
-        RefreshToken stored = getActiveRefreshToken(refreshToken);
-        validateStoredRefreshToken(stored, refreshToken);
+        RefreshToken stored = validateStoredRefreshToken(refreshToken);
         if (stored.getUser().isDeleted()) {
-            refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.REVOKED);
+            revokeRefreshToken(refreshToken);
             throw new CustomException(ExceptionType.USER_DELETED);
         }
         return issueTokensAndPersist(stored.getUser());
@@ -196,13 +195,14 @@ public class CustomOAuth2UserService {
                 RefreshTokenStatus.ACTIVE,
                 RefreshTokenStatus.REVOKED
         );
+        revokeAllRefreshTokens(userId);
     }
 
     private AuthRes.TokenDto issueTokensAndPersist(User user) {
         String accessToken = jwtUtil.createAccessToken(user.getId());
         String refreshToken = jwtUtil.createRefreshToken(user.getId());
         Date expiresAt = jwtUtil.getExpiration(refreshToken);
-        LocalDateTime expiresAtLocal = LocalDateTime.ofInstant(expiresAt.toInstant(), ZoneId.systemDefault());
+        Duration ttl = Duration.ofMillis(Math.max(1L, expiresAt.getTime() - System.currentTimeMillis()));
 
         refreshTokenRepository.updateStatusByUserAndStatus(
                 user,
@@ -215,9 +215,10 @@ public class CustomOAuth2UserService {
                 refreshToken,
                 "unknown",
                 "unknown",
-                expiresAtLocal
+                java.time.LocalDateTime.now().plus(ttl)
         );
         refreshTokenRepository.save(entity);
+        cacheRefreshToken(user.getId(), refreshToken, ttl);
 
         return new AuthRes.TokenDto(accessToken, refreshToken);
     }
@@ -228,25 +229,81 @@ public class CustomOAuth2UserService {
         }
         if (jwtUtil.isExpired(refreshToken)) {
             refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.EXPIRED);
+            revokeRefreshToken(refreshToken);
             throw new CustomException(ExceptionType.AUTH_TOKEN_EXPIRED);
         }
     }
 
-    private RefreshToken getActiveRefreshToken(String refreshToken) {
-        return refreshTokenRepository.findByTokenAndStatus(refreshToken, RefreshTokenStatus.ACTIVE)
-                .orElseThrow(() -> new CustomException(ExceptionType.AUTH_INVALID_TOKEN));
-    }
-
-    private void validateStoredRefreshToken(RefreshToken stored, String refreshToken) {
-        if (stored.getExpiresAt().isBefore(LocalDateTime.now())) {
-            refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.EXPIRED);
-            throw new CustomException(ExceptionType.AUTH_TOKEN_EXPIRED);
-        }
-
+    private RefreshToken validateStoredRefreshToken(String refreshToken) {
         Long userId = jwtUtil.getUserId(refreshToken);
+        if (isActiveInRedis(userId, refreshToken)) {
+            return refreshTokenRepository.findByTokenAndStatus(refreshToken, RefreshTokenStatus.ACTIVE)
+                    .orElseGet(() -> {
+                        User user = userRepository.findById(userId)
+                                .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
+                        return RefreshToken.create(
+                                user,
+                                refreshToken,
+                                "unknown",
+                                "unknown",
+                                java.time.LocalDateTime.now().plusSeconds(1)
+                        );
+                    });
+        }
+
+        RefreshToken stored = refreshTokenRepository.findByTokenAndStatus(refreshToken, RefreshTokenStatus.ACTIVE)
+                .orElseThrow(() -> new CustomException(ExceptionType.AUTH_INVALID_TOKEN));
+
         if (!stored.getUser().getId().equals(userId)) {
             refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.REVOKED);
+            revokeRefreshToken(refreshToken);
             throw new CustomException(ExceptionType.AUTH_INVALID_TOKEN);
+        }
+
+        if (stored.getExpiresAt().isBefore(java.time.LocalDateTime.now())) {
+            refreshTokenRepository.updateStatusByToken(refreshToken, RefreshTokenStatus.EXPIRED);
+            revokeRefreshToken(refreshToken);
+            throw new CustomException(ExceptionType.AUTH_TOKEN_EXPIRED);
+        }
+
+        Duration ttl = Duration.between(java.time.LocalDateTime.now(), stored.getExpiresAt());
+        if (!ttl.isNegative() && !ttl.isZero()) {
+            cacheRefreshToken(userId, refreshToken, ttl);
+        }
+
+        return stored;
+    }
+
+    private boolean isActiveInRedis(Long userId, String refreshToken) {
+        try {
+            return redisRefreshTokenStore.isActive(userId, refreshToken);
+        } catch (Exception e) {
+            log.warn("Redis refresh token lookup failed. Fallback to DB. userId={}", userId, e);
+            return false;
+        }
+    }
+
+    private void cacheRefreshToken(Long userId, String refreshToken, Duration ttl) {
+        try {
+            redisRefreshTokenStore.rotate(userId, refreshToken, ttl);
+        } catch (Exception e) {
+            log.warn("Redis refresh token cache write failed. userId={}", userId, e);
+        }
+    }
+
+    private void revokeRefreshToken(String refreshToken) {
+        try {
+            redisRefreshTokenStore.revoke(refreshToken);
+        } catch (Exception e) {
+            log.warn("Redis refresh token revoke failed", e);
+        }
+    }
+
+    private void revokeAllRefreshTokens(Long userId) {
+        try {
+            redisRefreshTokenStore.revokeAllByUserId(userId);
+        } catch (Exception e) {
+            log.warn("Redis refresh token revokeAll failed. userId={}", userId, e);
         }
     }
 
