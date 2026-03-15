@@ -16,10 +16,12 @@ import org.refit.refitbackend.domain.user.entity.UserSkill;
 import org.refit.refitbackend.domain.user.repository.UserJobRepository;
 import org.refit.refitbackend.domain.user.repository.UserSkillRepository;
 import org.refit.refitbackend.global.common.dto.CursorPage;
+import org.refit.refitbackend.global.config.RedisCacheConfig;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpEntity;
@@ -52,6 +54,7 @@ public class ExpertService {
     @Value("${ai.base-url:https://re-fit.kr/api/ai}")
     private String aiBaseUrl;
 
+    @Cacheable(cacheNames = RedisCacheConfig.EXPERT_SEARCH_CACHE)
     public CursorPage<ExpertRes.ExpertListItem> searchExperts(
             String keyword,
             Long jobId,
@@ -79,6 +82,7 @@ public class ExpertService {
         return new CursorPage<>(items, nextCursor, hasMore);
     }
 
+    @Cacheable(cacheNames = RedisCacheConfig.EXPERT_DETAIL_CACHE, key = "#userId")
     public ExpertRes.ExpertDetail getExpertDetail(Long userId) {
         User expert = expertRepository.findExpertById(userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.EXPERT_NOT_FOUND));
@@ -161,6 +165,7 @@ public class ExpertService {
         }
     }
 
+    @Cacheable(cacheNames = RedisCacheConfig.EXPERT_RECOMMENDATION_CACHE)
     public ExpertRes.RecommendationResponse getRecommendationsAuto(
             Long authUserId,
             int topK,
