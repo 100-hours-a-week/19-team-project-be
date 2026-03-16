@@ -15,7 +15,7 @@ on:
 jobs:
   deploy-k8s:
     runs-on: ubuntu-latest
-    environment: development
+    environment: production
     steps:
       - name: Checkout Cloud Repo
         uses: actions/checkout@v4
@@ -99,7 +99,7 @@ jobs:
           payload=$(cat <<EOF
           {
             "embeds": [{
-              "title": "BE K8s 배포 완료",
+              "title": "BE K8s 배포 완료 (Prod)",
               "description": "ArgoCD를 통해 K8s 클러스터에 배포되었습니다.",
               "color": 3447003,
               "fields": [
@@ -126,7 +126,7 @@ jobs:
           payload=$(cat <<EOF
           {
             "embeds": [{
-              "title": "BE K8s 배포 실패",
+              "title": "BE K8s 배포 실패 (Prod)",
               "color": 15158332,
               "fields": [
                 {"name": "이미지 태그", "value": "\`${{ inputs.image_tag }}\`", "inline": true},

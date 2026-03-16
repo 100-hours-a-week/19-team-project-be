@@ -203,23 +203,7 @@ jobs:
             });
             console.log('CD-Dev workflow triggered successfully');
 
-      - name: Trigger CD-K8s Workflow
-        if: success()
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.PAT }}
-          script: |
-            await github.rest.actions.createWorkflowDispatch({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'cd-k8s.yml',
-              ref: 'develop',
-              inputs: {
-                image_tag: '${{ steps.meta.outputs.image_tag }}',
-                sha: '${{ github.sha }}'
-              }
-            });
-            console.log('CD-K8s workflow triggered successfully');
+
 
   release-prod:
     if: |
@@ -289,90 +273,37 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/arm64
-      
-      - name: Create CodeDeploy revision and deploy
-        id: codedeploy
-        working-directory: ${{ github.workspace }}
-        env:
-          S3_BUCKET: ${{ secrets.CODEDEPLOY_REVISION_BUCKET }}
-          APP_NAME: ${{ secrets.CODEDEPLOY_APP_NAME }}
-          DG_NAME: ${{ secrets.CODEDEPLOY_DEPLOYMENT_GROUP_NAME }}
-          RUNTIME_ENV: ${{ secrets.RUNTIME_ENV_FILE }}
-          IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          ECR_REPOSITORY: ${{ secrets.ECR_REPOSITORY_BACKEND }}
-          AWS_REGION: ${{ secrets.AWS_REGION }}
-        run: |
-          set -e
-          REVISION_DIR="${GITHUB_WORKSPACE}/.codedeploy-revision"
-          rm -rf "$REVISION_DIR" && mkdir -p "$REVISION_DIR"
-          cp appspec.yml "$REVISION_DIR/"
-          mkdir -p "$REVISION_DIR/scripts/codedeploy"
-          cp scripts/codedeploy/deploy.sh "$REVISION_DIR/scripts/codedeploy/"
 
-          envsubst '${ECR_REGISTRY} ${ECR_REPOSITORY} ${IMAGE_TAG}' \
-            < docker-compose.yml > "$REVISION_DIR/docker-compose.yml"
+      - name: Create and Trigger CD-K8s Workflow
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.PAT }}
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'cd-k8s.yml',
+              ref: 'main',
+              inputs: {
+                image_tag: '${{ steps.image-tag.outputs.tag }}',
+                sha: '${{ github.sha }}'
+              }
+            });
+            console.log('CD-K8s workflow triggered successfully');
 
-          printf 'ECR_REGISTRY=%s\nAWS_REGION=%s\n' "${ECR_REGISTRY}" "${AWS_REGION}" \
-            > "$REVISION_DIR/.env"
-
-          printf '%s' "${RUNTIME_ENV}" > "$REVISION_DIR/refit.env"
-          cp otel-agent-config.yaml "$REVISION_DIR/otel-agent-config.yaml"
-
-          ZIP_KEY="backend/${GITHUB_SHA}.zip"
-          (cd "$REVISION_DIR" && zip -r -q "../${GITHUB_SHA}.zip" .)
-          aws s3 cp "${GITHUB_WORKSPACE}/${GITHUB_SHA}.zip" "s3://${S3_BUCKET}/${ZIP_KEY}"
-          DEPLOY_ID=$(aws deploy create-deployment \
-            --application-name "$APP_NAME" \
-            --deployment-group-name "$DG_NAME" \
-            --s3-location bucket="${S3_BUCKET}",key="${ZIP_KEY}",bundleType=zip \
-            --query 'deploymentId' --output text)
-          echo "Deployment started: $DEPLOY_ID"
-          echo "deploy_id=${DEPLOY_ID}" >> $GITHUB_OUTPUT
-
-      - name: Wait for CodeDeploy
-        id: wait-deploy
-        run: |
-          DEPLOY_ID="${{ steps.codedeploy.outputs.deploy_id }}"
-          echo "Deployment ID: $DEPLOY_ID — polling (max 10min)"
-          for i in $(seq 1 30); do
-            STATUS=$(aws deploy get-deployment \
-              --deployment-id "$DEPLOY_ID" \
-              --query 'deploymentInfo.status' \
-              --output text --region "${{ secrets.AWS_REGION }}")
-            echo "  [$i/30] status: $STATUS"
-            case "$STATUS" in
-              Succeeded)
-                echo "deploy_status=Succeeded" >> $GITHUB_OUTPUT
-                exit 0 ;;
-              Failed|Stopped)
-                ERROR=$(aws deploy get-deployment \
-                  --deployment-id "$DEPLOY_ID" \
-                  --query 'deploymentInfo.errorInformation.message' \
-                  --output text --region "${{ secrets.AWS_REGION }}" 2>/dev/null || echo "N/A")
-                echo "deploy_status=${STATUS}" >> $GITHUB_OUTPUT
-                echo "deploy_error=${ERROR}" >> $GITHUB_OUTPUT
-                exit 1 ;;
-            esac
-            sleep 15
-          done
-          echo "deploy_status=Timeout" >> $GITHUB_OUTPUT
-          echo "deploy_error=Timed out after 10 minutes" >> $GITHUB_OUTPUT
-          exit 1
-
-      - name: Discord notification
+      - name: Discord notification (CI/Trigger Result)
         if: always()
         env:
           DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
           STATUS: ${{ job.status }}
           IMAGE_TAG: ${{ steps.image-tag.outputs.tag }}
-          DEPLOY_ID: ${{ steps.codedeploy.outputs.deploy_id }}
         run: |
           [ -z "$DISCORD_WEBHOOK" ] && exit 0
           SHA_SHORT="${GITHUB_SHA::7}"
           COLOR=$([ "$STATUS" = "success" ] && echo "3066993" || echo "15158332")
           payload=$(cat <<EOF
-          {"embeds":[{"title":"BE 배포(Prod): $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"커밋 SHA","value":"\`$SHA_SHORT\`","inline":true},{"name":"CodeDeploy ID","value":"\`$DEPLOY_ID\`","inline":true},{"name":"워크플로우","value":"[상세](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
+          {"embeds":[{"title":"BE CI & CD Trigger (Prod): $STATUS","color":$COLOR,"fields":[{"name":"이미지 태그","value":"\`$IMAGE_TAG\`","inline":true},{"name":"커밋 SHA","value":"\`$SHA_SHORT\`","inline":true},{"name":"워크플로우","value":"[상세 보기](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})","inline":false}],"footer":{"text":"Re-Fit Prod Pipeline"},"timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)"}]}
           EOF
           )
           curl -sS -X POST -H "Content-Type: application/json" -d "$payload" "$DISCORD_WEBHOOK" || true
