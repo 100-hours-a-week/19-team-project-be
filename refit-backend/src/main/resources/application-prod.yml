@@ -83,6 +83,10 @@ management:
       exposure:
         include: health,metrics,info,prometheus
   endpoint:
+    health:
+      probes:
+        enabled: true   # /actuator/health/liveness, /actuator/health/readiness 활성화
+      show-details: never
     prometheus:
       enabled: true
     metrics:
