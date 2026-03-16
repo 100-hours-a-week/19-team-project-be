@@ -22,6 +22,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Date;
 import java.time.Duration;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -237,7 +238,7 @@ public class CustomOAuth2UserService {
     private RefreshToken validateStoredRefreshToken(String refreshToken) {
         Long userId = jwtUtil.getUserId(refreshToken);
         if (isActiveInRedis(userId, refreshToken)) {
-            return refreshTokenRepository.findByTokenAndStatus(refreshToken, RefreshTokenStatus.ACTIVE)
+            return resolveActiveRefreshToken(refreshToken)
                     .orElseGet(() -> {
                         User user = userRepository.findById(userId)
                                 .orElseThrow(() -> new CustomException(ExceptionType.USER_NOT_FOUND));
@@ -251,7 +252,7 @@ public class CustomOAuth2UserService {
                     });
         }
 
-        RefreshToken stored = refreshTokenRepository.findByTokenAndStatus(refreshToken, RefreshTokenStatus.ACTIVE)
+        RefreshToken stored = resolveActiveRefreshToken(refreshToken)
                 .orElseThrow(() -> new CustomException(ExceptionType.AUTH_INVALID_TOKEN));
 
         if (!stored.getUser().getId().equals(userId)) {
@@ -272,6 +273,30 @@ public class CustomOAuth2UserService {
         }
 
         return stored;
+    }
+
+    private java.util.Optional<RefreshToken> resolveActiveRefreshToken(String refreshToken) {
+        List<RefreshToken> matches = refreshTokenRepository.findAllByTokenAndStatusOrderByIdDesc(
+                refreshToken,
+                RefreshTokenStatus.ACTIVE
+        );
+        if (matches.isEmpty()) {
+            return java.util.Optional.empty();
+        }
+
+        RefreshToken latest = matches.getFirst();
+        if (matches.size() > 1) {
+            int revokedCount = refreshTokenRepository.updateStatusByTokenAndStatusExcludingId(
+                    refreshToken,
+                    RefreshTokenStatus.ACTIVE,
+                    RefreshTokenStatus.REVOKED,
+                    latest.getId()
+            );
+            log.warn("Duplicate active refresh tokens detected. tokenHash={}, revokedDuplicates={}",
+                    Integer.toHexString(refreshToken.hashCode()),
+                    revokedCount);
+        }
+        return java.util.Optional.of(latest);
     }
 
     private boolean isActiveInRedis(Long userId, String refreshToken) {
