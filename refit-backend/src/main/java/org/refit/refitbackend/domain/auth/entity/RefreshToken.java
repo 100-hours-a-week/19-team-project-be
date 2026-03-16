@@ -24,7 +24,7 @@ public class RefreshToken extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(length = 500, nullable = false)
+    @Column(length = 500, nullable = false, unique = true)
     private String token;
 
     @Column(name = "device_id", length = 100, nullable = false)

@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtUtil {
@@ -111,6 +112,7 @@ public class JwtUtil {
 
         return Jwts.builder()
                 .header().type("JWT").and()
+                .id(UUID.randomUUID().toString())
                 .issuer(issuer)
                 .subject(String.valueOf(userId))
                 .issuedAt(new Date(now))
