@@ -7,18 +7,17 @@ import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.util.ResponseUtil;
+import jakarta.validation.ConstraintViolation;
+import jakarta.validation.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
-import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
-import jakarta.validation.ConstraintViolation;
-import jakarta.validation.ConstraintViolationException;
 
 @Hidden
 @RestControllerAdvice
@@ -84,6 +83,19 @@ public class GlobalExceptionHandler {
     // 커스텀 비즈니스 예외
     @ExceptionHandler(CustomException.class)
     public ResponseEntity<ApiResponse<Object>> handleCustom(CustomException ex) {
+        if (ex.getExceptionType().getStatus().is4xxClientError()) {
+            log.warn("Business exception: code={}, status={}, message={}",
+                    ex.getExceptionType().getCode(),
+                    ex.getExceptionType().getStatus().value(),
+                    ex.getExceptionType().getMessage());
+        } else {
+            log.error("Business exception: code={}, status={}, message={}",
+                    ex.getExceptionType().getCode(),
+                    ex.getExceptionType().getStatus().value(),
+                    ex.getExceptionType().getMessage(),
+                    ex);
+        }
+
         if (ex.getData() != null) {
             return ResponseUtil.error(ex.getExceptionType(), ex.getData());
         }

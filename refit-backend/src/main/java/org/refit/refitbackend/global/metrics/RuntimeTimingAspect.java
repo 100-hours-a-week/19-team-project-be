@@ -4,10 +4,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.refit.refitbackend.global.error.CustomException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -49,9 +51,22 @@ public class RuntimeTimingAspect {
             return result;
         } catch (Throwable t) {
             long elapsedMs = (System.nanoTime() - startNs) / 1_000_000;
-            log.error("[AOP][ERROR] method={}, elapsedMs={}, argsCount={}, thread={}, error={}",
-                    method, elapsedMs, argsCount, Thread.currentThread().getName(), t.getClass().getSimpleName());
+            if (isClientSideException(t)) {
+                log.warn("[AOP][WARN] method={}, elapsedMs={}, argsCount={}, thread={}, error={}",
+                        method, elapsedMs, argsCount, Thread.currentThread().getName(), t.getClass().getSimpleName());
+            } else {
+                log.error("[AOP][ERROR] method={}, elapsedMs={}, argsCount={}, thread={}, error={}",
+                        method, elapsedMs, argsCount, Thread.currentThread().getName(), t.getClass().getSimpleName());
+            }
             throw t;
         }
+    }
+
+    private boolean isClientSideException(Throwable throwable) {
+        if (!(throwable instanceof CustomException customException)) {
+            return false;
+        }
+        HttpStatus status = customException.getExceptionType().getStatus();
+        return status.is4xxClientError();
     }
 }
