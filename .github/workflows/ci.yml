@@ -150,13 +150,15 @@ jobs:
 
       - name: Inject secrets
         working-directory: refit-backend
+        env:
+          FIREBASE_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           mkdir -p src/main/resources/firebase
-          printf '%s' "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > src/main/resources/firebase/refit-fcm.json
+          printf '%s' "$FIREBASE_JSON" > src/main/resources/firebase/refit-fcm.json
 
       - name: Build JAR (arm64)
         working-directory: refit-backend
-        run: ./gradlew clean bootJar -x test --no-daemon --no-build-cache
+        run: ./gradlew clean bootJar -x test --no-daemon
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -248,11 +250,14 @@ jobs:
 
       - name: Inject production secrets
         working-directory: refit-backend
+        env:
+          APPLICATION_SECRET_YML: ${{ secrets.APPLICATION_SECRET_YML_PROD }}
+          FIREBASE_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
         run: |
           mkdir -p src/main/resources
-          echo "${{ secrets.APPLICATION_SECRET_YML_PROD }}" > src/main/resources/application-secret.yml
+          printf '%s' "$APPLICATION_SECRET_YML" > src/main/resources/application-secret.yml
           mkdir -p src/main/resources/firebase
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > src/main/resources/firebase/refit-fcm.json
+          printf '%s' "$FIREBASE_JSON" > src/main/resources/firebase/refit-fcm.json
 
       - name: Build JAR
         working-directory: refit-backend
