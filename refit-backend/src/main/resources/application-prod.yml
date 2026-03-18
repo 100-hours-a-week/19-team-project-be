@@ -50,12 +50,12 @@ spring:
         domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
 
   kafka:
-    bootstrap-servers: b-2.refitkafka.cj233e.c2.kafka.ap-northeast-2.amazonaws.com:9092,b-1.refitkafka.cj233e.c2.kafka.ap-northeast-2.amazonaws.com:9092
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9093}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
-      group-id: refit-backend-prod
+      group-id: ${KAFKA_CONSUMER_GROUP_ID:refit-backend-prod}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: earliest
@@ -64,9 +64,9 @@ spring:
 
   data:
     redis:
-      host: refit-redis.3oj8op.ng.0001.apn2.cache.amazonaws.com
-      port: 6379
-      password:
+      host: ${REDIS_HOST:refit-redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
 springdoc:
   swagger-ui:
@@ -160,12 +160,19 @@ fcm:
   credentials-path: classpath:firebase/refit-fcm.json
   webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
 
+ai:
+  base-url: ${AI_BASE_URL:https://api.re-fit.kr/api/ai}
+
+internal:
+  api-key: ${INTERNAL_API_KEY:}
+  api-key-header: ${INTERNAL_API_KEY_HEADER:X-Internal-Api-Key}
+
 app:
   cache:
-    enabled: true
+    enabled: ${APP_CACHE_ENABLED:true}
   notification:
     async:
-      enabled: true
+      enabled: ${APP_NOTIFICATION_ASYNC_ENABLED:true}
   kafka:
     enabled: true
     topics:
@@ -185,7 +192,7 @@ app:
   chat:
     realtime:
       redis:
-        enabled: true
+        enabled: ${APP_CHAT_REALTIME_REDIS_ENABLED:true}
         channel: chat.message.broadcast
     persistence:
       async:
