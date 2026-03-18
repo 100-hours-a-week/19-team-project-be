@@ -28,6 +28,7 @@ public class SecurityConfig {
     public List<String> allowUrls() {
         List<String> allow = new ArrayList<>();
         allow.add("/");
+        allow.add("/error");
         allow.add("/actuator/**");
         allow.add("/api/actuator/**");
         allow.add("/dev/**");

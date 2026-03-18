@@ -105,11 +105,11 @@ public class AgentService {
     }
 
     public SseEmitter replyStream(Long userId, AgentReq.ReplyRequest request) {
+        String sessionId = resolveSessionId(userId, request.sessionId());
         SseEmitter emitter = new SseEmitter(replyTimeoutSeconds * 1000);
 
         CompletableFuture.runAsync(() -> {
             try {
-                String sessionId = resolveSessionId(userId, request.sessionId());
                 saveUserMessage(sessionId, userId, request.message());
                 increaseMessageCount(sessionId, userId);
                 StringBuilder assistantMessage = new StringBuilder();
