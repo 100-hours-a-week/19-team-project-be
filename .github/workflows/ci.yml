@@ -148,6 +148,12 @@ jobs:
         working-directory: refit-backend
         run: chmod +x gradlew
 
+      - name: Inject secrets
+        working-directory: refit-backend
+        run: |
+          mkdir -p src/main/resources/firebase
+          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > src/main/resources/firebase/refit-fcm.json
+
       - name: Build JAR (arm64)
         working-directory: refit-backend
         run: ./gradlew clean bootJar -x test --no-daemon
