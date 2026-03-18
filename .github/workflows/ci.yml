@@ -156,7 +156,7 @@ jobs:
 
       - name: Build JAR (arm64)
         working-directory: refit-backend
-        run: ./gradlew clean bootJar -x test --no-daemon
+        run: ./gradlew clean bootJar -x test --no-daemon --no-build-cache
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
