@@ -136,6 +136,8 @@ public class ExpertRes {
             String nickname,
             @JsonProperty("company_name")
             String companyName,
+            @JsonProperty("profile_image_url")
+            String profileImageUrl,
             boolean verified,
             @JsonProperty("rating_avg")
             Double ratingAvg,

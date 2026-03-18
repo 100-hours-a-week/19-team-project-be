@@ -8,6 +8,8 @@ import org.refit.refitbackend.domain.master.repository.CareerLevelRepository;
 import org.refit.refitbackend.domain.master.repository.EmailDomainRepository;
 import org.refit.refitbackend.domain.master.repository.JobRepository;
 import org.refit.refitbackend.domain.master.repository.SkillRepository;
+import org.refit.refitbackend.global.config.RedisCacheConfig;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +26,7 @@ public class MasterService {
     private final CareerLevelRepository careerLevelRepository;
     private final EmailDomainRepository emailDomainRepository;
 
+    @Cacheable(cacheNames = RedisCacheConfig.MASTER_JOBS_CACHE)
     public MasterRes.Jobs getJobs() {
         return new MasterRes.Jobs(
                 jobRepository.findAll()
@@ -33,6 +36,7 @@ public class MasterService {
         );
     }
 
+    @Cacheable(cacheNames = RedisCacheConfig.MASTER_SKILLS_CACHE)
     public MasterRes.Skills getSkills(String keyword) {
         List<Skill> skills = (keyword == null || keyword.isBlank())
                 ? skillRepository.findAll()
@@ -45,6 +49,7 @@ public class MasterService {
         );
     }
 
+    @Cacheable(cacheNames = RedisCacheConfig.MASTER_CAREER_LEVELS_CACHE)
     public MasterRes.CareerLevels getCareerLevels() {
         return new MasterRes.CareerLevels(
                 careerLevelRepository.findAll()
@@ -54,6 +59,7 @@ public class MasterService {
         );
     }
 
+    @Cacheable(cacheNames = RedisCacheConfig.MASTER_EMAIL_DOMAINS_CACHE)
     public MasterRes.EmailDomains getEmailDomains(String cursor, int size) {
         List<EmailDomain> domains = emailDomainRepository.findByCursor(
                 cursor,

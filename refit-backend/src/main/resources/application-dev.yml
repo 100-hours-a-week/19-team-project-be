@@ -2,6 +2,17 @@
 # Development Environment Configuration
 # ============================================
 spring:
+  datasource:
+    hikari:
+      minimum-idle: 30
+      maximum-pool-size: 120
+      connection-timeout: 5000
+      validation-timeout: 1500
+      idle-timeout: 600000
+      max-lifetime: 1500000
+      keepalive-time: 180000
+      leak-detection-threshold: 15000
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -13,7 +24,7 @@ spring:
 
   jwt:
     issuer: re-fit
-    access-exp-ms: 10000 # 10분
+    access-exp-ms: 10000 # 10초
     refresh-exp-ms: 1209600000 # 2주
 
   jackson:
@@ -43,17 +54,23 @@ spring:
         domain: ${AWS_S3_DOMAIN:https://refit-storage-dev.s3.ap-northeast-2.amazonaws.com/}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:kafka:9093}
+    bootstrap-servers: kafka:9093
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
     consumer:
-      group-id: ${KAFKA_CONSUMER_GROUP_ID:refit-backend-dev}
+      group-id: refit-backend-dev
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       auto-offset-reset: earliest
       properties:
         spring.json.trusted.packages: "*"
+
+  data:
+    redis:
+      host: refit-redis
+      port: 6379
+      password:
 
 springdoc:
   swagger-ui:
@@ -64,6 +81,8 @@ springdoc:
         url: /v3/api-docs/v1
       - name: v2
         url: /v3/api-docs/v2
+      - name: v3
+        url: /v3/api-docs/v3
   api-docs:
     enabled: true
 
@@ -108,6 +127,14 @@ management:
       prometheus:
         enabled: true
 
+sentry:
+  enabled: true
+  environment: dev
+  traces-sample-rate: 0.2
+  profiles-sample-rate: 0.0
+  send-default-pii: false
+  debug: false
+
 # ============================================
 # Structured JSON Logging (개발 환경)
 # ============================================
@@ -124,21 +151,69 @@ logging:
     root: info
     org.springframework: info
     org.hibernate: info
-    org.refit.backend: debug  # 개발 환경은 debug 레벨
+    org.refit.refitbackend: info  # 개발 환경 기본 로그 레벨
+    org.apache.kafka: warn
+    org.springframework.kafka: warn
 
 server:
   forward-headers-strategy: framework
+  tomcat:
+    connection-timeout: 8s
+    threads:
+      max: 400
+      min-spare: 40
+    accept-count: 500
+    max-connections: 10000
 
 ai:
   base-url: https://dev.re-fit.kr/api/ai
 
 app:
+  notification:
+    async:
+      enabled: false
+  rate-limit:
+    enabled: true
   kafka:
-    enabled: ${APP_KAFKA_ENABLED:false}
+    enabled: true
     topics:
-      resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
-      report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
-      mentor-embedding-refresh-requested: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED:mentor.embedding.refresh.requested}
-      resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
-      report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}
-      mentor-embedding-refresh-requested-dlq: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED_DLQ:mentor.embedding.refresh.requested.dlq}
+      resume-parse-requested: resume.parse.requested
+      report-generate-requested: report.generate.requested
+      mentor-embedding-refresh-requested: mentor.embedding.refresh.requested
+      resume-parse-requested-dlq: resume.parse.requested.dlq
+      report-generate-requested-dlq: report.generate.requested.dlq
+      mentor-embedding-refresh-requested-dlq: mentor.embedding.refresh.requested.dlq
+      chat-message-sent: chat.message.sent
+      notification-requested: notification.requested
+      notification-requested-dlq: notification.requested.dlq
+      notification-push-requested: notification.push.requested
+      notification-push-requested-dlq: notification.push.requested.dlq
+      chat-message-persist-requested: chat.message.persist.requested
+      chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
+  chat:
+    realtime:
+      redis:
+        enabled: true
+        channel: chat.message.broadcast
+    persistence:
+      async:
+        enabled: true
+        batch-size: 250
+        flush-interval-ms: 120
+  metrics:
+    aop:
+      enabled: true
+      slow-threshold-ms: 500
+  websocket:
+    inbound:
+      core-pool-size: 24
+      max-pool-size: 96
+      queue-capacity: 10000
+    outbound:
+      core-pool-size: 24
+      max-pool-size: 96
+      queue-capacity: 10000
+    transport:
+      send-time-limit-ms: 15000
+      send-buffer-size-limit-bytes: 4194304
+      message-size-limit-bytes: 262144

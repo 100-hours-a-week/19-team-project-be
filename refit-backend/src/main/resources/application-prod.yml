@@ -1,4 +1,15 @@
 spring:
+  datasource:
+    hikari:
+      minimum-idle: 30
+      maximum-pool-size: 120
+      connection-timeout: 5000
+      validation-timeout: 1500
+      idle-timeout: 600000
+      max-lifetime: 1500000
+      keepalive-time: 180000
+      leak-detection-threshold: 15000
+
   jpa:
     hibernate:
       ddl-auto: update
@@ -51,6 +62,12 @@ spring:
       properties:
         spring.json.trusted.packages: "*"
 
+  data:
+    redis:
+      host: ${REDIS_HOST:refit-redis}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+
 springdoc:
   swagger-ui:
     enabled: false
@@ -66,6 +83,10 @@ management:
       exposure:
         include: health,metrics,info,prometheus
   endpoint:
+    health:
+      probes:
+        enabled: true   # /actuator/health/liveness, /actuator/health/readiness 활성화
+      show-details: never
     prometheus:
       enabled: true
     metrics:
@@ -120,23 +141,78 @@ logging:
     root: info
     org.springframework: warn
     org.hibernate: warn
-    org.refit.refitbackend: info  # 운영 환경은 info 레벨
+    org.refit.refitbackend: info  # 운영 환경 기본 로그 레벨
+    org.apache.kafka: warn
+    org.springframework.kafka: warn
 
 server:
   forward-headers-strategy: framework
+  tomcat:
+    connection-timeout: 8s
+    threads:
+      max: 500
+      min-spare: 50
+    accept-count: 800
+    max-connections: 12000
 
 fcm:
   enabled: ${FCM_ENABLED:true}
   credentials-path: classpath:firebase/refit-fcm.json
   webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
 
+ai:
+  base-url: ${AI_BASE_URL:https://api.re-fit.kr/api/ai}
+
+internal:
+  api-key: ${INTERNAL_API_KEY:}
+  api-key-header: ${INTERNAL_API_KEY_HEADER:X-Internal-Api-Key}
+
 app:
+  cache:
+    enabled: ${APP_CACHE_ENABLED:true}
+  notification:
+    async:
+      enabled: ${APP_NOTIFICATION_ASYNC_ENABLED:true}
   kafka:
-    enabled: ${APP_KAFKA_ENABLED:false}
+    enabled: true
     topics:
-      resume-parse-requested: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED:resume.parse.requested}
-      report-generate-requested: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED:report.generate.requested}
-      mentor-embedding-refresh-requested: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED:mentor.embedding.refresh.requested}
-      resume-parse-requested-dlq: ${APP_KAFKA_TOPICS_RESUME_PARSE_REQUESTED_DLQ:resume.parse.requested.dlq}
-      report-generate-requested-dlq: ${APP_KAFKA_TOPICS_REPORT_GENERATE_REQUESTED_DLQ:report.generate.requested.dlq}
-      mentor-embedding-refresh-requested-dlq: ${APP_KAFKA_TOPICS_MENTOR_EMBEDDING_REFRESH_REQUESTED_DLQ:mentor.embedding.refresh.requested.dlq}
+      resume-parse-requested: resume.parse.requested
+      report-generate-requested: report.generate.requested
+      mentor-embedding-refresh-requested: mentor.embedding.refresh.requested
+      resume-parse-requested-dlq: resume.parse.requested.dlq
+      report-generate-requested-dlq: report.generate.requested.dlq
+      mentor-embedding-refresh-requested-dlq: mentor.embedding.refresh.requested.dlq
+      chat-message-sent: chat.message.sent
+      notification-requested: notification.requested
+      notification-requested-dlq: notification.requested.dlq
+      notification-push-requested: notification.push.requested
+      notification-push-requested-dlq: notification.push.requested.dlq
+      chat-message-persist-requested: chat.message.persist.requested
+      chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
+  chat:
+    realtime:
+      redis:
+        enabled: ${APP_CHAT_REALTIME_REDIS_ENABLED:true}
+        channel: chat.message.broadcast
+    persistence:
+      async:
+        enabled: true
+        batch-size: 300
+        flush-interval-ms: 100
+  metrics:
+    aop:
+      enabled: false
+      slow-threshold-ms: 1000
+  websocket:
+    inbound:
+      core-pool-size: 32
+      max-pool-size: 128
+      queue-capacity: 20000
+    outbound:
+      core-pool-size: 32
+      max-pool-size: 128
+      queue-capacity: 20000
+    transport:
+      send-time-limit-ms: 15000
+      send-buffer-size-limit-bytes: 4194304
+      message-size-limit-bytes: 262144

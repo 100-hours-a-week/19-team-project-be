@@ -11,6 +11,9 @@ import org.refit.refitbackend.domain.chat.entity.MessageType;
 import org.refit.refitbackend.domain.chat.repository.ChatMessageRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.chat.repository.projection.ChatMessageCursorProjection;
+import org.refit.refitbackend.domain.chat.repository.projection.ChatRoomListProjection;
+import org.refit.refitbackend.domain.chat.repository.projection.ChatRoomReadStateProjection;
 import org.refit.refitbackend.domain.report.entity.enums.ReportStatus;
 import org.refit.refitbackend.domain.report.repository.ReportRepository;
 import org.refit.refitbackend.domain.resume.entity.Resume;
@@ -25,18 +28,17 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.storage.PresignedUrlResponse;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
+@Transactional(propagation = Propagation.SUPPORTS, readOnly = true)
 public class ChatRoomService {
 
     private final ChatRoomRepository chatRoomRepository;
@@ -104,55 +106,62 @@ public class ChatRoomService {
             Long cursorId,
             int size
     ) {
-        List<ChatRoom> rooms = chatRoomRepository.findMyRoomsByCursor(
+        List<ChatRoomListProjection> rows = chatRoomRepository.findMyRoomSummariesByCursor(
                 userId,
                 status,
                 cursorId,
                 PageRequest.of(0, size + 1)
         );
 
-        boolean hasMore = rooms.size() > size;
+        boolean hasMore = rows.size() > size;
         if (hasMore) {
-            rooms = rooms.subList(0, size);
+            rows = rows.subList(0, size);
         }
 
-        Map<Long, String> requestTypeByRequestId = getRequestTypeByRequestId(rooms);
-
-        List<ChatRes.RoomListItem> items = rooms.stream()
-                .map(r -> {
-                    String requestType = r.getChatRequestId() == null
-                            ? null
-                            : requestTypeByRequestId.get(r.getChatRequestId());
-                    if (r.getLastMessageSeq() == null) {
-                        return ChatRes.RoomListItem.from(r, 0L, requestType);
-                    }
-                    Long lastReadSeq = r.getRequester().getId().equals(userId)
-                            ? r.getRequesterLastReadSeq()
-                            : r.getReceiverLastReadSeq();
-                    long lastRead = lastReadSeq != null ? lastReadSeq : 0L;
-                    long unread = Math.max(0L, r.getLastMessageSeq() - lastRead);
-                    return ChatRes.RoomListItem.from(r, unread, requestType);
-                })
+        List<ChatRes.RoomListItem> items = rows.stream()
+                .map(this::toRoomListItem)
                 .toList();
 
-        String nextCursor = rooms.isEmpty() ? null : String.valueOf(rooms.get(rooms.size() - 1).getId());
+        String nextCursor = rows.isEmpty() ? null : String.valueOf(rows.get(rows.size() - 1).getChatId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
     }
 
-    private Map<Long, String> getRequestTypeByRequestId(List<ChatRoom> rooms) {
-        List<Long> chatRequestIds = rooms.stream()
-                .map(ChatRoom::getChatRequestId)
-                .filter(id -> id != null)
-                .distinct()
-                .toList();
+    private ChatRes.RoomListItem toRoomListItem(ChatRoomListProjection row) {
+        ChatRes.UserInfo requester = new ChatRes.UserInfo(
+                row.getRequesterId(),
+                row.getRequesterNickname(),
+                row.getRequesterProfileImageUrl(),
+                row.getRequesterUserType().name()
+        );
+        ChatRes.UserInfo receiver = new ChatRes.UserInfo(
+                row.getReceiverId(),
+                row.getReceiverNickname(),
+                row.getReceiverProfileImageUrl(),
+                row.getReceiverUserType().name()
+        );
+        ChatRes.LastMessageInfo lastMessage = row.getLastMessageId() == null
+                ? null
+                : new ChatRes.LastMessageInfo(
+                        row.getLastMessageId(),
+                        row.getLastMessageRoomSequence(),
+                        row.getLastMessageContent(),
+                        row.getLastMessageAt()
+                );
 
-        if (chatRequestIds.isEmpty()) {
-            return Map.of();
-        }
+        String requestType = row.getRequestType() != null ? row.getRequestType().name() : null;
 
-        return chatRequestRepository.findAllById(chatRequestIds).stream()
-                .collect(Collectors.toMap(ChatRequest::getId, request -> request.getRequestType().name()));
+        return new ChatRes.RoomListItem(
+                row.getChatId(),
+                requester,
+                receiver,
+                lastMessage,
+                row.getUnreadCount(),
+                row.getStatus().name(),
+                requestType,
+                row.getCreatedAt(),
+                row.getUpdatedAt()
+        );
     }
 
     /**
@@ -256,7 +265,7 @@ public class ChatRoomService {
      */
     @Transactional
     public void markAsRead(Long userId, Long roomId, ChatReq.ReadMessage request) {
-        ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
+        ChatRoomReadStateProjection room = chatRoomRepository.findReadStateByIdAndUserId(roomId, userId)
                 .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
 
         Long lastReadSeq = request.lastReadSeq();
@@ -267,32 +276,36 @@ public class ChatRoomService {
         if (lastReadSeq > lastMessageSeq) {
             throw new CustomException(ExceptionType.INVALID_REQUEST);
         }
-        room.updateLastReadSeq(userId, lastReadSeq);
+
+        if (room.getRequesterId().equals(userId)) {
+            chatRoomRepository.updateRequesterLastReadSeqIfGreater(roomId, userId, lastReadSeq);
+            return;
+        }
+        if (room.getReceiverId().equals(userId)) {
+            chatRoomRepository.updateReceiverLastReadSeqIfGreater(roomId, userId, lastReadSeq);
+            return;
+        }
+        throw new CustomException(ExceptionType.AUTH_FORBIDDEN);
     }
 
     /**
      * 채팅방 메시지 목록 조회 (커서)
      */
-    @Transactional
     public CursorPage<ChatRes.MessageInfo> getMessages(
             Long userId,
             Long roomId,
             Long cursorId,
-            int size
+        int size
     ) {
-        // 권한 체크
-        ChatRoom room = chatRoomRepository.findByIdAndUserId(roomId, userId)
-                .orElseThrow(() -> new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND));
-
-        List<ChatMessage> messages = chatMessageRepository.findByChatIdByCursor(
+        List<ChatMessageCursorProjection> messages = chatMessageRepository.findMessageSummariesByChatIdAndUserIdByCursor(
                 roomId,
+                userId,
                 cursorId,
                 PageRequest.of(0, size + 1)
         );
 
-        if (room.getLastMessageSeq() != null) {
-            // 메시지 페이지 커서와 무관하게, 방에 존재하는 최신 메시지까지 읽음 처리
-            room.updateLastReadSeq(userId, room.getLastMessageSeq());
+        if (messages.isEmpty() && !chatRoomRepository.existsByIdAndUserId(roomId, userId)) {
+            throw new CustomException(ExceptionType.CHAT_ROOM_NOT_FOUND);
         }
 
         boolean hasMore = messages.size() > size;
@@ -301,11 +314,30 @@ public class ChatRoomService {
         }
 
         List<ChatRes.MessageInfo> items = messages.stream()
-                .map(ChatRes.MessageInfo::from)
+                .map(this::toMessageInfo)
                 .toList();
 
-        String nextCursor = messages.isEmpty() ? null : String.valueOf(messages.get(messages.size() - 1).getId());
+        String nextCursor = messages.isEmpty() ? null : String.valueOf(messages.get(messages.size() - 1).getMessageId());
 
         return new CursorPage<>(items, nextCursor, hasMore);
+    }
+
+    private ChatRes.MessageInfo toMessageInfo(ChatMessageCursorProjection row) {
+        ChatRes.UserInfo sender = new ChatRes.UserInfo(
+                row.getSenderId(),
+                row.getSenderNickname(),
+                row.getSenderProfileImageUrl(),
+                row.getSenderUserType().name()
+        );
+        return new ChatRes.MessageInfo(
+                row.getMessageId(),
+                row.getChatId(),
+                row.getRoomSequence(),
+                sender,
+                row.getMessageType().name(),
+                row.getContent(),
+                row.getClientMessageId(),
+                row.getCreatedAt()
+        );
     }
 }

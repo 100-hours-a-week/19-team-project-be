@@ -11,6 +11,13 @@ public class KafkaTopicProperties {
     private String resumeParseRequestedDlq = "resume.parse.requested.dlq";
     private String reportGenerateRequestedDlq = "report.generate.requested.dlq";
     private String mentorEmbeddingRefreshRequestedDlq = "mentor.embedding.refresh.requested.dlq";
+    private String chatMessageSent = "chat.message.sent";
+    private String notificationRequested = "notification.requested";
+    private String notificationRequestedDlq = "notification.requested.dlq";
+    private String notificationPushRequested = "notification.push.requested";
+    private String notificationPushRequestedDlq = "notification.push.requested.dlq";
+    private String chatMessagePersistRequested = "chat.message.persist.requested";
+    private String chatMessagePersistRequestedDlq = "chat.message.persist.requested.dlq";
 
     public String getResumeParseRequested() {
         return resumeParseRequested;
@@ -58,5 +65,61 @@ public class KafkaTopicProperties {
 
     public void setMentorEmbeddingRefreshRequestedDlq(String mentorEmbeddingRefreshRequestedDlq) {
         this.mentorEmbeddingRefreshRequestedDlq = mentorEmbeddingRefreshRequestedDlq;
+    }
+
+    public String getChatMessageSent() {
+        return chatMessageSent;
+    }
+
+    public void setChatMessageSent(String chatMessageSent) {
+        this.chatMessageSent = chatMessageSent;
+    }
+
+    public String getChatMessagePersistRequested() {
+        return chatMessagePersistRequested;
+    }
+
+    public void setChatMessagePersistRequested(String chatMessagePersistRequested) {
+        this.chatMessagePersistRequested = chatMessagePersistRequested;
+    }
+
+    public String getChatMessagePersistRequestedDlq() {
+        return chatMessagePersistRequestedDlq;
+    }
+
+    public void setChatMessagePersistRequestedDlq(String chatMessagePersistRequestedDlq) {
+        this.chatMessagePersistRequestedDlq = chatMessagePersistRequestedDlq;
+    }
+
+    public String getNotificationRequested() {
+        return notificationRequested;
+    }
+
+    public void setNotificationRequested(String notificationRequested) {
+        this.notificationRequested = notificationRequested;
+    }
+
+    public String getNotificationRequestedDlq() {
+        return notificationRequestedDlq;
+    }
+
+    public void setNotificationRequestedDlq(String notificationRequestedDlq) {
+        this.notificationRequestedDlq = notificationRequestedDlq;
+    }
+
+    public String getNotificationPushRequested() {
+        return notificationPushRequested;
+    }
+
+    public void setNotificationPushRequested(String notificationPushRequested) {
+        this.notificationPushRequested = notificationPushRequested;
+    }
+
+    public String getNotificationPushRequestedDlq() {
+        return notificationPushRequestedDlq;
+    }
+
+    public void setNotificationPushRequestedDlq(String notificationPushRequestedDlq) {
+        this.notificationPushRequestedDlq = notificationPushRequestedDlq;
     }
 }

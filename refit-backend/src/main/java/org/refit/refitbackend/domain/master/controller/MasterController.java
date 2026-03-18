@@ -32,7 +32,6 @@ public class MasterController {
     public ResponseEntity<ApiResponse<MasterRes.Jobs>> getJobs() {
         MasterRes.Jobs result = masterService.getJobs();
         int count = result.jobs() == null ? 0 : result.jobs().size();
-        log.info("GET /api/v1/jobs -> count={}", count);
         return ResponseUtil.ok("success", result);
     }
 
@@ -44,7 +43,6 @@ public class MasterController {
     public ResponseEntity<ApiResponse<MasterRes.CareerLevels>> getCareerLevels() {
         MasterRes.CareerLevels result = masterService.getCareerLevels();
         int count = result.careerLevels() == null ? 0 : result.careerLevels().size();
-        log.info("GET /api/v1/career-levels -> count={}", count);
         return ResponseUtil.ok("success", result);
     }
 
@@ -62,7 +60,6 @@ public class MasterController {
     ) {
         MasterRes.Skills result = masterService.getSkills(keyword);
         int count = result.skills() == null ? 0 : result.skills().size();
-        log.info("GET /api/v1/skills -> keyword={}, count={}", keyword, count);
         return ResponseUtil.ok("success", result);
     }
 
@@ -79,7 +76,6 @@ public class MasterController {
     ) {
         MasterRes.EmailDomains result = masterService.getEmailDomains(cursor, size);
         int count = result.emailDomains() == null ? 0 : result.emailDomains().size();
-        log.info("GET /api/v1/email-domains -> cursor={}, size={}, count={}", cursor, size, count);
         return ResponseUtil.ok("success", result);
     }
 }

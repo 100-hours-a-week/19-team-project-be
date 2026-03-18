@@ -82,4 +82,32 @@ public class ExpertProfile extends BaseEntity {
         this.verified = true;
         this.verifiedAt = verifiedAt;
     }
+
+    public void applyReview(int rating) {
+        double total = (this.ratingAvg * this.ratingCount) + rating;
+        this.ratingCount += 1;
+        this.ratingAvg = total / this.ratingCount;
+    }
+
+    public void updateReview(int oldRating, int newRating) {
+        if (this.ratingCount <= 0) {
+            return;
+        }
+        double total = (this.ratingAvg * this.ratingCount) - oldRating + newRating;
+        this.ratingAvg = total / this.ratingCount;
+    }
+
+    public void removeReview(int rating) {
+        if (this.ratingCount <= 0) {
+            return;
+        }
+        if (this.ratingCount == 1) {
+            this.ratingCount = 0;
+            this.ratingAvg = 0.0;
+            return;
+        }
+        double total = (this.ratingAvg * this.ratingCount) - rating;
+        this.ratingCount -= 1;
+        this.ratingAvg = total / this.ratingCount;
+    }
 }

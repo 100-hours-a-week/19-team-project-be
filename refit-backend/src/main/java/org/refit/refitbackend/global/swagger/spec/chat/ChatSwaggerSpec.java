@@ -352,4 +352,123 @@ public final class ChatSwaggerSpec {
             ExceptionType.FEEDBACK_ANSWER_MISSING
     })
     public @interface GetChatFeedbackV2 {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "V3 리뷰 작성",
+            operationDescription = """
+                    요청자가 종료된 FEEDBACK 채팅방에서 응답자(현직자)에게 리뷰를 작성합니다.
+                    - 평점은 1~5만 허용
+                    - 리뷰 텍스트는 최대 300자
+                    - 채팅방당 리뷰 1회만 허용
+                    """,
+            responseCode = "201",
+            responseDescription = "created",
+            implementation = ChatRes.ChatReviewDetail.class
+    )
+    @SwaggerApiRequestBody(
+            implementation = org.refit.refitbackend.domain.chat.dto.ChatReq.CreateReviewV3.class,
+            description = "리뷰 입력",
+            examples = {
+                    """
+                    {
+                      "rating": 5,
+                      "comment": "실무 경험 기반으로 구체적인 조언을 받아 큰 도움이 되었습니다."
+                    }
+                    """
+            },
+            exampleNames = {"create_review_example"}
+    )
+    @SwaggerApiError(responseCode = "400", description = "invalid_request", types = {
+            ExceptionType.INVALID_REQUEST,
+            ExceptionType.CHAT_NOT_CLOSED,
+            ExceptionType.REVIEW_ALREADY_EXISTS,
+            ExceptionType.REVIEW_RATING_INVALID,
+            ExceptionType.REVIEW_COMMENT_TOO_LONG
+    })
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "403", description = "forbidden", types = {
+            ExceptionType.FORBIDDEN
+    })
+    @SwaggerApiError(responseCode = "404", description = "not_found", types = {
+            ExceptionType.CHAT_ROOM_NOT_FOUND,
+            ExceptionType.CHAT_NOT_FOUND
+    })
+    public @interface CreateChatReviewV3 {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "V3 리뷰 조회",
+            operationDescription = "채팅방에 작성된 리뷰를 조회합니다.",
+            implementation = ChatRes.ChatReviewDetail.class
+    )
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "404", description = "not_found", types = {
+            ExceptionType.CHAT_ROOM_NOT_FOUND,
+            ExceptionType.REVIEW_NOT_FOUND
+    })
+    public @interface GetChatReviewV3 {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "V3 리뷰 수정",
+            operationDescription = "요청자가 자신이 작성한 리뷰를 수정합니다.",
+            implementation = ChatRes.ChatReviewDetail.class
+    )
+    @SwaggerApiRequestBody(
+            implementation = org.refit.refitbackend.domain.chat.dto.ChatReq.CreateReviewV3.class,
+            description = "수정할 리뷰 입력"
+    )
+    @SwaggerApiError(responseCode = "400", description = "invalid_request", types = {
+            ExceptionType.INVALID_REQUEST,
+            ExceptionType.CHAT_NOT_CLOSED,
+            ExceptionType.REVIEW_RATING_INVALID,
+            ExceptionType.REVIEW_COMMENT_TOO_LONG
+    })
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "403", description = "forbidden", types = {
+            ExceptionType.FORBIDDEN
+    })
+    @SwaggerApiError(responseCode = "404", description = "not_found", types = {
+            ExceptionType.CHAT_ROOM_NOT_FOUND,
+            ExceptionType.REVIEW_NOT_FOUND
+    })
+    public @interface UpdateChatReviewV3 {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "V3 리뷰 삭제",
+            operationDescription = "요청자가 자신이 작성한 리뷰를 삭제합니다.",
+            implementation = Void.class
+    )
+    @SwaggerApiError(responseCode = "401", description = "unauthorized", types = {
+            ExceptionType.AUTH_UNAUTHORIZED,
+            ExceptionType.AUTH_INVALID_TOKEN,
+            ExceptionType.AUTH_TOKEN_EXPIRED
+    })
+    @SwaggerApiError(responseCode = "403", description = "forbidden", types = {
+            ExceptionType.FORBIDDEN
+    })
+    @SwaggerApiError(responseCode = "404", description = "not_found", types = {
+            ExceptionType.CHAT_ROOM_NOT_FOUND,
+            ExceptionType.REVIEW_NOT_FOUND
+    })
+    public @interface DeleteChatReviewV3 {}
+
 }

@@ -5,8 +5,6 @@ import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.refit.refitbackend.domain.user.entity.User;
-import org.refit.refitbackend.domain.user.repository.UserRepository;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.response.ApiResponse;
 import org.refit.refitbackend.global.util.JwtUtil;
@@ -25,12 +23,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtUtil jwtUtil;
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final UserRepository userRepository;
     private final List<String> allowUrls;
 
-    public JwtAuthFilter(JwtUtil jwtUtil, UserRepository userRepository, List<String> allowedUrls) {
+    public JwtAuthFilter(JwtUtil jwtUtil, List<String> allowedUrls) {
         this.jwtUtil = jwtUtil;
-        this.userRepository = userRepository;
         this.allowUrls = allowedUrls;
     }
 
@@ -65,23 +61,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         Long userId = jwtUtil.getUserId(token);
 
-        User user = userRepository.findById(userId)
-                .orElse(null);
-        if (user == null) {
-            writeError(response, ExceptionType.USER_NOT_FOUND);
-            return;
-        }
-        if (user.isDeleted()) {
-            writeError(response, ExceptionType.USER_DELETED);
-            return;
-        }
-
-        CustomUserDetails principal = new CustomUserDetails(user);
+        CustomUserDetails principal = new CustomUserDetails(userId);
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
                         principal,
                         null,
-                        List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()))
+                        List.of(new SimpleGrantedAuthority("ROLE_USER"))
                 );
         SecurityContextHolder.getContext().setAuthentication(authentication);
 

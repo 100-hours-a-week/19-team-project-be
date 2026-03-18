@@ -96,4 +96,20 @@ public final class ExpertSwaggerSpec {
             ExceptionType.USER_NOT_FOUND
     })
     public @interface RecommendExperts {}
+
+    @Target(ElementType.METHOD)
+    @Retention(RetentionPolicy.RUNTIME)
+    @SwaggerApiSuccess(
+            summary = "V3 현직자 리뷰 목록 조회",
+            operationDescription = "특정 현직자에게 작성된 리뷰를 커서 기반으로 조회합니다.",
+            implementation = org.refit.refitbackend.domain.chat.dto.ChatRes.ChatReviewCursorResponse.class
+    )
+    @SwaggerApiBadRequestError(types = {
+            ExceptionType.INVALID_CURSOR
+    })
+    @SwaggerApiNotFoundError(description = "expert_not_found", types = {
+            ExceptionType.EXPERT_NOT_FOUND
+    })
+    public @interface GetExpertReviewsV3 {}
+
 }

@@ -61,4 +61,60 @@ public class KafkaTopicsConfig {
                 .replicas(1)
                 .build();
     }
+
+    @Bean
+    public NewTopic chatMessageSentTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessageSent())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic notificationRequestedTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getNotificationRequested())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic notificationRequestedDlqTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getNotificationRequestedDlq())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic notificationPushRequestedTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getNotificationPushRequested())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic notificationPushRequestedDlqTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getNotificationPushRequestedDlq())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic chatMessagePersistRequestedTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessagePersistRequested())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    public NewTopic chatMessagePersistRequestedDlqTopic(KafkaTopicProperties topicProperties) {
+        return TopicBuilder.name(topicProperties.getChatMessagePersistRequestedDlq())
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
 }

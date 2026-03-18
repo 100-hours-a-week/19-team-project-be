@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import org.refit.refitbackend.domain.chat.entity.ChatFeedback;
 import org.refit.refitbackend.domain.chat.entity.ChatFeedbackAnswer;
 import org.refit.refitbackend.domain.chat.entity.ChatMessage;
+import org.refit.refitbackend.domain.chat.entity.ChatReview;
 import org.refit.refitbackend.domain.chat.entity.ChatRequest;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.user.entity.User;
@@ -370,6 +371,66 @@ public class ChatRes {
                     UserInfo.from(feedback.getUser()),
                     feedback.getCreatedAt(),
                     answers.stream().map(ChatFeedbackAnswerItem::from).toList()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatReviewId(
+            Long chatReviewId,
+            Long chatId
+    ) {}
+
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatReviewItem(
+            Long chatReviewId,
+            Long chatId,
+            UserInfo reviewer,
+            Integer rating,
+            String comment,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt
+    ) {
+        public static ChatReviewItem from(ChatReview review) {
+            return new ChatReviewItem(
+                    review.getId(),
+                    review.getChatRoom().getId(),
+                    UserInfo.from(review.getReviewer()),
+                    review.getRating(),
+                    review.getComment(),
+                    review.getCreatedAt()
+            );
+        }
+    }
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatReviewCursorResponse(
+            List<ChatReviewItem> reviews,
+            String nextCursor,
+            boolean hasMore
+    ) {}
+
+    @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
+    public record ChatReviewDetail(
+            Long chatReviewId,
+            Long chatId,
+            UserInfo reviewer,
+            UserInfo reviewee,
+            Integer rating,
+            String comment,
+            @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
+            LocalDateTime createdAt
+    ) {
+        public static ChatReviewDetail from(ChatReview review) {
+            return new ChatReviewDetail(
+                    review.getId(),
+                    review.getChatRoom().getId(),
+                    UserInfo.from(review.getReviewer()),
+                    UserInfo.from(review.getReviewee()),
+                    review.getRating(),
+                    review.getComment(),
+                    review.getCreatedAt()
             );
         }
     }

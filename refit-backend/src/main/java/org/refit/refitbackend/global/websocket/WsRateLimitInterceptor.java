@@ -3,6 +3,7 @@ package org.refit.refitbackend.global.websocket;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.global.ratelimit.LocalRateLimiter;
 import org.refit.refitbackend.global.ratelimit.RateLimitResult;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -24,9 +25,14 @@ public class WsRateLimitInterceptor implements ChannelInterceptor {
 
     private final LocalRateLimiter rateLimiter;
     private final SimpMessagingTemplate messagingTemplate;
+    @Value("${app.rate-limit.enabled:true}")
+    private boolean rateLimitEnabled;
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
+        if (!rateLimitEnabled) {
+            return message;
+        }
         StompHeaderAccessor accessor = StompHeaderAccessor.wrap(message);
         if (!StompCommand.SEND.equals(accessor.getCommand())) {
             return message;
