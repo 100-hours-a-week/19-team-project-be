@@ -152,7 +152,7 @@ jobs:
         working-directory: refit-backend
         run: |
           mkdir -p src/main/resources/firebase
-          echo "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > src/main/resources/firebase/refit-fcm.json
+          printf '%s' "${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}" > src/main/resources/firebase/refit-fcm.json
 
       - name: Build JAR (arm64)
         working-directory: refit-backend
