@@ -50,7 +50,7 @@ spring:
         domain: ${AWS_S3_DOMAIN:https://refit-storage-prod.s3.ap-northeast-2.amazonaws.com/}
 
   kafka:
-    bootstrap-servers: kafka:9093
+    bootstrap-servers: b-2.refitkafka.cj233e.c2.kafka.ap-northeast-2.amazonaws.com:9092,b-1.refitkafka.cj233e.c2.kafka.ap-northeast-2.amazonaws.com:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -64,7 +64,7 @@ spring:
 
   data:
     redis:
-      host: refit-redis
+      host: refit-redis.3oj8op.ng.0001.apn2.cache.amazonaws.com
       port: 6379
       password:
 
@@ -161,9 +161,11 @@ fcm:
   webpush-link: ${FCM_WEBPUSH_LINK:https://re-fit.kr/}
 
 app:
+  cache:
+    enabled: true
   notification:
     async:
-      enabled: false
+      enabled: true
   kafka:
     enabled: true
     topics:
@@ -183,7 +185,7 @@ app:
   chat:
     realtime:
       redis:
-        enabled: false
+        enabled: true
         channel: chat.message.broadcast
     persistence:
       async:
