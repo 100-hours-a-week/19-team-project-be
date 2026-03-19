@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -20,6 +21,24 @@ public class StartupDbLogger implements ApplicationRunner {
     private final DataSource dataSource;
     private final JdbcTemplate jdbcTemplate;
 
+    @Value("${spring.data.redis.host:}")
+    private String redisHost;
+
+    @Value("${spring.data.redis.port:0}")
+    private int redisPort;
+
+    @Value("${spring.kafka.bootstrap-servers:}")
+    private String kafkaBootstrapServers;
+
+    @Value("${spring.kafka.consumer.group-id:}")
+    private String kafkaConsumerGroupId;
+
+    @Value("${app.chat.realtime.redis.enabled:false}")
+    private boolean chatRealtimeRedisEnabled;
+
+    @Value("${app.chat.realtime.redis.channel:chat.message.broadcast}")
+    private String chatRealtimeRedisChannel;
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
         try (Connection conn = dataSource.getConnection()) {
@@ -34,5 +53,8 @@ public class StartupDbLogger implements ApplicationRunner {
         );
         log.info("DB current db={}, schema={}, host={}, port={}",
                 row.get("db"), row.get("schema"), row.get("host"), row.get("port"));
+        log.info("Redis host={}, port={}", redisHost, redisPort);
+        log.info("Kafka bootstrapServers={}, consumerGroupId={}", kafkaBootstrapServers, kafkaConsumerGroupId);
+        log.info("Chat realtime redis enabled={}, channel={}", chatRealtimeRedisEnabled, chatRealtimeRedisChannel);
     }
 }
