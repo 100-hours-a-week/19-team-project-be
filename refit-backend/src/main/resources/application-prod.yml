@@ -173,6 +173,10 @@ app:
   notification:
     async:
       enabled: ${APP_NOTIFICATION_ASYNC_ENABLED:true}
+    realtime:
+      redis:
+        enabled: ${APP_NOTIFICATION_REALTIME_REDIS_ENABLED:true}
+        channel: notification.event.broadcast
   kafka:
     enabled: true
     topics:
