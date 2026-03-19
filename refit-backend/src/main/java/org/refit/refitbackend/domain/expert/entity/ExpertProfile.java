@@ -110,4 +110,16 @@ public class ExpertProfile extends BaseEntity {
         this.ratingCount -= 1;
         this.ratingAvg = total / this.ratingCount;
     }
+
+    public void applyAcceptedRequest() {
+        this.respondedRequestCount += 1;
+        this.acceptedRequestCount += 1;
+        this.lastActiveAt = LocalDateTime.now();
+    }
+
+    public void applyRejectedRequest() {
+        this.respondedRequestCount += 1;
+        this.rejectedRequestCount += 1;
+        this.lastActiveAt = LocalDateTime.now();
+    }
 }
