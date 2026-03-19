@@ -27,9 +27,6 @@ public class RedisChatRealtimeSubscriber implements MessageListener {
             String body = new String(message.getBody(), StandardCharsets.UTF_8);
             JsonNode root = objectMapper.readTree(body);
             JsonNode chatIdNode = root.get("chatId");
-            if (chatIdNode == null || chatIdNode.isNull()) {
-                chatIdNode = root.get("chat_id");
-            }
             if (chatIdNode == null || !chatIdNode.canConvertToLong()) {
                 throw new IllegalArgumentException("chatId missing in redis chat payload");
             }
