@@ -9,6 +9,7 @@ import org.refit.refitbackend.domain.chat.entity.ChatRequestType;
 import org.refit.refitbackend.domain.chat.entity.ChatRoom;
 import org.refit.refitbackend.domain.chat.repository.ChatRequestRepository;
 import org.refit.refitbackend.domain.chat.repository.ChatRoomRepository;
+import org.refit.refitbackend.domain.expert.entity.ExpertProfile;
 import org.refit.refitbackend.domain.notification.service.NotificationService;
 import org.refit.refitbackend.domain.resume.repository.ResumeRepository;
 import org.refit.refitbackend.domain.user.entity.User;
@@ -129,6 +130,7 @@ public class ChatRequestService {
 
         ChatRequestStatus targetStatus = parseRespondStatus(request.status());
         Long chatId = null;
+        ExpertProfile expertProfile = chatRequest.getReceiver().getExpertProfile();
 
         if (targetStatus == ChatRequestStatus.ACCEPTED) {
             ChatRoom room = chatRoomRepository.save(ChatRoom.builder()
@@ -139,6 +141,9 @@ public class ChatRequestService {
                     .jobPostUrl(chatRequest.getJobPostUrl())
                     .build());
             chatRequest.accept();
+            if (expertProfile != null) {
+                expertProfile.applyAcceptedRequest();
+            }
             chatId = room.getId();
             notificationService.notifyChatRequestAccepted(
                     chatRequest.getRequester(),
@@ -148,6 +153,9 @@ public class ChatRequestService {
             );
         } else {
             chatRequest.reject();
+            if (expertProfile != null) {
+                expertProfile.applyRejectedRequest();
+            }
             notificationService.notifyChatRequestRejected(
                     chatRequest.getRequester(),
                     chatRequest.getReceiver(),
