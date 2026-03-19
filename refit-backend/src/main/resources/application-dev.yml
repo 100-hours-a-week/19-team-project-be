@@ -172,6 +172,10 @@ app:
   notification:
     async:
       enabled: false
+    realtime:
+      redis:
+        enabled: true
+        channel: notification.event.broadcast
   rate-limit:
     enabled: true
   kafka:

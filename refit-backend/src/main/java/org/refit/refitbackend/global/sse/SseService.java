@@ -2,6 +2,7 @@ package org.refit.refitbackend.global.sse;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.refit.refitbackend.domain.notification.realtime.RedisNotificationRealtimePublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -9,6 +10,7 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -19,6 +21,7 @@ public class SseService {
     private static final long DEFAULT_TIMEOUT_MS = 30L * 60L * 1000L; // 30m
 
     private final SseEmitterRepository emitterRepository;
+    private final Optional<RedisNotificationRealtimePublisher> redisNotificationRealtimePublisher;
 
     public SseEmitter subscribe(Long userId) {
         String emitterId = UUID.randomUUID().toString();
@@ -46,6 +49,15 @@ public class SseService {
     }
 
     public void sendNotificationEvent(Long userId, String notificationType, Long notificationId, long unreadCount) {
+        if (redisNotificationRealtimePublisher.isPresent()) {
+            redisNotificationRealtimePublisher.get()
+                    .publish(userId, notificationType, notificationId, unreadCount);
+            return;
+        }
+        sendNotificationEventLocal(userId, notificationType, notificationId, unreadCount);
+    }
+
+    public void sendNotificationEventLocal(Long userId, String notificationType, Long notificationId, long unreadCount) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("type", "NOTIFICATION");
         payload.put("notification_type", notificationType);
