@@ -1,7 +1,5 @@
 package org.refit.refitbackend.domain.task.outbox.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.refit.refitbackend.domain.task.kafka.event.MentorEmbeddingRefreshRequestedEvent;
 import org.refit.refitbackend.domain.task.kafka.event.ReportGenerateRequestedEvent;
@@ -13,6 +11,7 @@ import org.refit.refitbackend.global.error.ExceptionType;
 import org.refit.refitbackend.global.kafka.config.KafkaTopicProperties;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
 @RequiredArgsConstructor
@@ -59,7 +58,7 @@ public class TaskOutboxService {
     private String toJson(Object event) {
         try {
             return objectMapper.writeValueAsString(event);
-        } catch (JsonProcessingException e) {
+        } catch (Exception e) {
             throw new CustomException(ExceptionType.INTERNAL_SERVER_ERROR);
         }
     }
