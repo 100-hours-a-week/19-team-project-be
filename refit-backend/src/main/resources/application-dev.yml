@@ -171,7 +171,12 @@ ai:
 app:
   notification:
     async:
-      enabled: false
+      enabled: true
+    outbox:
+      enabled: true
+      batch-size: 100
+      publish-fixed-delay-ms: 1000
+      retry-delay-ms: 5000
     realtime:
       redis:
         enabled: true
@@ -194,6 +199,12 @@ app:
       notification-push-requested-dlq: notification.push.requested.dlq
       chat-message-persist-requested: chat.message.persist.requested
       chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
+  task:
+    outbox:
+      enabled: true
+      batch-size: 100
+      publish-fixed-delay-ms: 1000
+      retry-delay-ms: 5000
   chat:
     realtime:
       redis:

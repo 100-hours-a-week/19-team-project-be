@@ -173,6 +173,11 @@ app:
   notification:
     async:
       enabled: ${APP_NOTIFICATION_ASYNC_ENABLED:true}
+    outbox:
+      enabled: ${APP_NOTIFICATION_OUTBOX_ENABLED:true}
+      batch-size: ${APP_NOTIFICATION_OUTBOX_BATCH_SIZE:100}
+      publish-fixed-delay-ms: ${APP_NOTIFICATION_OUTBOX_PUBLISH_FIXED_DELAY_MS:1000}
+      retry-delay-ms: ${APP_NOTIFICATION_OUTBOX_RETRY_DELAY_MS:5000}
     realtime:
       redis:
         enabled: ${APP_NOTIFICATION_REALTIME_REDIS_ENABLED:true}
@@ -193,6 +198,12 @@ app:
       notification-push-requested-dlq: notification.push.requested.dlq
       chat-message-persist-requested: chat.message.persist.requested
       chat-message-persist-requested-dlq: chat.message.persist.requested.dlq
+  task:
+    outbox:
+      enabled: ${APP_TASK_OUTBOX_ENABLED:true}
+      batch-size: ${APP_TASK_OUTBOX_BATCH_SIZE:100}
+      publish-fixed-delay-ms: ${APP_TASK_OUTBOX_PUBLISH_FIXED_DELAY_MS:1000}
+      retry-delay-ms: ${APP_TASK_OUTBOX_RETRY_DELAY_MS:5000}
   chat:
     realtime:
       redis:
