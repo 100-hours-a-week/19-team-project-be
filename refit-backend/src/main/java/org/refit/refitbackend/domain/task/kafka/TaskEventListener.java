@@ -8,12 +8,14 @@ import org.refit.refitbackend.domain.task.kafka.event.MentorEmbeddingRefreshRequ
 import org.refit.refitbackend.domain.task.kafka.event.ReportGenerateRequestedEvent;
 import org.refit.refitbackend.domain.task.kafka.event.ResumeParseRequestedEvent;
 import org.refit.refitbackend.domain.resume.service.ResumeTaskService;
+import org.refit.refitbackend.global.idempotency.service.ProcessedEventService;
 import org.refit.refitbackend.global.error.CustomException;
 import org.refit.refitbackend.global.error.ExceptionType;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Headers;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -24,15 +26,28 @@ import java.util.Map;
 @ConditionalOnProperty(name = "app.kafka.enabled", havingValue = "true")
 public class TaskEventListener {
 
+    private static final String RESUME_PARSE_CONSUMER = "task.resume-parse-requested";
+    private static final String REPORT_GENERATE_CONSUMER = "task.report-generate-requested";
+    private static final String MENTOR_EMBEDDING_REFRESH_CONSUMER = "task.mentor-embedding-refresh-requested";
+
     private final ResumeTaskService resumeTaskService;
     private final ReportService reportService;
     private final ExpertService expertService;
+    private final ProcessedEventService processedEventService;
 
     @KafkaListener(
             topics = "${app.kafka.topics.resume-parse-requested:resume.parse.requested}",
             groupId = "${spring.kafka.consumer.group-id:refit-backend}"
     )
+    @Transactional
     public void onResumeParseRequested(ResumeParseRequestedEvent event) {
+        if (event == null || event.taskId() == null) {
+            return;
+        }
+        if (!processedEventService.tryMarkProcessed(RESUME_PARSE_CONSUMER, event.taskId())) {
+            log.info("Skip duplicate resume parse request. taskId={}", event.taskId());
+            return;
+        }
         resumeTaskService.processAsyncParseTask(event);
         log.info("Kafka consumed resume parse request. taskId={}, userId={}, fileUrl={}",
                 event.taskId(), event.userId(), event.fileUrl());
@@ -42,7 +57,15 @@ public class TaskEventListener {
             topics = "${app.kafka.topics.report-generate-requested:report.generate.requested}",
             groupId = "${spring.kafka.consumer.group-id:refit-backend}"
     )
+    @Transactional
     public void onReportGenerateRequested(ReportGenerateRequestedEvent event) {
+        if (event == null || event.taskId() == null) {
+            return;
+        }
+        if (!processedEventService.tryMarkProcessed(REPORT_GENERATE_CONSUMER, event.taskId())) {
+            log.info("Skip duplicate report generate request. taskId={}", event.taskId());
+            return;
+        }
         reportService.processAsyncGenerateReportTask(event);
         log.info("Kafka consumed report generate request. taskId={}, userId={}, reportId={}, chatRoomId={}",
                 event.taskId(), event.userId(), event.reportId(), event.chatRoomId());
@@ -52,7 +75,15 @@ public class TaskEventListener {
             topics = "${app.kafka.topics.mentor-embedding-refresh-requested:mentor.embedding.refresh.requested}",
             groupId = "${spring.kafka.consumer.group-id:refit-backend}"
     )
+    @Transactional
     public void onMentorEmbeddingRefreshRequested(MentorEmbeddingRefreshRequestedEvent event) {
+        if (event == null || event.taskId() == null) {
+            return;
+        }
+        if (!processedEventService.tryMarkProcessed(MENTOR_EMBEDDING_REFRESH_CONSUMER, event.taskId())) {
+            log.info("Skip duplicate mentor embedding refresh request. taskId={}", event.taskId());
+            return;
+        }
         try {
             expertService.refreshMentorEmbedding(event.userId());
             log.info("Kafka consumed mentor embedding refresh request. taskId={}, userId={}",
