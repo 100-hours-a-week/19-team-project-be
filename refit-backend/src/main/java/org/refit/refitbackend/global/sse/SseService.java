@@ -76,14 +76,17 @@ public class SseService {
     }
 
     public void sendToUser(Long userId, String eventName, Object payload) {
-        for (SseEmitter emitter : emitterRepository.findAllByUserId(userId)) {
+        for (Map.Entry<String, SseEmitter> entry : emitterRepository.findEntriesByUserId(userId).entrySet()) {
+            String emitterId = entry.getKey();
+            SseEmitter emitter = entry.getValue();
             try {
                 emitter.send(SseEmitter.event()
                         .name(eventName)
                         .data(payload));
             } catch (Exception e) {
+                emitterRepository.remove(userId, emitterId);
                 try {
-                    emitter.completeWithError(e);
+                    emitter.complete();
                 } catch (Exception ignored) {
                     // no-op
                 }

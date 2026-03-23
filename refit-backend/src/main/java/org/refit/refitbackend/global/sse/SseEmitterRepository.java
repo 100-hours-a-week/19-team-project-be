@@ -26,6 +26,14 @@ public class SseEmitterRepository {
         return List.copyOf(emitters.values());
     }
 
+    public Map<String, SseEmitter> findEntriesByUserId(Long userId) {
+        Map<String, SseEmitter> emitters = emittersByUserId.get(userId);
+        if (emitters == null || emitters.isEmpty()) {
+            return Map.of();
+        }
+        return Map.copyOf(emitters);
+    }
+
     public void remove(Long userId, String emitterId) {
         Map<String, SseEmitter> emitters = emittersByUserId.get(userId);
         if (emitters == null) {

@@ -23,6 +23,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -125,6 +126,7 @@ public class AgentService {
 
                 HttpClient client = HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(5))
+                        .version(HttpClient.Version.HTTP_1_1)
                         .build();
 
                 HttpRequest httpRequest = HttpRequest.newBuilder()
@@ -138,21 +140,18 @@ public class AgentService {
                 HttpResponse<InputStream> response = client.send(httpRequest, HttpResponse.BodyHandlers.ofInputStream());
                 if (response.statusCode() >= 400) {
                     String err = new String(response.body().readAllBytes(), StandardCharsets.UTF_8);
-                    sendEvent(emitter, "error", Map.of("message", "Agent server error", "status", response.statusCode(), "body", err));
-                    sendEvent(emitter, "done", Map.of());
-                    emitter.complete();
+                    safeSendEvent(emitter, "error", Map.of("message", "Agent server error", "status", response.statusCode(), "body", err));
+                    safeSendEvent(emitter, "done", Map.of());
+                    safeComplete(emitter);
                     return;
                 }
 
                 streamSse(sessionId, userId, response.body(), emitter, assistantMessage, latestIntent, latestCards);
             } catch (Exception e) {
                 log.warn("Agent SSE relay failed", e);
-                try {
-                    sendEvent(emitter, "error", Map.of("message", e.getMessage() == null ? "Agent stream failed" : e.getMessage()));
-                    sendEvent(emitter, "done", Map.of());
-                } catch (Exception ignored) {
-                }
-                emitter.complete();
+                safeSendEvent(emitter, "error", Map.of("message", e.getMessage() == null ? "Agent stream failed" : e.getMessage()));
+                safeSendEvent(emitter, "done", Map.of());
+                safeComplete(emitter);
             }
         });
 
@@ -188,13 +187,13 @@ public class AgentService {
                                     latestCards[0]
                             );
                             updateSessionMetadata(sessionId, userId, latestIntent[0]);
-                            sendAssistantMessageSavedEvent(emitter, sessionId, saved);
-                            sendEvent(emitter, "done", data);
-                            emitter.complete();
+                            safeSendAssistantMessageSavedEvent(emitter, sessionId, saved);
+                            safeSendEvent(emitter, "done", data);
+                            safeComplete(emitter);
                             return;
                         }
 
-                        sendEvent(emitter, eventName, data);
+                        safeSendEvent(emitter, eventName, data);
                     }
                     eventName = null;
                     dataBuilder.setLength(0);
@@ -226,9 +225,9 @@ public class AgentService {
                 latestCards[0]
         );
         updateSessionMetadata(sessionId, userId, latestIntent[0]);
-        sendAssistantMessageSavedEvent(emitter, sessionId, saved);
-        sendEvent(emitter, "done", Map.of());
-        emitter.complete();
+        safeSendAssistantMessageSavedEvent(emitter, sessionId, saved);
+        safeSendEvent(emitter, "done", Map.of());
+        safeComplete(emitter);
     }
 
     private void captureState(
@@ -370,6 +369,32 @@ public class AgentService {
 
     private void sendEvent(SseEmitter emitter, String eventName, Object data) throws Exception {
         emitter.send(SseEmitter.event().name(eventName).data(data));
+    }
+
+    private void safeSendAssistantMessageSavedEvent(SseEmitter emitter, String sessionId, AgentMessage saved) {
+        try {
+            sendAssistantMessageSavedEvent(emitter, sessionId, saved);
+        } catch (Exception e) {
+            log.debug("Skip SSE message_saved event. sessionId={}", sessionId, e);
+        }
+    }
+
+    private void safeSendEvent(SseEmitter emitter, String eventName, Object data) {
+        try {
+            sendEvent(emitter, eventName, data);
+        } catch (IOException | IllegalStateException e) {
+            log.debug("Skip SSE event send. eventName={}", eventName, e);
+        } catch (Exception e) {
+            log.debug("Skip SSE event send. eventName={}", eventName, e);
+        }
+    }
+
+    private void safeComplete(SseEmitter emitter) {
+        try {
+            emitter.complete();
+        } catch (IllegalStateException e) {
+            log.debug("Skip SSE emitter complete", e);
+        }
     }
 
     private JsonNode requireData(JsonNode root) {
