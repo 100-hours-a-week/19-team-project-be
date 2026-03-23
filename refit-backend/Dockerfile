@@ -6,6 +6,11 @@ WORKDIR /app
 # Update Alpine packages and install curl
 RUN apk update && apk add --no-cache curl
 
+# Download OpenTelemetry Java agent at build time (initContainer 불필요)
+RUN curl -fsSL \
+    -o /app/opentelemetry-javaagent.jar \
+    https://github.com/open-telemetry/opentelemetry-java-instrumentation/releases/latest/download/opentelemetry-javaagent.jar
+
 # Create non-root user
 RUN addgroup -S spring && adduser -S spring -G spring
 USER spring:spring
