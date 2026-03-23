@@ -73,6 +73,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private void writeRateLimit(HttpServletResponse response, long retryAfterSeconds) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
         response.setStatus(ExceptionType.RATE_LIMIT_EXCEEDED.getStatus().value());
         response.setContentType("application/json;charset=UTF-8");
         response.setHeader("Retry-After", String.valueOf(retryAfterSeconds));
