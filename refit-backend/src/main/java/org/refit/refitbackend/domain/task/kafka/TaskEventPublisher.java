@@ -31,9 +31,4 @@ public class TaskEventPublisher {
         taskOutboxService.appendMentorEmbeddingRefreshRequested(event);
         log.info("Task outbox appended mentor embedding refresh request. taskId={}, userId={}", event.taskId(), event.userId());
     }
-
-    public void publishMentorEmbeddingRefreshRequested(MentorEmbeddingRefreshRequestedEvent event) {
-        kafkaTemplate.send(topicProperties.getMentorEmbeddingRefreshRequested(), event.taskId(), event);
-        log.info("Kafka published mentor embedding refresh request. taskId={}, userId={}", event.taskId(), event.userId());
-    }
 }
