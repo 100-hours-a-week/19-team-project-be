@@ -50,6 +50,9 @@ public class InternalApiKeyFilter extends OncePerRequestFilter {
     }
 
     private void writeUnauthorized(HttpServletResponse response) throws IOException {
+        if (response.isCommitted()) {
+            return;
+        }
         response.setStatus(ExceptionType.AUTH_UNAUTHORIZED.getStatus().value());
         response.setContentType("application/json;charset=UTF-8");
         ApiResponse<Void> body = ApiResponse.error(
